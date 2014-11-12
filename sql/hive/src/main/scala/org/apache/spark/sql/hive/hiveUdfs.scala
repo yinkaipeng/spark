@@ -153,6 +153,7 @@ private[hive] case class HiveGenericUdf(functionClassName: String, children: Seq
   @transient
   protected lazy val argumentInspectors = children.map(toInspector)
 
+
   @transient
   protected lazy val returnInspector = function.initialize(argumentInspectors.toArray)
 
