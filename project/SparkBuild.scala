@@ -100,8 +100,11 @@ object SparkBuild extends PomBuild {
           "conjunction with environment variable.")
       v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
+
     if (profiles.exists(_.contains("scala-"))) {
       profiles
+    } else if (System.getProperty("scala-2.11") != null) {
+      profiles ++ Seq("scala-2.11")
     } else {
       println("Enabled default scala profile")
       profiles ++ Seq("scala-2.10")
@@ -374,6 +377,8 @@ object TestSettings {
     javaOptions in Test += "-Dspark.testing=1",
     javaOptions in Test += "-Dspark.port.maxRetries=100",
     javaOptions in Test += "-Dspark.ui.enabled=false",
+    javaOptions in Test += "-Dspark.ui.showConsoleProgress=false",
+    javaOptions in Test += "-Dspark.driver.allowMultipleContexts=true",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
     javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark")
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
@@ -389,8 +394,6 @@ object TestSettings {
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
     libraryDependencies += "com.novocode" % "junit-interface" % "0.9" % "test",
-    // Enable Tachyon local testing.
-    libraryDependencies += "org.tachyonproject" % "tachyon" % "0.5.0" % "test" classifier "tests",
     // Only allow one test at a time, even across projects, since they run in the same JVM
     parallelExecution in Test := false,
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
