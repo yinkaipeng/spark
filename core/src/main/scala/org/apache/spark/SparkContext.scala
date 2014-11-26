@@ -83,6 +83,8 @@ class SparkContext(config: SparkConf) extends Logging {
   // contains a map from hostname to a list of input format splits on the host.
   private[spark] var preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()
 
+  val startTime = System.currentTimeMillis()
+
   /**
    * Create a SparkContext that loads settings from system properties (for instance, when
    * launching with ./bin/spark-submit).
@@ -268,8 +270,6 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(conf)
-
-  val startTime = System.currentTimeMillis()
 
   // Add each JAR given through the constructor
   if (jars != null) {
@@ -1813,6 +1813,9 @@ object SparkContext extends Logging {
         def localCpuCount = Runtime.getRuntime.availableProcessors()
         // local[*] estimates the number of cores on the machine; local[N] uses exactly N threads.
         val threadCount = if (threads == "*") localCpuCount else threads.toInt
+        if (threadCount <= 0) {
+          throw new SparkException(s"Asked to run locally with $threadCount threads")
+        }
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
         val backend = new LocalBackend(scheduler, threadCount)
         scheduler.initialize(backend)
