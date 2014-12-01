@@ -25,32 +25,20 @@ import org.apache.spark.Logging
 private[sql] object OrcFilters extends Logging {
 
   def createFilter(expr: Seq[Expression]): Option[SearchArgument] = {
-    var exist = false
     if (expr == null || expr.size == 0) return None
     var sarg: Option[Builder] = Some(SearchArgument.FACTORY.newBuilder())
     sarg.get.startAnd()
     expr.foreach {
       x => {
         sarg match {
-          case Some(s1) => {
-            val s2 = createFilter(x, s1)
-            s2 match {
-              case Some(s3) => exist = true
-                sarg = s2
-              case _ => None
-            }
-          }
+          case Some(s1) => sarg = createFilter(x, s1)
           case _ => None
         }
       }
     }
-    if (exist) {
-      sarg match {
-        case Some(b) => Some(b.end.build)
-        case _ => None
-      }
-    } else {
-      None
+    sarg match {
+      case Some(b) => Some(b.end.build)
+      case _ => None
     }
   }
 
