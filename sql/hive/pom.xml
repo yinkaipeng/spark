@@ -75,6 +75,7 @@
       <groupId>org.codehaus.jackson</groupId>
       <artifactId>jackson-mapper-asl</artifactId>
     </dependency>
+
     <dependency>
       <groupId>org.spark-project.hive</groupId>
       <artifactId>hive-serde</artifactId>

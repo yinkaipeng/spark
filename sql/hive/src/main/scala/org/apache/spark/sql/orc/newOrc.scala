@@ -260,3 +260,4 @@ case class OrcRelation2(path: String)(@transient val sqlContext: SQLContext)
     }
   }
 }
+
