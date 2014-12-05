@@ -360,6 +360,10 @@ private[spark] trait ClientBase extends Logging {
       }
     }
 
+    // include yarn am specific java options
+    sparkConf.getOption("spark.yarn.am.extraJavaOptions")
+      .foreach(opts => javaOpts += opts)
+
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
 
