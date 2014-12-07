@@ -99,20 +99,6 @@ class YarnHistoryService  extends AbstractService("ATS")
     list.split(',').map(_.trim).filter(!_.isEmpty).toSet
   }
 
-  private def toSpaceSeparatedString(set: Set[String]): String  = {
-    val sb = new StringBuilder()
-    var first = true
-    set.map{ x=>
-      if (!first) {
-        sb.append(" ").append(x)
-      } else {
-        sb.append(x)
-        first = false
-      }
-    }
-    return sb.toString();
-  }
-
   private  def createTimelineDomain():String = {
     val sparkConf = sc.getConf
     val aclsOn = sparkConf.getOption("spark.acls.enable").getOrElse(
@@ -125,13 +111,13 @@ class YarnHistoryService  extends AbstractService("ATS")
       domainId = predefDomain.get
       return null
     }
-    val current = Set[String](UserGroupInformation.getCurrentUser.getShortUserName)
+    val current = UserGroupInformation.getCurrentUser.getShortUserName
     val adminAcls  = stringToSet(sparkConf.get("spark.admin.acls", ""))
     val viewAcls = stringToSet(sparkConf.get("spark.ui.view.acls", ""))
     val modifyAcls = stringToSet(sparkConf.get("spark.modify.acls", ""))
 
-    val readers = toSpaceSeparatedString(current ++ adminAcls ++ modifyAcls ++ viewAcls)
-    val writers = toSpaceSeparatedString(current ++ adminAcls ++ modifyAcls)
+    val readers = (adminAcls ++ modifyAcls ++ viewAcls).foldLeft(current)(_ + " " + _)
+    val writers = (adminAcls ++ modifyAcls).foldLeft(current)(_ + " " + _)
     var tmpId = YarnHistoryService.DOMAIN_ID_PREFIX + appId
     logInfo("Creating domain " + tmpId + " with  readers: "
       + readers + " writers:" + writers)
