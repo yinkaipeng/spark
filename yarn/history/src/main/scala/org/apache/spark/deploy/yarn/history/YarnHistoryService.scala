@@ -117,7 +117,7 @@ class YarnHistoryService  extends AbstractService("ATS")
     val writers = (adminAcls ++ modifyAcls).foldLeft(current)(_ + " " + _)
     var tmpId = YarnHistoryService.DOMAIN_ID_PREFIX + appId
     logInfo("Creating domain " + tmpId + " with  readers: "
-      + readers + " writers:" + writers)
+      + readers + " and writers:" + writers)
     val timelineDomain = new TimelineDomain();
     timelineDomain.setId(tmpId);
 
@@ -205,7 +205,6 @@ class YarnHistoryService  extends AbstractService("ATS")
 
   override def serviceStop {
     logInfo("Stopping ATS service")
-
     if (!stopped.getAndSet(true)) {
       if (eventHandlingThread != null) {
         eventHandlingThread.interrupt
@@ -214,7 +213,7 @@ class YarnHistoryService  extends AbstractService("ATS")
         eventQueue.add(new TimestampEvent(SparkListenerApplicationEnd(System.currentTimeMillis()),
           System.currentTimeMillis()))
       }
-      logInfo("push out all events")
+      logDebug("push out all events")
       if (!eventQueue.isEmpty) {
         if (maxTimeToWaitOnShutdown > 0) {
           val curTime: Long = System.currentTimeMillis()
@@ -242,7 +241,7 @@ class YarnHistoryService  extends AbstractService("ATS")
   def getCurrentEntity = {
     curEntity.getOrElse {
       val entity: TimelineEntity = new TimelineEntity
-      logInfo("Create new entity")
+      logDebug("Create new entity")
       curEventNum = 0
       entity.setEntityType(YarnHistoryService.ENTITY_TYPE)
       entity.setEntityId(appId.toString)
@@ -265,7 +264,7 @@ class YarnHistoryService  extends AbstractService("ATS")
     if (entityList.isEmpty) {
       return
     }
-    logInfo("before pushEntities: " + entityList.size())
+    logDebug("before pushEntities: " + entityList.size())
     var client = getTimelineClient
     entityList = entityList.filter {
       en => {
@@ -285,7 +284,7 @@ class YarnHistoryService  extends AbstractService("ATS")
               }
               true
             } else {
-              logInfo("entity pushed: " + en)
+              logDebug("entity pushed: " + en)
               false
             }
           } catch {
@@ -299,7 +298,7 @@ class YarnHistoryService  extends AbstractService("ATS")
         }
       }
     }
-    logInfo("after pushEntities: " + entityList.size())
+    logDebug("after pushEntities: " + entityList.size())
   }
 
   /**
@@ -316,7 +315,7 @@ class YarnHistoryService  extends AbstractService("ATS")
     lock synchronized {
       if (event != null) {
         if (eventsProcessed % 1000 == 0) {
-          logInfo("$eventProcessed events are processed")
+          logDebug("$eventProcessed events are processed")
         }
         eventsProcessed += 1
         val obj = JsonProtocol.sparkEventToJson(event.sparkEvent)
@@ -326,7 +325,7 @@ class YarnHistoryService  extends AbstractService("ATS")
           case start: SparkListenerApplicationStart =>
             // we already have all information,
             // flush it for old one to switch to new one
-            logInfo("Receive application start event: " + event)
+            logDebug("Receive application start event: " + event)
             // flush old entity
             curEntity.foreach(entityList :+= _)
          //   entityList :+= curEntity.getOrElse(null)
@@ -343,7 +342,7 @@ class YarnHistoryService  extends AbstractService("ATS")
             if (!bAppEnd) {
               // we already have all information,
               // flush it for old one to switch to new one
-              logInfo("Receive application end event: " + event)
+              logDebug("Receive application end event: " + event)
               // flush old entity
               curEntity.foreach(entityList :+= _)
              // entityList :+= curEntity.getOrElse(null)
@@ -368,7 +367,7 @@ class YarnHistoryService  extends AbstractService("ATS")
         getCurrentEntity.addEvent(tlEvent)
         curEventNum += 1
       }
-      logInfo("current event num: " + curEventNum)
+      logDebug("current event num: " + curEventNum)
       if (curEventNum == batchSize || flush || push) {
         curEntity.foreach(entityList :+= _)
       //  entityList :+= curEntity.getOrElse(null)

@@ -73,7 +73,6 @@ class YarnHistoryProvider(conf: SparkConf)
       .accept(MediaType.APPLICATION_JSON)
       .get(classOf[ClientResponse])
       .getEntity(classOf[TimelineEntities])
-    logInfo(entities.toString)
 
     entities.getEntities().flatMap { en =>
       try {
@@ -109,7 +108,7 @@ class YarnHistoryProvider(conf: SparkConf)
       .accept(MediaType.APPLICATION_JSON)
       .get(classOf[ClientResponse])
       .getEntity(classOf[TimelineEntity])
-    logInfo(entity.toString)
+    logDebug(entity.toString)
     //  val entities = resource.get(classOf[ClientResponse]).getEntity(classOf[TimelineEntities])
     val bus = new SparkListenerBus() { }
     val appListener = new ApplicationEventListener()
@@ -123,8 +122,6 @@ class YarnHistoryProvider(conf: SparkConf)
     val events = entity.getEvents.flatMap(_.getEventInfo.values)
 
     events.reverse.foreach { line =>
-      //  val line = e.getEventInfo.asInstanceOf[String]
-      logInfo(line.asInstanceOf[String])
       bus.postToAll(JsonProtocol.sparkEventFromJson(parse(line.asInstanceOf[String])))
     }
     ui.setAppName(s"${appListener.appName.getOrElse(NOT_STARTED)} ($appId)")

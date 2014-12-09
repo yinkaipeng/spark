@@ -144,7 +144,6 @@ private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, childr
   @transient
   protected lazy val argumentInspectors = children.map(toInspector)
 
-
   @transient
   protected lazy val returnInspector = {
     function.initializeAndFoldConstants(argumentInspectors.toArray)

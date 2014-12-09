@@ -269,12 +269,9 @@ private[hive] trait HiveStrategies {
           if (ORC_FILTER_PUSHDOWN_ENABLED) {
             val job = new Job(OrcRelation.jobConf)
             val conf: Configuration = job.getConfiguration
-            logInfo("Orc push down filter enabled:" + filters)
             (filters: Seq[Expression]) => {
               val recordFilter = OrcFilters.createFilter(filters)
               if (recordFilter.isDefined) {
-
-                logInfo("Parsed filters:" + recordFilter)
                 /**
                  * To test it, we can set follows so that the reader
                  * will not read whole file if small
@@ -283,8 +280,8 @@ private[hive] trait HiveStrategies {
                  */
                 conf.set(SARG_PUSHDOWN, toKryo(recordFilter.get))
                 conf.setBoolean("hive.optimize.index.filter", true)
-                // TODO: Following is for testing only. Remove it  in production
-                conf.setInt("mapreduce.input.fileinputformat.split.maxsize", 50)
+                // Following is for testing only. Remove it  in production
+                // conf.setInt("mapreduce.input.fileinputformat.split.maxsize", 50)
                 OrcRelation.jobConf = conf
               }
               // no matter whether it is filtered or not in orc,
