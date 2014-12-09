@@ -50,7 +50,7 @@ class YarnHistoryService  extends AbstractService("ATS")
   private var userName: String = null
   private var startTime: Long = _
 
-  private var batchSize: Int = 3
+  private var batchSize: Int = YarnHistoryService.DEFAULT_BATCH_SIZE
 
   // enqueue event to avoid blocking on main thread.
   private var eventQueue = new LinkedBlockingQueue[TimestampEvent]
@@ -66,9 +66,9 @@ class YarnHistoryService  extends AbstractService("ATS")
   private var eventHandlingThread: Thread = null
   private var stopped: AtomicBoolean = new AtomicBoolean(true)
   private final val lock: AnyRef = new AnyRef
-  private var maxTimeToWaitOnShutdown: Long = 1000L
+  private var maxTimeToWaitOnShutdown: Long = YarnHistoryService.DEFAULT_WAIT_TIME
   private var clientFailure = 0
-  private var domainId: String = null;
+  private var domainId: String = null
 
 
   def createTimelineClient = {
@@ -85,10 +85,7 @@ class YarnHistoryService  extends AbstractService("ATS")
 
 
   def stopTimelineClient = {
-    timelineClient match {
-      case Some(t) => t.stop
-      case _ =>
-    }
+    timelineClient.map(_.stop)
     timelineClient = None
   }
 
@@ -313,7 +310,6 @@ class YarnHistoryService  extends AbstractService("ATS")
    * @return
    */
   private def handleEvent(event: TimestampEvent,  flush: Boolean): Unit = {
-    logInfo("handle event")
     var push = false
     // if we receive a new appStart event, we always push
     // not much contention here, only happens when servcie is stopped
@@ -323,7 +319,6 @@ class YarnHistoryService  extends AbstractService("ATS")
           logInfo("$eventProcessed events are processed")
         }
         eventsProcessed += 1
-        logInfo("Handle event: " + event)
         val obj = JsonProtocol.sparkEventToJson(event.sparkEvent)
         val map = compact(render(obj))
         if (map == null || map == "") return
@@ -387,5 +382,7 @@ class YarnHistoryService  extends AbstractService("ATS")
 
 object YarnHistoryService {
   val ENTITY_TYPE = "SparkApplication"
-  val DOMAIN_ID_PREFIX = "Spark_ATS_";
+  val DOMAIN_ID_PREFIX = "Spark_ATS_"
+  val DEFAULT_BATCH_SIZE = 3
+  val DEFAULT_WAIT_TIME = 1000L
 }
