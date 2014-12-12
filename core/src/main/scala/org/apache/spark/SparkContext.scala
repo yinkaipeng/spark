@@ -1463,13 +1463,15 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** Post the environment update event once the task scheduler is ready */
   private def postEnvironmentUpdate() {
-    val schedulingMode = getSchedulingMode.toString
-    val addedJarPaths = addedJars.keys.toSeq
-    val addedFilePaths = addedFiles.keys.toSeq
-    val environmentDetails =
-      SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths, addedFilePaths)
-    val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
-    listenerBus.post(environmentUpdate)
+    if (taskScheduler != null) {
+      val schedulingMode = getSchedulingMode.toString
+      val addedJarPaths = addedJars.keys.toSeq
+      val addedFilePaths = addedFiles.keys.toSeq
+      val environmentDetails =
+        SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths, addedFilePaths)
+      val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
+      listenerBus.post(environmentUpdate)
+    }
   }
 
   /** Called by MetadataCleaner to clean up the persistentRdds map periodically */
