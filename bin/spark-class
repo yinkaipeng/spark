@@ -29,6 +29,9 @@ FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 # Export this as SPARK_HOME
 export SPARK_HOME="$FWDIR"
 
+## Exports spar-native-yarn for pre-customized distribution
+EXECUTION_CONTEXT_HOME="$FWDIR"/external/spark-native-yarn
+
 . "$FWDIR"/bin/load-spark-env.sh
 
 if [ -z "$1" ]; then

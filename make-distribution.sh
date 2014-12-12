@@ -165,7 +165,7 @@ cd "$FWDIR"
 
 export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
 
-BUILD_COMMAND="mvn clean package -DskipTests $@"
+BUILD_COMMAND="mvn clean install -DskipTests $@"
 
 # Actually build the jar
 echo -e "\nBuilding with..."
@@ -176,7 +176,16 @@ ${BUILD_COMMAND}
 # Make directories
 rm -rf "$DISTDIR"
 mkdir -p "$DISTDIR/lib"
+mkdir -p "$DISTDIR/external"
 echo "Spark $VERSION$GITREVSTRING built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE"
+
+
+cd "$FWDIR"/../spark-native-yarn
+./gradlew clean installApp
+mkdir -p "$DISTDIR/external"
+cd "$FWDIR"
+cp -R "$FWDIR"/../spark-native-yarn/build/install/spark-native-yarn "$DISTDIR/external/"
+
 
 # Copy jars
 cp "$FWDIR"/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
