@@ -352,17 +352,21 @@ private[spark] trait ClientBase extends Logging {
     if (isLaunchingDriver) {
       sparkConf.getOption("spark.driver.extraJavaOptions")
         .orElse(sys.env.get("SPARK_JAVA_OPTS"))
+        .map(Utils.splitCommandString).getOrElse(Seq.empty)
         .foreach(opts => javaOpts += opts)
       val libraryPaths = Seq(sys.props.get("spark.driver.extraLibraryPath"),
         sys.props.get("spark.driver.libraryPath")).flatten
       if (libraryPaths.nonEmpty) {
         prefixEnv = Some(Utils.libraryPathEnvPrefix(libraryPaths))
       }
+      if (sparkConf.getOption("spark.yarn.am.extraJavaOptions").isDefined) {
+        logWarning("spark.yarn.am.extraJavaOptions will not take effect in cluster mode")
+      }
     } else {
      // Validate and include yarn am specific java options in yarn-client mode.
-     val amOptsKey = "spark.yarn.clientmode.am.extraJavaOptions"
+     val amOptsKey = "spark.yarn.am.extraJavaOptions"
      val amOpts = sparkConf.getOption(amOptsKey)
-    amOpts.foreach { opts =>
+     amOpts.foreach { opts =>
        if (opts.contains("-Dspark")) {
          val msg = s"$amOptsKey is not allowed to set Spark options (was '$opts'). "
          throw new SparkException(msg)
@@ -371,7 +375,7 @@ private[spark] trait ClientBase extends Logging {
          val msg = s"$amOptsKey is not allowed to alter memory settings (was '$opts')."
          throw new SparkException(msg)
       }
-      javaOpts += opts
+      javaOpts ++= Utils.splitCommandString(opts)
     }
   }
     // For log4j configuration to reference

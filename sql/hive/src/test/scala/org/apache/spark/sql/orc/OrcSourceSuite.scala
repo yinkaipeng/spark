@@ -45,7 +45,7 @@ abstract class OrcTest extends QueryTest with BeforeAndAfterAll {
       val partDir = new File(partitionedTableDir, s"p=$p")
       System.out.println(partDir)
       sparkContext.makeRDD(1 to 10)
-        .map(i => OrcData(i, s"part-$p"))
+        .map(i => OrcDataWithKey(p, i, s"part-$p"))
         .toSchemaRDD.saveAsOrcFile(partDir.getCanonicalPath)
     }
 
