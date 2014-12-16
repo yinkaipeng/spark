@@ -401,7 +401,7 @@
         </property>
       </activation>
       <properties>
-        <hbase.version>0.98.7-hadoop2</hbase.version>
+        <hbase.version>0.99.2</hbase.version>
       </properties>
     </profile>
     <profile>
