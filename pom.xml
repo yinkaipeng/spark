@@ -122,7 +122,7 @@
     <hadoop.version>1.0.4</hadoop.version>
     <protobuf.version>2.4.1</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
-    <hbase.version>0.94.6</hbase.version>
+    <hbase.version>0.99.2</hbase.version>
     <flume.version>1.4.0</flume.version>
     <zookeeper.version>3.4.5</zookeeper.version>
     <!-- Version used in Maven Hive dependency -->
@@ -152,6 +152,17 @@
   </properties>
 
   <repositories>
+    <repository>
+      <id>horton-repo</id>
+      <name>Hortonworks Repository</name>
+      <url>http://repo.hortonworks.com/content/repositories/releases/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
     <repository>
       <id>central</id>
       <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
@@ -846,8 +857,25 @@
         <!-- Matches the version of jackson-core-asl pulled in by avro -->
         <groupId>org.codehaus.jackson</groupId>
         <artifactId>jackson-mapper-asl</artifactId>
-        <version>1.8.8</version>
+        <version>1.9.5</version>
       </dependency>
+        <dependency>
+            <!-- Matches the version of jackson-core-asl pulled in by avro -->
+            <groupId>org.codehaus.jackson</groupId>
+            <artifactId>jackson-core-asl</artifactId>
+            <version>1.9.5</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.codehaus.jackson</groupId>
+            <artifactId>jackson-xc</artifactId>
+            <version>1.9.5</version>
+        </dependency>
+        <dependency>
+            <groupId>org.codehaus.jackson</groupId>
+            <artifactId>jackson-jaxrs</artifactId>
+            <version>1.9.5</version>
+        </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -1317,6 +1345,13 @@
       <modules>
         <module>yarn</module>
         <module>network/yarn</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>yarn-history</id>
+      <modules>
+        <module>yarn/history</module>
       </modules>
     </profile>
 

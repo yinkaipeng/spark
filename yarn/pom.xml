@@ -33,6 +33,20 @@
   </properties>
 
   <dependencies>
+      <dependency>
+          <!-- Matches the version of jackson-core-asl pulled in by avro -->
+          <groupId>org.codehaus.jackson</groupId>
+          <artifactId>jackson-core-asl</artifactId>
+      </dependency>
+
+      <dependency>
+          <groupId>org.codehaus.jackson</groupId>
+          <artifactId>jackson-xc</artifactId>
+      </dependency>
+      <dependency>
+          <groupId>org.codehaus.jackson</groupId>
+          <artifactId>jackson-jaxrs</artifactId>
+      </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
@@ -106,8 +120,13 @@
         <module>stable</module>
       </modules>
     </profile>
+    <!--<profile>
+      <id>yarn-history</id>
+      <modules>
+        <module>history</module>
+      </modules>
+    </profile>-->
   </profiles>
-
   <build>
     <plugins>
       <plugin>
