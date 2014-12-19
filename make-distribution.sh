@@ -75,6 +75,9 @@ while (( "$#" )); do
       NAME="$2"
       shift
       ;;
+    --HDP)
+      build_flags="-PhadoopVersion=${HADOOP_VERSION} -PtezVersion=${TEZ_VERSION} -PsparkVersion=${SPARK_VERSION}"
+      ;;
     --help)
       exit_with_usage
       ;;
@@ -181,7 +184,7 @@ echo "Spark $VERSION$GITREVSTRING built for Hadoop $SPARK_HADOOP_VERSION" > "$DI
 
 
 cd "$FWDIR"/../spark-native-yarn
-./gradlew clean installApp
+./gradlew clean installApp ${build_flags}
 mkdir -p "$DISTDIR/external"
 cd "$FWDIR"
 cp -R "$FWDIR"/../spark-native-yarn/build/install/spark-native-yarn "$DISTDIR/external/"
