@@ -37,6 +37,13 @@
       <distribution>repo</distribution>
     </license>
   </licenses>
+  <distributionManagement>
+    <repository>
+       <id>${repo.id}</id>
+       <name>Internal Repository</name>
+       <url>${internal.maven.repo}</url>
+    </repository>
+  </distributionManagement>
   <scm>
     <connection>scm:git:git@github.com:apache/spark.git</connection>
     <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/spark.git</developerConnection>
