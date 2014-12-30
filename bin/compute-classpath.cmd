@@ -54,6 +54,19 @@ if exist "%FWDIR%RELEASE" (
   )
 )
 
+rem Adding in HDInsight related jars
+for %%d in ("%HADOOP_HOME%\share\hadoop\common\lib\WindowsAzureETWSink-*.jar") do (
+    set CLASSPATH=%CLASSPATH%;%%d
+)
+
+for %%d in ("%HADOOP_HOME%\share\hadoop\common\lib\microsoft-windowsazure-storage-sdk-*.jar") do (
+    set CLASSPATH=%CLASSPATH%;%%d
+)
+
+for %%d in ("%HADOOP_HOME%\share\hadoop\common\hadoop-common-*.jar") do (
+    set CLASSPATH=%CLASSPATH%;%%d
+)
+
 set CLASSPATH=%CLASSPATH%;%ASSEMBLY_JAR%
 
 rem When Hive support is needed, Datanucleus jars must be included on the classpath.
