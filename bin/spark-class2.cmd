@@ -27,7 +27,18 @@ rem Figure out where the Spark framework is installed
 set FWDIR=%~dp0..\
 
 rem Export this as SPARK_HOME
-set SPARK_HOME=%FWDIR%
+if "%SPARK_HOME%" == "" ( 
+  set SPARK_HOME=%FWDIR% 
+) 
+
+rem create windows service config file if requested 
+if "%1"=="--service" (
+  if not defined SPARK_ROOT_LOGGER (
+    set SPARK_ROOT_LOGGER=INFO,DRFA
+  )
+  set service_entry=true
+  shift
+)
 
 rem Load environment variables from conf\spark-env.cmd, if it exists
 if exist "%FWDIR%conf\spark-env.cmd" call "%FWDIR%conf\spark-env.cmd"
@@ -125,6 +136,9 @@ rem Figure out where java is.
 set RUNNER=java
 if not "x%JAVA_HOME%"=="x" set RUNNER=%JAVA_HOME%\bin\java
 
+REM set spark command
+set spark-command=%1
+
 rem In Spark submit client mode, the driver is launched in the same JVM as Spark submit itself.
 rem Here we must parse the properties file for relevant "spark.driver.*" configs before launching
 rem the driver JVM itself. Instead of handling this complexity here, we launch a separate JVM
@@ -133,19 +147,39 @@ rem to prepare the launch environment of this driver JVM.
 rem In this case, leave out the main class (org.apache.spark.deploy.SparkSubmit) and use our own.
 rem Leaving out the first argument is surprisingly difficult to do in Windows. Note that this must
 rem be done here because the Windows "shift" command does not work in a conditional block.
-set BOOTSTRAP_ARGS=
-shift
+
+rem leave out first argument when it is submitted as bootstrap driver
+if defined SPARK_SUBMIT_BOOTSTRAP_DRIVER (
+	shift
+)
+
+set PARAMS=
 :start_parse
 if "%~1" == "" goto end_parse
-set BOOTSTRAP_ARGS=%BOOTSTRAP_ARGS% %~1
+set PARAMS=%PARAMS% %~1
 shift
 goto start_parse
 :end_parse
+set JAVA_ARGUMENTS=-cp "%CLASSPATH%" %JAVA_OPTS% %PARAMS%
+
 
 if not [%SPARK_SUBMIT_BOOTSTRAP_DRIVER%] == [] (
   set SPARK_CLASS=1
-  "%RUNNER%" org.apache.spark.deploy.SparkSubmitDriverBootstrapper %BOOTSTRAP_ARGS%
+  "%RUNNER%" org.apache.spark.deploy.SparkSubmitDriverBootstrapper %JAVA_ARGUMENTS%
+) else if defined service_entry (
+  call :makeServiceXml %JAVA_ARGUMENTS%
 ) else (
   "%RUNNER%" -cp "%CLASSPATH%" %JAVA_OPTS% %*
 )
-:exit
+goto :eof
+
+:makeServiceXml
+  set arguments=%*
+  @echo ^<service^>
+  @echo   ^<id^>%spark-command%^</id^>
+  @echo   ^<name^>%spark-command%^</name^>
+  @echo   ^<description^>This service runs Spark %spark-command%^</description^>
+  @echo   ^<executable^>%RUNNER%^</executable^>
+  @echo   ^<arguments^>%arguments%^</arguments^>
+  @echo ^</service^>
+goto :eof

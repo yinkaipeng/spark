@@ -20,7 +20,9 @@ rem
 set SCALA_VERSION=2.10
 
 rem Figure out where the Spark framework is installed
-set FWDIR=%~dp0..\
+if "%SPARK_HOME%" == "" ( 
+  set SPARK_HOME=%~dp0..
+) 
 
 rem Export this as SPARK_HOME
 set SPARK_HOME=%FWDIR%

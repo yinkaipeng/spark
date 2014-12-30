@@ -20,4 +20,8 @@ rem
 rem This is the entry point for running Spark shell. To avoid polluting the
 rem environment, it just launches a new cmd to do the real work.
 
+if "%SPARK_HOME%" == "" ( 
+   set SPARK_HOME=%~dp0..
+)
+
 cmd /V /E /C %~dp0spark-shell2.cmd %*
