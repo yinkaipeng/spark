@@ -104,6 +104,11 @@
       <version>${avro.version}</version>
       <classifier>${avro.mapred.classifier}</classifier>
     </dependency>
+     <dependency>
+      <groupId>javassist</groupId>
+      <artifactId>javassist</artifactId>
+      <version>3.12.1.GA</version>
+    </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
       <artifactId>scalatest_${scala.binary.version}</artifactId>
