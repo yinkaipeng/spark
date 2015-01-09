@@ -219,6 +219,7 @@ cp -r "$FWDIR/data" "$DISTDIR"
 # Copy other things
 mkdir "$DISTDIR"/conf
 cp "$FWDIR"/conf/*.template "$DISTDIR"/conf
+cp "$FWDIR"/conf/*.conf "$DISTDIR"/conf
 cp "$FWDIR/README.md" "$DISTDIR"
 cp -r "$FWDIR/bin" "$DISTDIR"
 cp -r "$FWDIR/python" "$DISTDIR"
