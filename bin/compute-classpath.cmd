@@ -67,7 +67,7 @@ for %%d in ("%HADOOP_HOME%\share\hadoop\common\hadoop-common-*.jar") do (
     set CLASSPATH=%CLASSPATH%;%%d
 )
 
-set CLASSPATH=%CLASSPATH%;%ASSEMBLY_JAR%
+set CLASSPATH=%ASSEMBLY_JAR%;%CLASSPATH%
 
 rem When Hive support is needed, Datanucleus jars must be included on the classpath.
 rem Datanucleus jars do not work if only included in the uber jar as plugin.xml metadata is lost.
