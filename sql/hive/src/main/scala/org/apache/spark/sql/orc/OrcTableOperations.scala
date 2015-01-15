@@ -192,11 +192,11 @@ case class OrcTableScan(
     }.unzip
 
     val unwrappers = HadoopTypeConverter.unwrappers(fieldRefs)
-    logInfo("Converting raw data to row")
+    logDebug("Converting raw data to row")
     // Map each tuple to a row object
     iterator.map { value =>
       val raw = deserializer.deserialize(value)
-      logInfo("Raw data: " + raw)
+      logDebug("Raw data: " + raw)
       var i = 0
       while (i < fieldRefs.length) {
         val fieldValue = soi.getStructFieldData(raw, fieldRefs(i))
@@ -207,7 +207,7 @@ case class OrcTableScan(
         }
         i += 1
       }
-      logInfo("Mutable row: " + mutableRow)
+      logDebug("Mutable row: " + mutableRow)
       mutableRow: Row
     }
 
