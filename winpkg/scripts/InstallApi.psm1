@@ -23,7 +23,7 @@
 ###
 $ScriptDir = Resolve-Path (Split-Path $MyInvocation.MyCommand.Path)
 
-$FinalName = "spark-1.2.0"
+$FinalName = "@final.name@"
 
 ###############################################################################
 ###
