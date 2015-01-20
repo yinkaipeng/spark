@@ -973,11 +973,17 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
   }
 
   def createSparkContext(): SparkContext = {
+    var appName: String = null;
+    if (Utils.isWindows) {
+      appName = "SparkShell"
+    } else {
+      appName = "Spark Shell"
+    }
     val execUri = System.getenv("SPARK_EXECUTOR_URI")
     val jars = SparkILoop.getAddedJars
     val conf = new SparkConf()
       .setMaster(getMaster())
-      .setAppName("Spark shell")
+      .setAppName(appName)
       .setJars(jars)
       .set("spark.repl.class.uri", intp.classServer.uri)
     if (execUri != null) {

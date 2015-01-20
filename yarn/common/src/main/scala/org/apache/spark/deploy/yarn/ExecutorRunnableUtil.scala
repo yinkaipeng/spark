@@ -110,6 +110,12 @@ trait ExecutorRunnableUtil extends Logging {
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
 
+    var kCmd:String = null
+    if (Utils.isWindows) {
+      kCmd =  "-XX:OnOutOfMemoryError=\"taskkill /F /PID %%%%p\""
+    } else {
+      kCmd =  "-XX:OnOutOfMemoryError='kill %p'"
+    }
     val commands = prefixEnv ++ Seq(Environment.JAVA_HOME.$() + "/bin/java",
       "-server",
       // Kill if OOM is raised - leverage yarn's failure handling to cause rescheduling.
@@ -117,7 +123,7 @@ trait ExecutorRunnableUtil extends Logging {
       // an inconsistent state.
       // TODO: If the OOM is not recoverable by rescheduling it on different node, then do
       // 'something' to fail job ... akin to blacklisting trackers in mapred ?
-      "-XX:OnOutOfMemoryError='kill %p'") ++
+      kCmd) ++
       javaOpts ++
       Seq("org.apache.spark.executor.CoarseGrainedExecutorBackend",
       masterAddress.toString,

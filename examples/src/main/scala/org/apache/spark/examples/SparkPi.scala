@@ -18,13 +18,19 @@
 package org.apache.spark.examples
 
 import scala.math.random
-
+import org.apache.spark.util.Utils
 import org.apache.spark._
 
 /** Computes an approximation to pi */
 object SparkPi {
   def main(args: Array[String]) {
-    val conf = new SparkConf().setAppName("Spark Pi")
+    var appName: String = null;
+    if (Utils.isWindows) {
+      appName = "SparkPi"
+    } else {
+      appName = "Spark Pi"
+    }
+    val conf = new SparkConf().setAppName(appName)
     val spark = new SparkContext(conf)
     val slices = if (args.length > 0) args(0).toInt else 2
     val n = 100000 * slices
