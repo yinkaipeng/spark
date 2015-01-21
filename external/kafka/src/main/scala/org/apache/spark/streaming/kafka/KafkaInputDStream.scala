@@ -130,9 +130,7 @@ class KafkaReceiver[
       try {
         val streamIterator = stream.iterator()
         while (streamIterator.hasNext()) {
-
           val msgAndMetadata = streamIterator.next()
-          logInfo(msgAndMetadata.message.toString)
           store((msgAndMetadata.key, msgAndMetadata.message))
         }
       } catch {
