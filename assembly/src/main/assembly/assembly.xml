@@ -28,15 +28,17 @@
         <include>README</include>
       </includes>
     </fileSet>
-    <fileSet>
-      <directory>
-        ${project.parent.basedir}/core/src/main/resources/org/apache/spark/ui/static/
-      </directory>
-      <outputDirectory>/ui-resources/org/apache/spark/ui/static</outputDirectory>
-      <includes>
-        <include>**/*</include>
-      </includes>
-    </fileSet>
+    	<fileSet>
+	  <directory>
+		${project.parent.basedir}/
+	  </directory>
+	  <outputDirectory>/</outputDirectory>
+	  <includes>
+		<include>LICENSE</include>
+		<include>NOTICE</include>
+		<include>README.md</include>
+	  </includes>
+	</fileSet>
     <fileSet>
       <directory>
         ${project.parent.basedir}/sbin/
@@ -45,6 +47,15 @@
       <includes>
         <include>**/*</include>
       </includes>
+    </fileSet>
+    <fileSet>
+       <directory>
+        ${project.parent.basedir}/python/
+       </directory>
+       <outputDirectory>/python</outputDirectory>
+       <includes>
+         <include>**/*</include>
+       </includes>
     </fileSet>
     <fileSet>
       <directory>
@@ -59,35 +70,73 @@
       <directory>
         ${project.parent.basedir}/assembly/target/${spark.jar.dir}
       </directory>
-      <outputDirectory>/</outputDirectory>
+      <outputDirectory>/lib</outputDirectory>
       <includes>
         <include>${spark.jar.basename}</include>
       </includes>
     </fileSet>
+    <fileSet>
+      <directory>
+	 ${project.parent.basedir}/examples/src/main
+       </directory>
+       <outputDirectory>/examples/src/main</outputDirectory>
+  	<includes>
+	   <include>**/*</include>
+  	</includes>
+    </fileSet>
+    <fileSet>
+       <directory>
+	  ${project.parent.basedir}/ec2
+       </directory>
+       <outputDirectory>/ec2</outputDirectory>
+       <includes>
+	  <include>**/*</include>
+       </includes>
+    </fileSet>
+    <fileSet>
+       <directory>
+	  ${project.parent.basedir}/data
+       </directory>
+       <outputDirectory>/data</outputDirectory>
+       <includes>
+	  <include>**/*</include>
+       </includes>
+    </fileSet>
+    <fileSet>
+       <directory>
+	   ${project.parent.basedir}/conf
+       </directory>
+       <outputDirectory>/conf</outputDirectory>
+       <includes>
+          <include>**/*</include>
+       </includes>
+    </fileSet>
+    <fileSet>
+      <directory>
+	 ${project.parent.basedir}/examples/target/${spark.jar.dir}/
+      </directory>
+      <outputDirectory>/lib</outputDirectory>
+       <includes>
+  	  <include>spark-examples-${project.version}-hadoop${hadoop.version}.jar</include>
+       </includes>
+    </fileSet>
+    <fileSet>
+       <directory>
+	   ${project.parent.basedir}/network/yarn/target/${spark.jar.dir}/
+       </directory>
+       <outputDirectory>/lib</outputDirectory>
+        <includes>
+	    <include>spark-${project.version}-yarn-shuffle.jar</include>
+        </includes>
+    </fileSet>
+    <fileSet>
+       <directory>
+	   ${project.parent.basedir}/lib_managed/jars
+       </directory>
+       <outputDirectory>/lib</outputDirectory>
+       <includes>
+	  <include>datanucleus*.jar</include>
+       </includes>
+    </fileSet>
   </fileSets>
-
-  <dependencySets>
-    <dependencySet>
-      <includes>
-        <include>org.apache.spark:*:jar</include>
-      </includes>
-      <excludes>
-        <exclude>org.apache.spark:spark-assembly:jar</exclude>
-      </excludes>
-    </dependencySet>
-    <dependencySet>
-      <outputDirectory>lib</outputDirectory>
-      <useTransitiveDependencies>true</useTransitiveDependencies>
-      <unpack>false</unpack>
-      <scope>runtime</scope>
-      <useProjectArtifact>false</useProjectArtifact>
-      <excludes>
-        <exclude>org.apache.hadoop:*:jar</exclude>
-        <exclude>org.apache.spark:*:jar</exclude>
-        <exclude>org.apache.zookeeper:*:jar</exclude>
-        <exclude>org.apache.avro:*:jar</exclude>
-      </excludes>
-    </dependencySet>
-  </dependencySets>
-
 </assembly>
