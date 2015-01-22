@@ -149,7 +149,7 @@ rem Leaving out the first argument is surprisingly difficult to do in Windows. N
 rem be done here because the Windows "shift" command does not work in a conditional block.
 
 rem leave out first argument when it is submitted as bootstrap driver
-if defined SPARK_SUBMIT_BOOTSTRAP_DRIVER (
+if not [%SPARK_SUBMIT_BOOTSTRAP_DRIVER%] == [] (
 	shift
 )
 
@@ -165,7 +165,7 @@ set JAVA_ARGUMENTS=-cp "%CLASSPATH%" %JAVA_OPTS% %PARAMS%
 
 if not [%SPARK_SUBMIT_BOOTSTRAP_DRIVER%] == [] (
   set SPARK_CLASS=1
-  "%RUNNER%" org.apache.spark.deploy.SparkSubmitDriverBootstrapper %JAVA_ARGUMENTS%
+  "%RUNNER%" org.apache.spark.deploy.SparkSubmitDriverBootstrapper %PARAMS%
 ) else if defined service_entry (
   call :makeServiceXml %JAVA_ARGUMENTS%
 ) else (
