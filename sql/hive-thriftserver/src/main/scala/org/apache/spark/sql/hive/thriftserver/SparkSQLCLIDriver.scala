@@ -39,6 +39,7 @@ import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.sql.hive.instrument.HiveInstrumentationAgent
 import org.apache.spark.sql.hive.thriftserver.HiveThriftServerShim
 
 private[hive] object SparkSQLCLIDriver {
@@ -70,6 +71,7 @@ private[hive] object SparkSQLCLIDriver {
   }
 
   def main(args: Array[String]) {
+    HiveInstrumentationAgent.instrument
     val oproc = new OptionsProcessor()
     if (!oproc.process_stage1(args)) {
       System.exit(1)
