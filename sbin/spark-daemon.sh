@@ -167,6 +167,7 @@ case $option in
       if kill -0 `cat $pid` > /dev/null 2>&1; then
         echo stopping $command
         kill `cat $pid`
+        rm -f $pid
       else
         echo no $command to stop
       fi
