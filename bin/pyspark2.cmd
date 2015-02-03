@@ -24,9 +24,9 @@ rem Figure out where the Spark framework is installed
 set FWDIR=%~dp0..\
 
 rem Export this as SPARK_HOME
-if "%SPARK_HOME%" == "" (
-  set SPARK_HOME=%FWDIR%
-)
+if "%SPARK_HOME%" == "" ( 
+  set SPARK_HOME=%FWDIR% 
+) 
 
 rem Test whether the user has built Spark
 if exist "%FWDIR%RELEASE" goto skip_build_test
