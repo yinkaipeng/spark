@@ -19,12 +19,6 @@
 
 $ScriptDir = Resolve-Path (Split-Path $MyInvocation.MyCommand.Path)
 
-### Templates
-$Username = "sparkadmin"
-$Password = "HDInsight123!"
-$ENV:HADOOP_NODE_INSTALL_ROOT = "C:\apps\dist"
-$ENV:WINPKG_LOG = "winpkg_core_install.log"
-$SparkVersion = "1.2.0"
 
 ###
 ### Uncomment and update below section for testing from sources
@@ -33,8 +27,8 @@ $SparkVersion = "1.2.0"
 #$Password = "TestUser123"
 #$ENV:HADOOP_NODE_INSTALL_ROOT = "C:\Hadoop\test"
 #$ENV:WINPKG_LOG = "winpkg_core_install.log"
+#$SparkVersion = "1.2.0"
 
-#$HadoopCoreVersion = "2.1.2-SNAPSHOT"
 ###
 ### End of testing section
 ###

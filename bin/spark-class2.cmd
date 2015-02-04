@@ -160,7 +160,7 @@ set PARAMS=%PARAMS% %~1
 shift
 goto start_parse
 :end_parse
-set JAVA_ARGUMENTS=-cp "%CLASSPATH%" %JAVA_OPTS% %PARAMS%
+set JAVA_ARGUMENTS=-classpath "%CLASSPATH%" %JAVA_OPTS% %PARAMS%
 
 
 if not [%SPARK_SUBMIT_BOOTSTRAP_DRIVER%] == [] (
@@ -180,6 +180,6 @@ goto :eof
   @echo   ^<name^>%spark-command%^</name^>
   @echo   ^<description^>This service runs Spark %spark-command%^</description^>
   @echo   ^<executable^>%RUNNER%^</executable^>
-  @echo   ^<arguments^>%arguments%^</arguments^>
+  @echo   ^<arguments^> %arguments%^</arguments^>
   @echo ^</service^>
 goto :eof
