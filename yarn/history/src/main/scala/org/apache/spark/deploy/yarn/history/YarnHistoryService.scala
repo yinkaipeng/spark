@@ -311,7 +311,7 @@ class YarnHistoryService  extends AbstractService("ATS")
   private def handleEvent(event: TimestampEvent,  flush: Boolean): Unit = {
     var push = false
     // if we receive a new appStart event, we always push
-    // not much contention here, only happens when servcie is stopped
+    // not much contention here, only happens when service is stopped
     lock synchronized {
       if (event != null) {
         if (eventsProcessed % 1000 == 0) {

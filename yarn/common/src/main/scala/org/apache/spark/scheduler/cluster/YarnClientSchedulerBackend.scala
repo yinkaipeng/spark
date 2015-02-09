@@ -58,8 +58,6 @@ private[spark] class YarnClientSchedulerBackend(
     client = new Client(args, conf)
     appId = client.submitApplication()
     YarnServices.start(sc, appId)
-   // val logService = new ATSHistoryLoggingService(sc, appId)
-   // logService.startATS
     waitForApplication()
     asyncMonitorApplication()
   }
@@ -149,6 +147,7 @@ private[spark] class YarnClientSchedulerBackend(
     stopping = true
     super.stop()
     client.stop()
+    YarnServices.stop
     logInfo("Stopped")
   }
 
