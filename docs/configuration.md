@@ -191,6 +191,27 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
+  <td><code>spark.driver.extraJavaOptions</code></td>
+  <td>(none)</td>
+  <td>
+    A string of extra JVM options to pass to the driver. For instance, GC settings or other logging.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.extraClassPath</code></td>
+  <td>(none)</td>
+  <td>
+    Extra classpath entries to append to the classpath of the driver.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.extraLibraryPath</code></td>
+  <td>(none)</td>
+  <td>
+    Set a special library path to use when launching the driver JVM.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.extraJavaOptions</code></td>
   <td>(none)</td>
   <td>
@@ -452,7 +473,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.retainedJobs</code></td>
   <td>1000</td>
   <td>
-    How many stages the Spark UI and status APIs remember before garbage
+    How many jobs the Spark UI and status APIs remember before garbage
     collecting.
   </td>
 </tr>
@@ -709,7 +730,9 @@ Apart from these, the following properties are also available, and may be useful
     <td>If set to true, validates the output specification (e.g. checking if the output directory already exists)
     used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing
     output directories. We recommend that users do not disable this except if trying to achieve compatibility with
-    previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
+    previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.
+    This setting is ignored for jobs generated through Spark Streaming's StreamingContext, since
+    data may need to be rewritten to pre-existing output directories during checkpoint recovery.</td>
 </tr>
 <tr>
     <td><code>spark.hadoop.cloneConf</code></td>
@@ -850,6 +873,41 @@ Apart from these, the following properties are also available, and may be useful
     quick. However this is usually not the case as gc pauses and network lags are expected in a
     real Spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats
     between nodes leading to flooding the network with those.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.preferDirectBufs</code></td>
+  <td>true</td>
+  <td>
+    (Netty only) Off-heap buffers are used to reduce garbage collection during shuffle and cache 
+    block transfer. For environments where off-heap memory is tightly limited, users may wish to 
+    turn this off to force all allocations from Netty to be on-heap.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.numConnectionsPerPeer</code></td>
+  <td>1</td>
+  <td>
+    (Netty only) Connections between hosts are reused in order to reduce connection buildup for 
+    large clusters. For clusters with many hard disks and few hosts, this may result in insufficient
+    concurrency to saturate all disks, and so users may consider increasing this value.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.maxRetries</code></td>
+  <td>3</td>
+  <td>
+    (Netty only) Fetches that fail due to IO-related exceptions are automatically retried if this is
+    set to a non-zero value. This retry logic helps stabilize large shuffles in the face of long GC 
+    pauses or transient network connectivity issues.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.retryWait</code></td>
+  <td>5</td>
+  <td>
+    (Netty only) Seconds to wait between retries of fetches. The maximum delay caused by retrying
+    is simply <code>maxRetries * retryWait</code>, by default 15 seconds. 
   </td>
 </tr>
 </table>
@@ -1008,6 +1066,67 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
+#### Dynamic allocation
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.dynamicAllocation.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to use dynamic resource allocation, which scales the number of executors registered
+    with this application up and down based on the workload. Note that this is currently only
+    available on YARN mode. For more detail, see the description
+    <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
+    <br><br>
+    This requires the following configurations to be set:
+    <code>spark.dynamicAllocation.minExecutors</code>,
+    <code>spark.dynamicAllocation.maxExecutors</code>, and
+    <code>spark.shuffle.service.enabled</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.minExecutors</code></td>
+  <td>(none)</td>
+  <td>
+    Lower bound for the number of executors if dynamic allocation is enabled (required).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.maxExecutors</code></td>
+  <td>(none)</td>
+  <td>
+    Upper bound for the number of executors if dynamic allocation is enabled (required).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.schedulerBacklogTimeout</code></td>
+  <td>60</td>
+  <td>
+    If dynamic allocation is enabled and there have been pending tasks backlogged for more than
+    this duration (in seconds), new executors will be requested. For more detail, see this
+    <a href="job-scheduling.html#resource-allocation-policy">description</a>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.sustainedSchedulerBacklogTimeout</code></td>
+  <td><code>schedulerBacklogTimeout</code></td>
+  <td>
+    Same as <code>spark.dynamicAllocation.schedulerBacklogTimeout</code>, but used only for
+    subsequent executor requests. For more detail, see this
+    <a href="job-scheduling.html#resource-allocation-policy">description</a>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.executorIdleTimeout</code></td>
+  <td>600</td>
+  <td>
+    If dynamic allocation is enabled and an executor has been idle for more than this duration
+    (in seconds), the executor will be removed. For more detail, see this
+    <a href="job-scheduling.html#resource-allocation-policy">description</a>.
+  </td>
+</tr>
+</table>
+
 #### Security
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
@@ -1120,7 +1239,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.streaming.receiver.writeAheadLogs.enable</code></td>
+  <td><code>spark.streaming.receiver.writeAheadLog.enable</code></td>
   <td>false</td>
   <td>
     Enable write ahead logs for receivers. All the input data received through receivers
