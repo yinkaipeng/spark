@@ -73,7 +73,15 @@ object SparkSubmit {
       printStream.println(appArgs)
     }
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
-    launch(childArgs, classpath, sysProps, mainClass, appArgs.verbose)
+    try {
+      launch(childArgs, classpath, sysProps, mainClass, appArgs.verbose)
+    } catch {
+      case e =>
+        printStream.println("Error: application failed with exception")
+        e.printStackTrace(printStream)
+        System.exit(1)
+    }
+    System.exit(0)
   }
 
   /**
