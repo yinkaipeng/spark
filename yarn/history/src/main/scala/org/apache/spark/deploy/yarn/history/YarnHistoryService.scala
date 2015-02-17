@@ -199,12 +199,11 @@ class YarnHistoryService  extends AbstractService("ATS")
     if (!stopped.get()) {
       eventQueue.add(event)
     } else {
-      logWarning("ATS service stopped")
+      logInfo("enqueue events with ATS service stopped")
     }
   }
 
   override def serviceStop {
-    logInfo("Stopping ATS service")
     if (!stopped.getAndSet(true)) {
       if (eventHandlingThread != null) {
         eventHandlingThread.interrupt
@@ -355,6 +354,7 @@ class YarnHistoryService  extends AbstractService("ATS")
               bAppEnd = true
               bAppStart = false
               push = true
+              this.stop
             }
           case _ =>
         }
