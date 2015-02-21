@@ -81,7 +81,6 @@ object SparkSubmit {
         e.printStackTrace(printStream)
         System.exit(1)
     }
-    System.exit(0)
   }
 
   /**
