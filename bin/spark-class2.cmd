@@ -98,7 +98,7 @@ rem The repl also uses SPARK_REPL_OPTS.
 )
 
 rem Set JAVA_OPTS to be able to load native libraries and to set heap size
-for /f "tokens=3" %%i in ('java -version 2^>^&1 ^| find "version"') do set jversion=%%i
+for /f "tokens=3" %%i in ('java -version 2^>^&1 ^| findstr "version"') do set jversion=%%i
 for /f "tokens=1 delims=_" %%i in ("%jversion:~1,-1%") do set jversion=%%i
 if "%jversion%" geq "1.8.0" (
   set JAVA_OPTS=%OUR_JAVA_OPTS% -Xms%OUR_JAVA_MEM% -Xmx%OUR_JAVA_MEM%
