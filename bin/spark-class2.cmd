@@ -171,6 +171,7 @@ if not [%SPARK_SUBMIT_BOOTSTRAP_DRIVER%] == [] (
 ) else (
   "%RUNNER%" -cp "%CLASSPATH%" %JAVA_OPTS% %*
 )
+exit /b %ERRORLEVEL%
 goto :eof
 
 :makeServiceXml
