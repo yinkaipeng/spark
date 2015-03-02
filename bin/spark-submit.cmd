@@ -21,3 +21,4 @@ rem This is the entry point for running Spark submit. To avoid polluting the
 rem environment, it just launches a new cmd to do the real work.
 
 cmd /V /E /C %~dp0spark-submit2.cmd %*
+exit /b %ERRORLEVEL%

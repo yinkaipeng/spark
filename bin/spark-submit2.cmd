@@ -76,3 +76,4 @@ if [%SPARK_SUBMIT_DEPLOY_MODE%] == [client] (
 )
 
 cmd /V /E /C %SPARK_HOME%\bin\spark-class.cmd org.apache.spark.deploy.SparkSubmit %ORIG_ARGS%
+exit /b %ERRORLEVEL%
