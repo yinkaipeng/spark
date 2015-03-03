@@ -26,7 +26,7 @@ function Main( $scriptDir )
 	"spark.history.ui.port" = "18080"
 	"spark.yarn.preserve.staging.files" = "False"
 	"spark.yarn.submit.file.replication" = "3"
-	"spark.yarn.historyServer.address" = "$ENV:RESOURCEMANAGER_HOST:18080"
+	"spark.yarn.historyServer.address" = "$ENV:SPARK_JOB_SERVER:18080"
 	"spark.yarn.driver.memoryOverhead" = "384"
 	"spark.yarn.queue" = "default"
 	"spark.yarn.containerLauncherMaxThreads" = "25"

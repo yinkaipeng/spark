@@ -363,7 +363,11 @@ function Configure(
             $active_config[$c.Key] = $c.Value
         }
         WriteSparkConfigFile $sparkDefaults_file $active_config
-
+       
+        Write-Log "Configuring hive-site.xml"
+        $config = @{"hive.metastore.uris"="thrift://$ENV:SPARK_JOB_SERVER:9083"}
+        UpdateXmlConfig "$ENV:SPARK_HOME\conf\hive-site.xml" $config
+  
         Write-Log "Configuration of spark is finished"
     }
     else
@@ -496,6 +500,51 @@ function StopAndDeleteHadoopService(
         $cmd = "sc.exe delete $service"
         Invoke-Cmd $cmd
     }
+}
+
+### Helper routine that updates the given fileName XML file with the given
+### key/value configuration values. The XML file is expected to be in the
+### Hadoop format. For example:
+### <configuration>
+###   <property>
+###     <name.../><value.../>
+###   </property>
+### </configuration>
+function UpdateXmlConfig(
+    [string]
+    [parameter( Position=0, Mandatory=$true )]
+    $fileName, 
+    [hashtable]
+    [parameter( Position=1 )]
+    $config = @{} )
+{
+    $xml = New-Object System.Xml.XmlDocument
+    $xml.PreserveWhitespace = $true
+    $xml.Load($fileName)
+
+    foreach( $key in empty-null $config.Keys )
+    {
+        $value = $config[$key]
+        $found = $False
+        $xml.SelectNodes('/configuration/property') | ? { $_.name -eq $key } | % { $_.value = $value; $found = $True }
+        if ( -not $found )
+        {
+            $newItem = $xml.CreateElement("property")
+            $newItem.AppendChild($xml.CreateSignificantWhitespace("`r`n    ")) | Out-Null
+            $newItem.AppendChild($xml.CreateElement("name")) | Out-Null
+            $newItem.AppendChild($xml.CreateSignificantWhitespace("`r`n    ")) | Out-Null
+            $newItem.AppendChild($xml.CreateElement("value")) | Out-Null
+            $newItem.AppendChild($xml.CreateSignificantWhitespace("`r`n  ")) | Out-Null
+            $newItem.name = $key
+            $newItem.value = $value
+            $xml["configuration"].AppendChild($xml.CreateSignificantWhitespace("`r`n  ")) | Out-Null
+            $xml["configuration"].AppendChild($newItem) | Out-Null
+            $xml["configuration"].AppendChild($xml.CreateSignificantWhitespace("`r`n")) | Out-Null
+        }
+    }
+    
+    $xml.Save($fileName)
+    $xml.ReleasePath
 }
 
 ###
