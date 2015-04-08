@@ -107,7 +107,15 @@ object SparkSubmit {
       printStream.println(appArgs)
     }
     appArgs.action match {
-      case SparkSubmitAction.SUBMIT => submit(appArgs)
+      case SparkSubmitAction.SUBMIT =>
+        try {
+          submit(appArgs)
+        }catch {
+          case e =>
+            printStream.println("Error: application failed with exception")
+            e.printStackTrace(printStream)
+            System.exit(1)
+        }
       case SparkSubmitAction.KILL => kill(appArgs)
       case SparkSubmitAction.REQUEST_STATUS => requestStatus(appArgs)
     }

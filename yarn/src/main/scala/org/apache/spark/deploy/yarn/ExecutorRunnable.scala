@@ -202,6 +202,13 @@ class ExecutorRunnable(
       Seq("--user-class-path", "file:" + absPath)
     }.toSeq
 
+    var kCmd:String = null
+    if (Utils.isWindows) {
+      kCmd =  "-XX:OnOutOfMemoryError=\"taskkill /F /PID %%%%p\""
+    } else {
+      kCmd =  "-XX:OnOutOfMemoryError='kill %p'"
+    }
+
     val commands = prefixEnv ++ Seq(
       YarnSparkHadoopUtil.expandEnvironment(Environment.JAVA_HOME) + "/bin/java",
       "-server",
@@ -210,7 +217,7 @@ class ExecutorRunnable(
       // an inconsistent state.
       // TODO: If the OOM is not recoverable by rescheduling it on different node, then do
       // 'something' to fail job ... akin to blacklisting trackers in mapred ?
-      "-XX:OnOutOfMemoryError='kill %p'") ++
+      kCmd) ++
       javaOpts ++
       Seq("org.apache.spark.executor.CoarseGrainedExecutorBackend",
         "--driver-url", masterAddress.toString,

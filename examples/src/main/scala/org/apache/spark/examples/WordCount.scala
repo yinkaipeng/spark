@@ -17,29 +17,21 @@
 
 package org.apache.spark.examples
 
-import scala.math.random
-import org.apache.spark.util.Utils
-import org.apache.spark._
+import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.SparkContext._
 
-/** Computes an approximation to pi */
-object SparkPi {
+object WordCount {
+  /** Usage: HdfsTest [file] */
   def main(args: Array[String]) {
-    var appName: String = null;
-    if (Utils.isWindows) {
-      appName = "SparkPi"
-    } else {
-      appName = "Spark Pi"
+    if (args.length < 2) {
+      System.err.println("Usage: WordCount <input> <output")
+      System.exit(1)
     }
-    val conf = new SparkConf().setAppName(appName)
-    val spark = new SparkContext(conf)
-    val slices = if (args.length > 0) args(0).toInt else 2
-    val n = math.min(100000L * slices, Int.MaxValue).toInt // avoid overflow
-    val count = spark.parallelize(1 until n, slices).map { i =>
-      val x = random * 2 - 1
-      val y = random * 2 - 1
-      if (x*x + y*y < 1) 1 else 0
-    }.reduce(_ + _)
-    println("Pi is roughly " + 4.0 * count / n)
-    spark.stop()
+    val sparkConf = new SparkConf().setAppName("WordCount")
+    val sc = new SparkContext(sparkConf)
+    val file = sc.textFile(args(0))
+    val counts = file.flatMap(line => line.split(" ")).map(word =>(word, 1)).reduceByKey(_ + _)
+    counts.saveAsTextFile(args(1))
+    sc.stop()
   }
 }
