@@ -1003,11 +1003,17 @@ class SparkILoop(
   // NOTE: Must be public for visibility
   @DeveloperApi
   def createSparkContext(): SparkContext = {
+    var appName: String = null;
+    if (Utils.isWindows) {
+      appName = "Sparkshell"
+    } else {
+      appName = "Spark shell"
+    }
     val execUri = System.getenv("SPARK_EXECUTOR_URI")
     val jars = SparkILoop.getAddedJars
     val conf = new SparkConf()
       .setMaster(getMaster())
-      .setAppName("Spark shell")
+      .setAppName(appName)
       .setJars(jars)
       .set("spark.repl.class.uri", intp.classServerUri)
     if (execUri != null) {

@@ -162,7 +162,12 @@ object YarnSparkHadoopUtil {
    */
   def escapeForShell(arg: String): String = {
     if (arg != null) {
-      val escaped = new StringBuilder("'")
+      val escaped = new StringBuilder("")
+      if (Utils.isWindows) {
+        escaped.append("\"")
+      } else {
+        escaped.append("'")
+      }
       for (i <- 0 to arg.length() - 1) {
         arg.charAt(i) match {
           case '$' => escaped.append("\\$")
@@ -171,7 +176,12 @@ object YarnSparkHadoopUtil {
           case c => escaped.append(c)
         }
       }
-      escaped.append("'").toString()
+      if (Utils.isWindows) {
+        escaped.append("\"")
+      } else {
+        escaped.append("'")
+      }
+      escaped.toString()
     } else {
       arg
     }
