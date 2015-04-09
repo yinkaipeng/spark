@@ -184,6 +184,17 @@
 
   <repositories>
     <repository>
+      <id>horton-repo</id>
+      <name>Hortonworks Repository</name>
+      <url>http://repo.hortonworks.com/content/repositories/releases/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
       <id>central</id>
       <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
