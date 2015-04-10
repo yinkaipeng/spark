@@ -118,6 +118,14 @@ function Install(
         [Environment]::SetEnvironmentVariable("SPARK_HOME", $sparkInstallPath, [EnvironmentVariableTarget]::Machine)
         $ENV:SPARK_HOME = "$sparkInstallPath"
 
+               ###
+               ### Copy conf files
+               ###
+               Write-Log "Copy conf files"
+               $xcopy_cmd = "xcopy /EIYF `"$HDP_INSTALL_PATH\..\template\conf\*`" `"$sparkInstallPath\conf`""
+               Invoke-CmdChk $xcopy_cmd
+
+
 		if ($roles) {
 
 		###
