@@ -104,7 +104,6 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
-    <module>assembly</module>
     <module>external/twitter</module>
     <module>external/flume</module>
     <module>external/flume-sink</module>
@@ -112,6 +111,7 @@
     <module>external/zeromq</module>
     <module>examples</module>
     <module>repl</module>
+    <module>assembly</module>
   </modules>
 
   <properties>
