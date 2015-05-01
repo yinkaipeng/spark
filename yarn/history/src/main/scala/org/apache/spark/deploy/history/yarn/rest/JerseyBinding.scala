@@ -18,16 +18,17 @@
 package org.apache.spark.deploy.history.yarn.rest
 
 import java.io.{FileNotFoundException, IOException}
+import java.lang.reflect.UndeclaredThrowableException
 import java.net.{HttpURLConnection, URI, URL}
-import java.nio.file.{AccessDeniedException, FileSystemException}
 import javax.servlet.http.HttpServletResponse
 import javax.ws.rs.core.MediaType
 
-import com.sun.jersey.api.client.config.{DefaultClientConfig, ClientConfig}
-import com.sun.jersey.api.client.{Client, ClientHandlerException, UniformInterfaceException}
+import com.sun.jersey.api.client.config.{ClientConfig, DefaultClientConfig}
+import com.sun.jersey.api.client.{Client, ClientHandlerException, ClientResponse, UniformInterfaceException}
 import com.sun.jersey.api.json.JSONConfiguration
 import com.sun.jersey.client.urlconnection.{HttpURLConnectionFactory, URLConnectionClientHandler}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.PathPermissionException
 import org.codehaus.jackson.jaxrs.JacksonJaxbJsonProvider
 import org.codehaus.jackson.map.ObjectMapper
 import org.codehaus.jackson.map.annotate.JsonSerialize.Inclusion
@@ -55,19 +56,28 @@ private[spark] object JerseyBinding extends Logging {
    * Translate exceptions, where possible. If not, it is passed through unchanged
    * @param verb HTTP verb
    * @param targetURL URL of operation
-   * @param exception exception caught
+   * @param thrown exception caught
    * @return an exception to log, ingore, throw...
    */
   def translateException(verb: String,
     targetURL: URI,
-    exception: Exception): Exception = {
-    exception match {
+    thrown: Throwable): Throwable = {
+    thrown match {
       case ex: ClientHandlerException =>
+        // client-side Jersey exception
         translateException(verb, targetURL, ex)
+
       case ex: UniformInterfaceException =>
+        // remote Jersey exception
         translateException(verb, targetURL, ex)
+
+      case ex: UndeclaredThrowableException =>
+        // wrapped exception raised in a doAs() call. Extract cause and retry
+        translateException(verb, targetURL, ex.getCause)
+
       case _ =>
-        exception
+        // anything else
+        thrown
     }
   }
   
@@ -85,13 +95,48 @@ private[spark] object JerseyBinding extends Logging {
   def translateException(verb: String,
     targetURL: URI,
     exception: ClientHandlerException): IOException = {
-    if (exception.getCause.isInstanceOf[IOException]) {
-      exception.getCause.asInstanceOf[IOException]
-    } else {
-      val ioe = new IOException(verb + " " + targetURL + " failed: " + exception)
-      ioe.initCause(exception)
-      ioe
+    val uri = if (targetURL !=null) targetURL.toString else "unknown URL"
+    exception.getCause match {
+      case ioe: IOException =>
+        // pass through
+        ioe
+      case other: Throwable =>
+        // get inner cause into exception text
+        val ioe = new IOException(s"$verb $uri failed: $exception - $other")
+        ioe.initCause(exception)
+        ioe
+      case _ =>
+        // no inner cause
+        val ioe = new IOException(s"$verb $uri failed: $exception")
+        ioe.initCause(exception)
+        ioe
     }
+  }
+
+  /**
+   * Get the body of a response. Only the
+   * first 256 chars are returned.
+   * @param response response
+   * @return string body; "" for no body
+   */
+  private def bodyOfResponse(response: ClientResponse) : String = {
+    var body: String = ""
+    try {
+      if (response.hasEntity) {
+        try {
+          body = response.getEntity(classOf[String])
+        }
+        catch {
+          case e: Exception => // ignored
+        }
+      }
+    } catch {
+      case e: Exception => {
+        log.warn("Failed to extract body from client response", e)
+      }
+    }
+    //shorten the body
+    body.substring(0, Math.min(256, body.length))
   }
 
   /**
@@ -112,44 +157,25 @@ private[spark] object JerseyBinding extends Logging {
     val uri = if (targetURL != null) targetURL.toString else ("unknown URL")
     if (response != null) {
       val status: Int = response.getStatus
-      var body: String = ""
-      try {
-        if (response.hasEntity) {
-          try {
-            body = response.getEntity(classOf[String])
-          }
-          catch {
-            case e: Exception => // ignored
-          }
-          logError(s"$verb $uri returned status $status and body\n$body")
-        }
-        else {
-          logError(s"$verb $uri returned status $status and empty body")
-        }
-      } catch {
-        case e: Exception => {
-          log.warn("Failed to extract body from client response", e)
-        }
-      }
+      val body = bodyOfResponse(response)
+      val errorText = s"Bad $verb request: status code $status against $uri; $body"
       if (status == HttpServletResponse.SC_UNAUTHORIZED ||
           status == HttpServletResponse.SC_FORBIDDEN) {
-        ioe = new AccessDeniedException(uri, null, s"Status code $status; $body")
+        ioe = new PathPermissionException(errorText)
       } else if (status == HttpServletResponse.SC_BAD_REQUEST ||
           status == HttpServletResponse.SC_NOT_ACCEPTABLE ||
           status == HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE) {
         // ideally a specific exception could be raised here, but there is no ideal match in the JDK
-        ioe = new FileSystemException(uri, null,
-                    s"Bad $verb request: status code $status against $uri; $body")
+        ioe = new IOException(errorText)
 
       } else if (status > 400 && status < 500) {
         ioe = new FileNotFoundException(
             s"Bad $verb request: status code $status against $uri; $body")
       } else {
-        ioe = new FileSystemException(uri, null, s"$verb $uri failed: " +
-            s"with status code $status: $exception; $body")
+        ioe = new IOException(errorText)
       }
     } else {
-      ioe = new FileSystemException(uri, null, s"$verb $uri failed: $exception")
+      ioe = new IOException(s"$verb $uri failed: $exception")
     }
     ioe.initCause(exception)
     ioe
