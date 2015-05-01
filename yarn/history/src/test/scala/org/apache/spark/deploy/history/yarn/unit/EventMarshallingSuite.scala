@@ -55,7 +55,7 @@ class EventMarshallingSuite extends FunSuite
 
   test("unmarshall entity type") {
     val event = new TimelineEvent
-    event.setEventType(YarnHistoryService.ENTITY_TYPE)
+    event.setEventType(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
     val ex = intercept[IOException] {
       toSparkEvent(event)
     }

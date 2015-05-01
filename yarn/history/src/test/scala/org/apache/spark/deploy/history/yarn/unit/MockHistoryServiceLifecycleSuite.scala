@@ -72,7 +72,7 @@ class MockHistoryServiceLifecycleSuite
     }
     // and expect an attempt to start again to fail
     val thrown = intercept[ServiceStateException] {
-      service.start(sparkCtx, appId)
+      service.start(sparkCtx, applicationId)
     }
     // but a repeated close is harmless
     service.close()
@@ -81,7 +81,7 @@ class MockHistoryServiceLifecycleSuite
   test("ServiceStartArguments") {
     val service = new YarnHistoryService()
     intercept[IllegalArgumentException] {
-      service.start(null, appId)
+      service.start(null, applicationId)
     }
     intercept[IllegalArgumentException] {
       service.start(sparkCtx, null)

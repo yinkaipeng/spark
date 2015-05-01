@@ -35,7 +35,7 @@ private[spark] class YarnClientSchedulerBackend(
   private var client: Client = null
   private var appId: ApplicationId = null
   @volatile private var stopping: Boolean = false
-  private val services: YarnServices = new YarnServices()
+  private val services: YarnExtensionServices = new YarnExtensionServices()
 
   /**
    * Create a Yarn client to submit an application to the ResourceManager.

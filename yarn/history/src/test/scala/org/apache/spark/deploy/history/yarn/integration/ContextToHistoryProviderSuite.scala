@@ -17,8 +17,6 @@
  */
 package org.apache.spark.deploy.history.yarn.integration
 
-import java.io.File
-
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
@@ -76,12 +74,10 @@ class ContextToHistoryProviderSuite
       sparkCtx.stop()
       flushHistoryServiceToSuccess()
 
-      // WORK in PROGRESS
       val timeline = historyService.getTimelineServiceAddress()
-      val clientConfig = createClientConfig()
-      val jerseyClient = createJerseyClient(sparkCtx.hadoopConfiguration, clientConfig)
-      val queryClient = new TimelineQueryClient(timeline, jerseyClient)
-      val entities = queryClient.listEntities(ENTITY_TYPE)
+      val queryClient = new TimelineQueryClient(timeline,
+           sparkCtx.hadoopConfiguration, createClientConfig())
+      val entities = queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE)
       logInfo(s"Entity listing returned ${entities.size} entities")
       entities.foreach { en =>
         logInfo(describeEntityVerbose(en))
@@ -90,13 +86,13 @@ class ContextToHistoryProviderSuite
         entities.size
       }
       assertResult(1, "entities listed by app end filter") {
-        queryClient.listEntities(ENTITY_TYPE,
+        queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE,
                                   primaryFilter = Some(FILTER_APP_END, FILTER_APP_END_VALUE)
                                 ).size
       }
 
       assertResult(1, "entities listed by app start filter") {
-        queryClient.listEntities(ENTITY_TYPE,
+        queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE,
                                   primaryFilter = Some(FILTER_APP_START, FILTER_APP_START_VALUE)
                                 ).size
       }
@@ -109,6 +105,7 @@ class ContextToHistoryProviderSuite
         history.size
       }
       val info = history.head
+      assert(info.completed, s"application not flagged as completed")
       provider.getAppUI(info.id)
       provider.stop()
     } finally {

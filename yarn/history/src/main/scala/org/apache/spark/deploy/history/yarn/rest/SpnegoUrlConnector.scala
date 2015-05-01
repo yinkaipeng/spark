@@ -19,17 +19,15 @@ package org.apache.spark.deploy.history.yarn.rest
 
 import java.io.{FileNotFoundException, IOException}
 import java.net.{HttpURLConnection, URL, URLConnection}
-import java.nio.file.AccessDeniedException
-import java.security.PrivilegedAction
 import javax.net.ssl.HttpsURLConnection
 
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.PathPermissionException
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.security.authentication.client.{PseudoAuthenticator, KerberosAuthenticator, Authenticator, AuthenticatedURL, AuthenticationException, ConnectionConfigurator}
+import org.apache.hadoop.security.authentication.client.{AuthenticatedURL, AuthenticationException, Authenticator, ConnectionConfigurator, KerberosAuthenticator, PseudoAuthenticator}
 import org.apache.hadoop.security.ssl.SSLFactory
-import org.apache.hadoop.security.token.delegation.web.{PseudoDelegationTokenAuthenticator, KerberosDelegationTokenAuthenticator, DelegationTokenAuthenticator, DelegationTokenAuthenticatedURL}
-
+import org.apache.hadoop.security.token.delegation.web.{DelegationTokenAuthenticatedURL, DelegationTokenAuthenticator, KerberosDelegationTokenAuthenticator, PseudoDelegationTokenAuthenticator}
 
 import org.apache.spark.Logging
 
@@ -41,10 +39,12 @@ import org.apache.spark.Logging
 private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator,
   token: DelegationTokenAuthenticatedURL.Token) extends Logging {
 
-  private val useSpnego = UserGroupInformation.isSecurityEnabled
-  private var authenticator: DelegationTokenAuthenticator =
-    if (useSpnego) new KerberosDelegationTokenAuthenticator()
-    else new PseudoDelegationTokenAuthenticator
+  private val secure = UserGroupInformation.isSecurityEnabled
+  private val authenticator: DelegationTokenAuthenticator = if (secure)  {
+      new KerberosDelegationTokenAuthenticator()
+    } else {
+      new PseudoDelegationTokenAuthenticator
+    }
 
   authenticator.setConnectionConfigurator(connConfigurator)
 
@@ -67,15 +67,17 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
       logDebug("open AuthenticatedURL connection" + url)
       UserGroupInformation.getCurrentUser.checkTGTAndReloginFromKeytab
       val authToken: AuthenticatedURL.Token = new AuthenticatedURL.Token
-      return new AuthenticatedURL(KerberosUgiAuthenticator, connConfigurator).openConnection(url, authToken)
+      new AuthenticatedURL(KerberosUgiAuthenticator, connConfigurator).openConnection(url, authToken)
     }
     else {
       logDebug("open URL connection")
       val connection: URLConnection = url.openConnection
-      if (connection.isInstanceOf[HttpURLConnection]) {
-        connConfigurator.configure(connection.asInstanceOf[HttpURLConnection])
+      connection match {
+        case connection1: HttpURLConnection =>
+          connConfigurator.configure(connection1)
+        case _ =>
       }
-      return connection
+      connection
     }
   }
 
@@ -89,21 +91,24 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
    */
 
   def getHttpURLConnection(url: URL): HttpURLConnection = {
-    val isProxyAccess = UserGroupInformation.getCurrentUser.getAuthenticationMethod ==
+    val isProxyAccess =
+      UserGroupInformation.getCurrentUser.getAuthenticationMethod ==
           UserGroupInformation.AuthenticationMethod.PROXY
-    val callerUGI =
-      if (isProxyAccess) UserGroupInformation.getCurrentUser.getRealUser
-      else UserGroupInformation.getCurrentUser
-    val doAsUser =
-      if (isProxyAccess) UserGroupInformation.getCurrentUser.getShortUserName
-      else null
-    val conn = callerUGI.doAs(new PrivilegedAction[HttpURLConnection] {
-      override def run(): HttpURLConnection = {
-        new DelegationTokenAuthenticatedURL(authenticator, connConfigurator)
-            .openConnection(url, token, doAsUser)
+    val callerUGI = if (isProxyAccess) {
+        UserGroupInformation.getCurrentUser.getRealUser
+      } else {
+        UserGroupInformation.getCurrentUser
       }
-    })
-
+    val doAsUser = if (isProxyAccess) {
+        UserGroupInformation.getCurrentUser.getShortUserName
+      } else {
+        null
+      }
+    val conn = callerUGI.doAs(new PrivilegedFunction(
+        (() => {
+          new DelegationTokenAuthenticatedURL(authenticator, connConfigurator)
+              .openConnection(url, token, doAsUser)
+        })))
     conn.setUseCaches(false)
     conn.setInstanceFollowRedirects(true)
     conn
@@ -121,6 +126,7 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
    * @param bodyAsString optional body as a string. If set, used in preference to <code>body</code>
    * @param body optional body of the request. If set (and bodyAsString) unset, the body is
    *             converted to a string and used in the response
+   * @throws IOException if the result code was 400 or higher
    */
   @throws(classOf[IOException])
   def uprateFaults(
@@ -128,19 +134,21 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
     url: String,
     resultCode: Int,
     bodyAsString: String,
-    body: Array[Byte]) {
+    body: Array[Byte]): Unit = {
     if (resultCode >= 400) {
       val msg = s"$verb $url"
       if (resultCode == 404) {
         throw new FileNotFoundException(msg)
       } else if (resultCode == 401) {
-        throw new AccessDeniedException(url, null, msg)
+        throw new PathPermissionException(msg)
       }
-      val bodyText = if (bodyAsString != null)
-                       bodyAsString
-                     else if (body != null && body.length > 0)
-                            new String(body)
-                     else ""
+      val bodyText = if (bodyAsString != null) {
+          bodyAsString
+        } else if (body != null && body.length > 0) {
+          new String(body)
+        } else {
+          ""
+        }
       val message = s"$msg failed with exit code $resultCode, body length" +
           s" ${bodyText.length}\n${bodyText}"
       logError(message)
@@ -151,20 +159,20 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
   def execHttpOperation(verb: String,
     url: URL,
     payload: Array[Byte],
-    contentType: String): HttpOperationResponse = {
+    payloadContentType: String): HttpOperationResponse = {
     var conn: HttpURLConnection = null
     val outcome = new HttpOperationResponse
     var resultCode = 0
     var body: Array[Byte] = null
-    logDebug(s"$verb $url spnego=$useSpnego")
+    logDebug(s"$verb $url spnego=$secure")
     val hasData = payload != null
     try {
       conn = getHttpURLConnection(url)
       conn.setRequestMethod(verb)
       conn.setDoOutput(hasData)
       if (hasData) {
-        require(contentType != null, "no content type")
-        conn.setRequestProperty("Content-Type", contentType)
+        require(payloadContentType != null, "no content type")
+        conn.setRequestProperty("Content-Type", payloadContentType)
       }
       // connection
       conn.connect
@@ -172,7 +180,7 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
         // submit any data
         val output = conn.getOutputStream
         IOUtils.write(payload, output)
-        output.close
+        output.close()
       }
       resultCode = conn.getResponseCode
       outcome.lastModified = conn.getLastModified
@@ -213,7 +221,7 @@ private[spark] class HttpOperationResponse {
   override def toString: String = {
     s"status $responseCode; last modified $lastModified," +
         s" contentType $contentType" +
-        s" data size=${if (data==null) -1 else data.size}}"
+        s" data size=${if (data == null) -1 else data.length}}"
   }
 
   /**
@@ -238,8 +246,7 @@ private object KerberosUgiAuthenticator extends KerberosAuthenticator {
     protected override def getUserName: String = {
       try {
         return UserGroupInformation.getLoginUser.getUserName
-      }
-      catch {
+      } catch {
         case e: IOException => {
           throw new SecurityException("Failed to obtain current username", e)
         }
@@ -282,24 +289,26 @@ private[spark] object SpnegoUrlConnector extends Logging {
   }
 
   /**
-   * Construct a new URLConnectionFactory based on the configuration. It will
-   * try to load SSL certificates when it is specified.
+   * Construct a new URLConnectionFactory based on the configuration.
+   *
+   * @param conf configuration
+   * @param token delegation token
+   * @return a new instance
    */
-  def newInstance(conf: Configuration): SpnegoUrlConnector = {
+  def newInstance(conf: Configuration,
+      token: DelegationTokenAuthenticatedURL.Token = new DelegationTokenAuthenticatedURL.Token): SpnegoUrlConnector = {
     var conn: ConnectionConfigurator = null
     try {
       conn = newSslConnConfigurator(DEFAULT_SOCKET_TIMEOUT, conf)
-    }
-    catch {
+    } catch {
       case e: Exception => {
-        logDebug(
-              "Cannot load customized ssl related configuration. Fallback to system-generic settings.",
-              e)
+        logDebug("Cannot load customized ssl related configuration." +
+            " Fallback to system-generic settings.",
+                  e)
         conn = DefaultConnectionConfigurator
       }
     }
-
-    return new SpnegoUrlConnector(conn, new DelegationTokenAuthenticatedURL.Token)
+    new SpnegoUrlConnector(conn, token)
   }
 
   /**
@@ -314,10 +323,11 @@ private[spark] object SpnegoUrlConnector extends Logging {
     new ConnectionConfigurator {
       @throws(classOf[IOException])
       def configure(conn: HttpURLConnection): HttpURLConnection = {
-        if (conn.isInstanceOf[HttpsURLConnection]) {
-          val c: HttpsURLConnection = conn.asInstanceOf[HttpsURLConnection]
-          c.setSSLSocketFactory(sf)
-          c.setHostnameVerifier(hv)
+        conn match {
+          case c: HttpsURLConnection =>
+            c.setSSLSocketFactory(sf)
+            c.setHostnameVerifier(hv)
+          case _ =>
         }
         setTimeouts(conn, timeout)
         conn

@@ -15,29 +15,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.history.yarn.integration
+package org.apache.spark.deploy.history.yarn.rest
 
-import org.apache.spark.deploy.history.yarn.YarnEventListener
-import org.apache.spark.deploy.history.yarn.YarnTestUtils._
-import org.apache.spark.scheduler.SparkListenerEvent
+import java.security.PrivilegedExceptionAction
 
-class TimelinePostSuite extends AbstractTestsWithHistoryServices {
+/**
+ * Take any function `() => Type` and apply it as a privileged action
+ * @param function function to apply
+ * @tparam T return type of the function
+ */
 
-  test("Round Trip App Stop") {
-    historyService = startHistoryService(sparkCtx)
-    val sparkEvt = appStopEvent()
-    val outcome = postEvent(sparkEvt, 100)
-    historyService.stop()
-    awaitEmptyQueue(historyService,1000)
+class PrivilegedFunction[T](function: (() => T)) extends PrivilegedExceptionAction[T] {
+  override def run(): T = {
+    function()
   }
-
-
-  test("App Start Via Event Listener") {
-    historyService = startHistoryService(sparkCtx)
-    val listener = new YarnEventListener(sparkCtx, historyService)
-    val sparkEvt = appStartEvent()
-    listener.onApplicationStart(sparkEvt)
-  }
-
-
 }

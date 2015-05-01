@@ -32,7 +32,7 @@ class HistoryWithDisabledTimelineSuite extends AbstractYarnHistoryTests {
       // verify that the string operator does not fail
       service.toString()
 
-      assert(!service.start(sparkCtx, appId), s"client start failed: $service")
+      assert(!service.start(sparkCtx, applicationId), s"client start failed: $service")
       assertResult(Service.STATE.STARTED, s"not started : $service") {
         service.getServiceState
       }
@@ -59,7 +59,7 @@ class HistoryWithDisabledTimelineSuite extends AbstractYarnHistoryTests {
     test("QueueAndFlush") {
       val service = new YarnHistoryService()
       try {
-        assert(!service.start(sparkCtx, appId), s"client start failed: $service")
+        assert(!service.start(sparkCtx, applicationId), s"client start failed: $service")
         service.enqueue(new HandleSparkEvent(appStartEvent(), 1))
         service.enqueue(new HandleSparkEvent(appStopEvent(), 1))
 

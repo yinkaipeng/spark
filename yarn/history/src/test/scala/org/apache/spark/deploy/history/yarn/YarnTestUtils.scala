@@ -37,9 +37,9 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
     "System Properties" -> Seq(("Username", "guest"), ("Password", "guest")),
     "Classpath Entries" -> Seq(("Super library", "/tmp/super_library"))))
 
-  val appId: ApplicationId = new StubApplicationId(1, 1L)
+  val applicationId: ApplicationId = new StubApplicationId(1, 1L)
   val applicationStart = SparkListenerApplicationStart("YarnTestUtils",
-                Some(appId.toString), 42L, "bob")
+                Some(applicationId.toString), 42L, "bob")
   val applicationEnd = SparkListenerApplicationEnd(84L)
 
   /**
@@ -126,6 +126,11 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
          YarnConfiguration.TIMELINE_SERVICE_CLIENT_RETRY_INTERVAL_MS -> "200"))
   }
 
+  /**
+   * Convert the single timeline event in a timeline entity to a spark event
+   * @param entity
+   * @return
+   */
   def convertToSparkEvent(entity: TimelineEntity): SparkListenerEvent = {
     assertResult(1, "-wrong # of events in the timeline entry") {
       entity.getEvents().size()
@@ -133,18 +138,40 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
     YarnTimelineUtils.toSparkEvent(entity.getEvents().get(0))
   }
 
+  /**
+   * Application name used in the app start event and tests
+   */
   val APP_NAME = "spark-demo"
 
+  /**
+   * User submitting the job
+   */
   val APP_USER = "data-scientist"
+
+  /**
+   * ID for events
+   */
+  val EVENT_ID = "eventId-0101"
+  /**
+   * Spark option to set for the history provider
+   */
+  val SPARK_HISTORY_PROVIDER = "spark.history.provider"
+
+  /**
+   * Constant used to define history port in Spark `HistoryServer` class
+   */
+  val SPARK_HISTORY_UI_PORT = "spark.history.ui.port"
 
   /**
    * Create an app start event, using the fixed [[APP_NAME]] and [[APP_USER]] values
    * for appname and user
    * @param time application start time
-   * @param eventId event ID
+   * @param eventId event ID; default is [[EVENT_ID]]
    * @return the event
    */
-  def appStartEvent(time: Long = 1, eventId: String = "eventId-0101", user:String = APP_USER): SparkListenerApplicationStart = {
+  def appStartEvent(time: Long = 1,
+      eventId: String = EVENT_ID,
+      user:String = APP_USER): SparkListenerApplicationStart = {
     new SparkListenerApplicationStart(APP_NAME, Some(eventId), time, user);
   }
 
@@ -156,7 +183,7 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
     val entity = new TimelineEntity
     entity.setStartTime(time)
     entity.setEntityId("post")
-    entity.setEntityType(YarnHistoryService.ENTITY_TYPE)
+    entity.setEntityType(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
     entity
   }
 
@@ -290,12 +317,23 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
   }
 
 
+  /**
+   * Wait for a history service's queue to become empty
+   * @param historyService service
+   * @param timeout timeout
+   */
   def awaitEmptyQueue(historyService: YarnHistoryService, timeout: Long): Unit = {
     spinForState(50, timeout,
           (() => outcomeFromBool(historyService.getQueueSize == 0)),
           ((_, _) => fail(s"queue never cleared: ${historyService.getQueueSize}")))
   }
 
+  /**
+   * Await for the count of flushes in the history service to match the expected value
+   * @param historyService service
+   * @param count number of flushes
+   * @param timeout timeout
+   */
   def awaitFlushCount(historyService: YarnHistoryService, count: Int, timeout: Long): Unit = {
     spinForState(50, timeout,
           (() => outcomeFromBool(historyService.getFlushCount() == count)),

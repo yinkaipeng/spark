@@ -22,6 +22,7 @@ import org.apache.hadoop.yarn.api.records.timeline.{TimelineEntity, TimelinePutR
 import org.apache.hadoop.yarn.client.api.TimelineClient
 import org.mockito.Matchers._
 import org.mockito.Mockito._
+import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
@@ -33,7 +34,7 @@ import org.apache.spark.deploy.history.yarn.{AbstractYarnHistoryTests, TimelineS
  */
 class AbstractMockHistorySuite()
     extends AbstractYarnHistoryTests
-    with TimelineServiceEnabled {
+    with TimelineServiceEnabled with MockitoSugar {
 
   protected var timelineClient: TimelineClient = _
 
@@ -44,8 +45,8 @@ class AbstractMockHistorySuite()
    */
   override protected def setup(): Unit = {
     super.setup()
-    timelineClient = mock(classOf[TimelineClient])
-    response = mock(classOf[TimelinePutResponse])
+    timelineClient = mock[TimelineClient]
+    response = mock[TimelinePutResponse]
     when(timelineClient.putEntities(any(classOf[TimelineEntity]))).thenReturn(response)
   }
 
@@ -67,8 +68,8 @@ class AbstractMockHistorySuite()
   YarnHistoryService = {
     val service = spy(new YarnHistoryService())
     assert(timelineClient != null)
-    doReturn(timelineClient).when(service).createTimelineClient
-    service.start(sc, appId)
+    doReturn(timelineClient).when(service).createTimelineClient()
+    service.start(sc, applicationId)
     assert(service.isInState(Service.STATE.STARTED), s"Not started $service")
     service
   }

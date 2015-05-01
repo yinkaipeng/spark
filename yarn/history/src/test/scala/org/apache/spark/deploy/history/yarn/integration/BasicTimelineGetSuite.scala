@@ -37,7 +37,7 @@ class BasicTimelineGetSuite extends AbstractTestsWithHistoryServices {
     super.setup()
     historyService = startHistoryService(sparkCtx)
     val tlUri: URI = historyService.getTimelineServiceAddress()
-    timelineAddress = new URL(tlUri.toURL, YarnHistoryService.ENTITY_TYPE)
+    timelineAddress = new URL(tlUri.toURL, YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
   }
 
 
@@ -47,7 +47,7 @@ class BasicTimelineGetSuite extends AbstractTestsWithHistoryServices {
 
   test("GET ATS paths") {
     describe("GET operations against ATS at HttpConnection level")
-    val connector = SpnegoUrlConnector.newInstance(sparkCtx.hadoopConfiguration)
+    val connector = createUrlConnector()
     val outcome = connector.execHttpOperation("GET", timelineAddress, null, "")
     logInfo(s"$timelineAddress => $outcome")
     assertResult("application/json", s"content type of $outcome") {
@@ -62,6 +62,7 @@ class BasicTimelineGetSuite extends AbstractTestsWithHistoryServices {
     val entityArr = entities.asInstanceOf[JArray]
     assert(entityArr.arr.isEmpty, s"non empty list of entries in $body")
   }
+
 
   test("Jersey Client GET /") {
     describe("GET operations against ATS via Jersey")

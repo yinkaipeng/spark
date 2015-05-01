@@ -19,11 +19,14 @@ package org.apache.spark.deploy.history.yarn.integration
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity
+
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
-import org.apache.spark.deploy.history.yarn.rest.{JerseyBinding, TimelineQueryClient}
-import org.apache.spark.deploy.history.yarn.{YarnEventListener, YarnHistoryProvider}
+import org.apache.spark.deploy.history.yarn.rest.JerseyBinding._
+import org.apache.spark.deploy.history.yarn.rest.TimelineQueryClient
+import org.apache.spark.deploy.history.yarn.{YarnHistoryService, YarnTimelineUtils, YarnEventListener, YarnHistoryProvider}
 import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerApplicationStart}
 import org.apache.spark.util.Utils
 
@@ -50,24 +53,28 @@ class TimelineListenerSuite extends AbstractTestsWithHistoryServices {
     describe("reading events back")
 
 
-    val clientConfig = JerseyBinding.createClientConfig()
-    val jerseyClient = JerseyBinding.createJerseyClient(sparkCtx.hadoopConfiguration, clientConfig)
-    val queryClient = new TimelineQueryClient(timeline, jerseyClient)
+    val queryClient = createTimelineQueryClient()
 
     // list all entries
-    val entities = queryClient.listEntities(ENTITY_TYPE)
+    val entities = queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE)
     assertResult(1, "number of listed entities") { entities.size }
     assertResult(1, "entities listed by app start filter") {
-      queryClient.listEntities(ENTITY_TYPE,
+      queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE,
                 primaryFilter = Some(FILTER_APP_START, FILTER_APP_START_VALUE)
                               ).size
     }
+    val timelineEntities =
+      queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE,
+                                primaryFilter = Some(FILTER_APP_END, FILTER_APP_END_VALUE))
     assertResult(1, "entities listed by app end filter") {
-      queryClient.listEntities(ENTITY_TYPE,
-                primaryFilter = Some(FILTER_APP_END, FILTER_APP_END_VALUE)
-                              ).size
+      timelineEntities.size
     }
-
+    val yarnAppId = applicationId.toString()
+    val entry = timelineEntities.head
+    assertResult(yarnAppId, s"no entry of id $yarnAppId") {
+      entry.getEntityId
+    }
+    val entity = queryClient.getEntity(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE, yarnAppId)
 
     // here the events should be in the system
     val provider = new YarnHistoryProvider(sparkCtx.conf)
@@ -84,7 +91,7 @@ class TimelineListenerSuite extends AbstractTestsWithHistoryServices {
     assertResult(started.time, s"time in $info") {
       info.startTime
     }
-    assertResult(appId.toString, s"app ID in $info") {
+    assertResult(yarnAppId, s"app ID in $info") {
       info.id
     }
     assertResult(started.appName, s"application name in $info") {
@@ -92,7 +99,7 @@ class TimelineListenerSuite extends AbstractTestsWithHistoryServices {
     }
     val appUI = provider.getAppUI(info.id)
 
-    val timelineEntity= queryClient.getEntity(ENTITY_TYPE, info.id)
+    val timelineEntity= queryClient.getEntity(SPARK_EVENT_ENTITY_TYPE, info.id)
     val events = timelineEntity.getEvents.asScala.toList
     assertResult(2, s"number of events in ${describeEntity(timelineEntity)}") {
       events.size
@@ -103,6 +110,9 @@ class TimelineListenerSuite extends AbstractTestsWithHistoryServices {
     val fetchedStartEvent = firstEvent.asInstanceOf[SparkListenerApplicationStart]
     val fetchedEndEvent = secondEvent.asInstanceOf[SparkListenerApplicationEnd]
     assertResult(started.time, "start time") { fetchedStartEvent.time}
+
+    // direct retrieval
+    val entity2 = queryClient.getEntity(SPARK_EVENT_ENTITY_TYPE, yarnAppId)
 
   }
 

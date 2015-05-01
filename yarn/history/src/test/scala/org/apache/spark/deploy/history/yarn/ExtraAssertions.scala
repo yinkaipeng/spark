@@ -122,4 +122,17 @@ trait ExtraAssertions extends Logging with Assertions {
     assert(service.isInState(state),
             s"not in state $state: $service")
   }
+
+  /**
+   * Assert that a source string contains the `contained` substring.
+   * (This is not a check for a proper subset; equality is also acceptable)
+   * @param source source string
+   * @param contained string to look for
+   */
+  def assertContains(source: String, contained: String): Unit = {
+    assertNotNull(source, "null source")
+    assert(source.contains(contained),
+          s"did not find '${contained}' in '${source}'")
+  }
+
 }

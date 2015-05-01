@@ -17,7 +17,7 @@
  */
 package org.apache.spark.deploy.history.yarn.unit
 
-import java.io.{ByteArrayInputStream, StringReader, IOException, FileNotFoundException}
+import java.io.{ByteArrayInputStream, IOException, FileNotFoundException}
 import java.net.URI
 
 import com.sun.jersey.api.client.{ClientResponse, UniformInterfaceException, ClientHandlerException}

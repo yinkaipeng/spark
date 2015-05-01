@@ -28,7 +28,8 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
-import org.apache.spark.deploy.history.yarn.rest.{JerseyBinding, TimelineQueryClient}
+import org.apache.spark.deploy.history.yarn.rest.JerseyBinding._
+import org.apache.spark.deploy.history.yarn.rest.TimelineQueryClient
 
 class TimelineQueryClientSuite extends AbstractTestsWithHistoryServices {
 
@@ -41,12 +42,8 @@ class TimelineQueryClientSuite extends AbstractTestsWithHistoryServices {
     super.setup()
     historyService = startHistoryService(sparkCtx)
     timeline = historyService.getTimelineServiceAddress()
-    clientConfig = JerseyBinding.createClientConfig()
-    jerseyClient = JerseyBinding.createJerseyClient(sparkCtx.hadoopConfiguration, clientConfig)
-    queryClient = new TimelineQueryClient(timeline, jerseyClient)
-
+    queryClient= createTimelineQueryClient()
   }
-
 
   test("About") {
     val response = queryClient.about();
@@ -58,7 +55,7 @@ class TimelineQueryClientSuite extends AbstractTestsWithHistoryServices {
 
   test("ListNoEntityTypes") {
     assertResult(Nil) {
-      queryClient.listEntities(ENTITY_TYPE)
+      queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE)
     }
   }
 
@@ -67,20 +64,20 @@ class TimelineQueryClientSuite extends AbstractTestsWithHistoryServices {
     val te = new TimelineEntity
     te.setStartTime(now())
     te.setEntityId("SPARK-0001")
-    te.setEntityType(ENTITY_TYPE)
+    te.setEntityType(SPARK_EVENT_ENTITY_TYPE)
     te.addPrimaryFilter(FILTER_APP_START, FILTER_APP_START_VALUE)
 
-    val timelineClient: TimelineClient = historyService.getTimelineClient
+    val timelineClient = historyService.getTimelineClient
     timelineClient.putEntities(te)
     val timelineEntities: List[TimelineEntity] =
-      queryClient.listEntities(ENTITY_TYPE)
+      queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE)
     assert(timelineEntities.size == 1, "empty TimelineEntity list")
     assertEquals(te, timelineEntities.head)
 
-    val entity2: TimelineEntity = queryClient.getEntity(ENTITY_TYPE, te.getEntityId )
+    val entity2 = queryClient.getEntity(SPARK_EVENT_ENTITY_TYPE, te.getEntityId )
     assertEquals(te, entity2)
 
-    val listing2 = queryClient.listEntities(ENTITY_TYPE,
+    val listing2 = queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE,
                               primaryFilter = Some(FILTER_APP_START, FILTER_APP_START_VALUE))
     assertResult(1, s"filtering on $FILTER_APP_START:$FILTER_APP_START_VALUE") {
       listing2.size

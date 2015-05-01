@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler.cluster
 
 import java.io.Closeable
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.LinkedList
 import scala.ref.WeakReference
@@ -29,9 +30,13 @@ import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.spark.{Logging, SparkContext}
 
 /**
- * Service that can be started and closed (==stop)
+ * An extension sservice that can be loaded into a Spark YARN application.
+ * A Service that can be started and closed (==stop).
+ *
+ * The `close()` operation MUST be idempotent, and succeed even if `start()` was
+ * never invoked.
  */
-trait YarnService extends Closeable {
+trait YarnExtensionService extends Closeable {
 
   /**
    * For Yarn services, SparkContext, and ApplicationId is the basic info required.
@@ -44,18 +49,19 @@ trait YarnService extends Closeable {
 
 
 /**
- * Class which loads child Yarn serices from the configuration,
+ * Class which loads child Yarn extension Services from the configuration,
  * and closes them all when closed/stopped itself.
  * <p>
  * It extends YARN's AbstractService to have a robust state model for start/stop
  * re-entrancy.
  */
-private[spark] class YarnServices extends AbstractService("YarnServices")
-    with YarnService
+private[spark] class YarnExtensionServices extends AbstractService("YarnExtensionServices")
+    with YarnExtensionService
     with Logging {
-  var services: List[YarnService] = Nil
+  var services: List[YarnExtensionService] = Nil
   var sparkContext: SparkContext = _
   var appId: ApplicationId = _
+  val started = new AtomicBoolean(false)
 
 
   /**
@@ -79,10 +85,10 @@ private[spark] class YarnServices extends AbstractService("YarnServices")
    * Loads a comma separated list of yarn services
    */
   override def serviceStart(): Unit = {
-    val sNames = sparkContext.getConf.getOption(YarnServices.SPARK_YARN_SERVICES)
+    val sNames = sparkContext.getConf.getOption(YarnExtensionServices.SPARK_YARN_SERVICES)
     sNames match {
       case Some(names) =>
-        val serviceList = new LinkedList[YarnService]
+        val serviceList = new LinkedList[YarnExtensionService]
         val sClasses = names.split(",")
         services = sClasses.flatMap {
           sClass => {
@@ -91,7 +97,7 @@ private[spark] class YarnServices extends AbstractService("YarnServices")
               if (clazz.nonEmpty) {
                 val instance = Class.forName(clazz)
                     .newInstance()
-                    .asInstanceOf[YarnService]
+                    .asInstanceOf[YarnExtensionService]
                 // bind this service
                 instance.start(sparkContext, appId)
                 logInfo("Service " + sClass + " started")
@@ -114,7 +120,7 @@ private[spark] class YarnServices extends AbstractService("YarnServices")
    * Get the list of services
    * @return a list of services; Nil until the service is started
    */
-  def getServices(): List[YarnService] = {
+  def getServices(): List[YarnExtensionService] = {
     services
   }
 
@@ -125,7 +131,7 @@ private[spark] class YarnServices extends AbstractService("YarnServices")
 
 }
 
-private[spark] object YarnServices {
+private[spark] object YarnExtensionServices {
   /**
    * Configuration option to contain a list of comma separated classes to instantiate in the AM
    */

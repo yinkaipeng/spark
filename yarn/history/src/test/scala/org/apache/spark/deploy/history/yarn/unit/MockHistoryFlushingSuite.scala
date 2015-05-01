@@ -42,7 +42,7 @@ class MockHistoryFlushingSuite extends AbstractMockHistorySuite
     try {
       assert(service.timelineServiceEnabled, s"no timeline service in $service")
       service.getTimelineClient
-      service.createTimelineClient
+      service.createTimelineClient()
       val listener = new YarnEventListener(sparkCtx, service)
       listener.onApplicationStart(applicationStart)
       service.asyncFlush()
@@ -60,7 +60,7 @@ class MockHistoryFlushingSuite extends AbstractMockHistorySuite
     try {
       assert(service.timelineServiceEnabled, s"no timeline service in $service")
       service.getTimelineClient
-      service.createTimelineClient
+      service.createTimelineClient()
       val listener = new YarnEventListener(sparkCtx, service)
       listener.onApplicationStart(applicationStart)
       verify(timelineClient, times(0)).putEntities(any(classOf[TimelineEntity]))

@@ -22,13 +22,14 @@ import java.io.FileNotFoundException
 import scala.collection.JavaConversions._
 
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity
+import org.apache.hadoop.yarn.client.api.TimelineClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.rest.{JerseyBinding, TimelineQueryClient}
-import org.apache.spark.deploy.history.{ApplicationHistoryInfo, ApplicationHistoryProvider}
+import org.apache.spark.deploy.history.{HistoryServer, ApplicationHistoryInfo, ApplicationHistoryProvider}
 import org.apache.spark.scheduler.{ApplicationEventListener, SparkListenerBus}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
@@ -57,42 +58,57 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    */
   private val timelineUri = rootTimelineUri(yarnConf)
 
-
   /**
-   * The Jersey client used for operations
+   * The Jersey client used for HTTP operations
    */
-  private val client = {
+  private val jersey = {
     JerseyBinding.createJerseyClient(yarnConf, JerseyBinding.createClientConfig())
   }
 
   /**
-   * A timeline query client which uses the `client`
+   * The post-side `TimelineClient` handles delegation token renewal
+   */
+
+  /**
+   * The timeline query client which uses the `jersey`
    * Jersey instance to talk to a timeline service running
-   * at `timelineUri`
+   * at `timelineUri`, and creates a timeline (write) client instance
+   * to handle token renewal
    *
    */
-  private val timelineQueryClient =
-    new TimelineQueryClient(timelineUri, client)
+  private val timelineQueryClient = {
+    val timelineClient = TimelineClient.createTimelineClient()
+    timelineClient.init(yarnConf)
+    timelineClient.start();
+
+    new TimelineQueryClient(timelineUri, yarnConf, JerseyBinding.createClientConfig())
+  }
 
   /**
    * List applications. This currently finds completed applications only.
    * @return List of all known applications.
    */
   override def getListing(): Seq[ApplicationHistoryInfo] = {
-    logInfo(s"getListing with Uri: $timelineUri")
+    logDebug(s"getListing from: $timelineUri")
     val timelineEntities = timelineQueryClient.listEntities(
-         YarnHistoryService.ENTITY_TYPE,
+         YarnHistoryService.SPARK_EVENT_ENTITY_TYPE,
          primaryFilter = Some(FILTER_APP_END, FILTER_APP_END_VALUE))
 
-    timelineEntities.flatMap { en =>
-      try {
+    val listing = timelineEntities.flatMap { en =>
+      try { {
+        val historyInfo = toApplicationHistoryInfo(en)
         Some(toApplicationHistoryInfo(en))
+      }
       } catch {
         case e: Exception =>
           logInfo(s"Failed to parse entity. ${YarnTimelineUtils.describeEntity(en)}" , e)
+          // skip this result
           None
       }
     }
+    logDebug(s"Listed ${listing.size} applications")
+    listing
+
   }
 
   /**
@@ -102,7 +118,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @throws FileNotFoundException if no entry was found
    */
   private def getTimelineEntity(appId: String): TimelineEntity = {
-    timelineQueryClient.getEntity(YarnHistoryService.ENTITY_TYPE, appId)
+    timelineQueryClient.getEntity(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE, appId)
   }
 
   /**
@@ -111,8 +127,8 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @return The application's UI, or None if the application is not found.
    */
   override def getAppUI(appId: String): Option[SparkUI] = {
-    logInfo(s"Request UI with appId $appId")
-    try {
+    logDebug(s"Request UI with appId $appId")
+    try { {
       val entity = getTimelineEntity(appId)
 
       if (log.isDebugEnabled) {
@@ -125,16 +141,17 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       val ui = {
         val conf = this.sparkConf.clone()
         val appSecManager = new SecurityManager(conf)
-        SparkUI.createHistoryUI(conf, bus, appSecManager, appId, "/history/" + appId)
+        SparkUI.createHistoryUI(conf, bus, appSecManager, appId,
+                                 HistoryServer.UI_PATH_PREFIX + s"/${appId }")
       }
       val events = entity.getEvents
 
       events.reverse.foreach { event =>
         val sparkEvent = toSparkEvent(event)
-        logDebug(s" event ${sparkEvent.toString}")
+        logDebug(s" event ${sparkEvent.toString }")
         bus.postToAll(sparkEvent)
       }
-      ui.setAppName(s"${appListener.appName.getOrElse(NOT_STARTED)} ($appId)")
+      ui.setAppName(s"${appListener.appName.getOrElse(NOT_STARTED) } ($appId)")
 
       val uiAclsEnabled = sparkConf.getBoolean("spark.history.ui.acls.enable", false)
       ui.getSecurityManager.setAcls(uiAclsEnabled)
@@ -143,6 +160,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       ui.getSecurityManager.setViewAcls(appListener.sparkUser.getOrElse(NOT_STARTED),
                                          appListener.viewAcls.getOrElse(""))
       Some(ui)
+    }
     } catch {
       case e: FileNotFoundException =>
         logInfo(s"Unknown application $appId", e)
@@ -155,10 +173,14 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @return A map with the configuration data. Data is show in the order returned by the map.
    */
   override def getConfig(): Map[String, String] = {
-    logInfo("getConfig ...:" +  timelineUri.resolve("/").toString())
+    val timelineURI = timelineUri.resolve("/")
+    logDebug(s"getConfig $timelineURI")
     Map(
-      ("Yarn Application History Server URI" -> timelineQueryClient.timelineURL.toString),
-      ("Yarn Application History Server" -> timelineQueryClient.about()))
+      YarnHistoryProvider.KEY_PROVIDER_NAME ->
+          "Apache Hadoop YARN Timeline Service",
+      YarnHistoryProvider.KEY_SERVICE_URL ->
+          s"${timelineURI}"
+       )
   }
 
   /**
@@ -166,10 +188,37 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    */
   override def stop(): Unit =  {
     logDebug(s"Stopping $this")
-    client.destroy()
+    jersey.destroy()
+    timelineQueryClient.close()
   }
 
   override def toString: String = {
     s"YarnHistoryProvider bound to history server at $timelineUri"
   }
+}
+
+object YarnHistoryProvider {
+
+  /**
+   * Default port
+   */
+  val SPARK_HISTORY_UI_PORT_DEFAULT = 18080
+  /**
+   * Name of the class to use in configuration strings
+   */
+  val YARN_HISTORY_PROVIDER_CLASS = classOf[YarnHistoryProvider].getName()
+
+  /**
+   * Key used when listing the URL of the ATS instance
+   */
+  val KEY_SERVICE_URL = "Timeline Service Location"
+  /**
+   * Key used to identify the history provider
+   */
+  val KEY_PROVIDER_NAME = "History Provider"
+
+  /**
+   * Value of the [[KEY_PROVIDER_NAME]] entry
+   */
+  val KEY_PROVIDER_DETAILS = "Apache Hadoop YARN Timeline Service"
 }

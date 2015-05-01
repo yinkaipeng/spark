@@ -17,41 +17,49 @@
  */
 package org.apache.spark.deploy.history.yarn.unit
 
-import org.apache.hadoop.service.{ServiceStateException, Service}
+import org.apache.hadoop.service.{Service, ServiceStateException}
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.history.{ApplicationHistoryProvider, FsHistoryProvider}
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
-import org.apache.spark.deploy.history.yarn.{AbstractYarnHistoryTests, YarnHistoryService}
-import org.apache.spark.scheduler.cluster.YarnServices
+import org.apache.spark.deploy.history.yarn.{AbstractYarnHistoryTests, YarnHistoryProvider, YarnHistoryService}
+import org.apache.spark.scheduler.cluster.YarnExtensionServices
 
 /**
- * Test the integration with [[YarnServices]]
+ * Test the integration with [[YarnExtensionServices]]
  */
 class YarnServiceIntegrationSuite extends AbstractYarnHistoryTests {
 
-    test("Instantiate") {
-      val services = new YarnServices
-      assertResult(Nil, "non-nil service list") {
-        services.getServices()
-      }
-      services.start(sparkCtx, appId)
-      assertInState(services, Service.STATE.STARTED)
-      services.close()
+  override def setupConfiguration(sparkConf: SparkConf): SparkConf = {
+    super.setupConfiguration(sparkConf)
+    sparkConf.set(YarnExtensionServices.SPARK_YARN_SERVICES, YarnHistoryService.CLASSNAME)
+    sparkConf.set(SPARK_HISTORY_PROVIDER,
+                   YarnHistoryProvider.YARN_HISTORY_PROVIDER_CLASS)
+  }
+  
+  test("Instantiate") {
+    val services = new YarnExtensionServices
+    assertResult(Nil, "non-nil service list") {
+      services.getServices()
     }
+    services.start(sparkCtx, applicationId)
+    assertInState(services, Service.STATE.STARTED)
+    services.close()
+  }
 
-    test("Non Rentrant") {
-      val services = new YarnServices
-      services.start(sparkCtx, appId)
-      intercept[ServiceStateException] {
-        services.start(sparkCtx, appId)
-      }
-      services.close()
+  test("Non Rentrant") {
+    val services = new YarnExtensionServices
+    services.start(sparkCtx, applicationId)
+    intercept[ServiceStateException] {
+      services.start(sparkCtx, applicationId)
     }
+    services.close()
+  }
 
   test("Contains History Service") {
-    val services = new YarnServices
-    try {
-      services.start(sparkCtx, appId)
+    val services = new YarnExtensionServices
+    try { {
+      services.start(sparkCtx, applicationId)
       val serviceList = services.getServices()
       assert(serviceList.nonEmpty, "empty service list")
       val (history :: Nil) = serviceList
@@ -59,13 +67,11 @@ class YarnServiceIntegrationSuite extends AbstractYarnHistoryTests {
       assertInState(historyService, Service.STATE.STARTED)
       services.close()
       assertInState(historyService, Service.STATE.STOPPED)
+    }
     } finally {
       services.close()
     }
   }
 
-  override def setupConfiguration(sparkConf: SparkConf): SparkConf = {
-    super.setupConfiguration(sparkConf)
-    sparkConf.set(YarnServices.SPARK_YARN_SERVICES, YarnHistoryService.CLASSNAME)
-  }
+
 }

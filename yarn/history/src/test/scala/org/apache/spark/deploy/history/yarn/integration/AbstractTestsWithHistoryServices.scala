@@ -17,6 +17,8 @@
  */
 package org.apache.spark.deploy.history.yarn.integration
 
+import java.net.URI
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.service.{Service, ServiceOperations}
 import org.apache.hadoop.yarn.api.records.timeline.{TimelineEntity, TimelineEvent, TimelinePutResponse}
@@ -26,7 +28,9 @@ import org.apache.hadoop.yarn.server.timeline.TimelineStore
 
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
-import org.apache.spark.deploy.history.yarn.{AbstractYarnHistoryTests, FreePortFinder, HistoryServiceNotListeningToSparkContext, TimelineServiceEnabled, HandleSparkEvent, YarnHistoryService, YarnTimelineUtils}
+import org.apache.spark.deploy.history.yarn.rest.JerseyBinding._
+import org.apache.spark.deploy.history.yarn.rest.{TimelineQueryClient, SpnegoUrlConnector}
+import org.apache.spark.deploy.history.yarn.{AbstractYarnHistoryTests, FreePortFinder, HandleSparkEvent, HistoryServiceNotListeningToSparkContext, TimelineServiceEnabled, YarnHistoryService, YarnTimelineUtils}
 import org.apache.spark.scheduler.SparkListenerEvent
 
 /**
@@ -76,6 +80,14 @@ abstract class AbstractTestsWithHistoryServices
   }
 
   /**
+   * Create a SPNEGO-enabled URL Connector
+   * @return a URL connector for issuing HTTP requests
+   */
+  protected def createUrlConnector(): SpnegoUrlConnector = {
+    SpnegoUrlConnector.newInstance(sparkCtx.hadoopConfiguration)
+  }
+
+  /**
    * Get at the timeline store
    * @return timeline store
    */
@@ -100,6 +112,14 @@ abstract class AbstractTestsWithHistoryServices
     // Wait for AHS to come up
     val endpoint = YarnTimelineUtils.timelineWebappUri(conf, "")
     awaitURL(endpoint.toURL, 5000)
+  }
+
+
+  protected def createTimelineQueryClient(): TimelineQueryClient = {
+    val timeline = historyService.getTimelineServiceAddress()
+    new TimelineQueryClient(timeline,
+                       sparkCtx.hadoopConfiguration,
+                       createClientConfig())
   }
 
   /**

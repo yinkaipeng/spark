@@ -253,7 +253,7 @@ private[spark] object YarnTimelineUtils extends Logging {
    * @return
    */
   def timelineWebappUri(conf: Configuration): URI = {
-    timelineWebappUri(conf, YarnHistoryService.ENTITY_TYPE)
+    timelineWebappUri(conf, YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
   }
 
 
@@ -333,9 +333,9 @@ private[spark] object YarnTimelineUtils extends Logging {
   }
 
   /**
-   * Lookup a required field in a timeline entity
+   * Lookup a required field in the `otherInfo` section of a [[TimelineEntity]]
    * @param en entity
-   * @param name name
+   * @param name field name
    * @return the value
    * @throws Exception if the field is not found
    */
@@ -346,22 +346,40 @@ private[spark] object YarnTimelineUtils extends Logging {
     }
     value
   }
-  
+
   /**
-   * Build an Application History Info instance from
-   * a timeline Entity.
+   * Lookup a required numeric field in the `otherInfo` section of a [[TimelineEntity]]
+   * @param en entity
+   * @param name field name
+   * @return the value
+   * @throws Exception if the field is not found or it is not a number
+   */
+  private def numberField(en: TimelineEntity, name: String) : Number = {
+    val contents = field(en, name)
+    contents match {
+      case n: Number => n
+      case _ => throw new Exception(s"Required a number in field ${name} -got $contents")
+    }
+  }
+
+  /**
+   * Build an [[ApplicationHistoryInfo]] instance from
+   * a [[TimelineEntity]]
    * @param en the entity
-   * @return an event
+   * @return an history info structure. The completed bit is strue if the entity has an
+   *         end time.
    * @throws Exception if the entity lacked an entry of that key
    * @throws ClassCastException if the the key contained value, but it
    *                            could not be converted to the desired type
    */
   def toApplicationHistoryInfo(en: TimelineEntity) : ApplicationHistoryInfo = {
+    val endTime = numberField(en, FIELD_END_TIME).longValue
     ApplicationHistoryInfo(en.getEntityId(),
         field(en, FIELD_APP_NAME).asInstanceOf[String],
-        field(en, FIELD_START_TIME).asInstanceOf[Number].longValue,
-        field(en, FIELD_END_TIME).asInstanceOf[Number].longValue,
-        field(en, FIELD_END_TIME).asInstanceOf[Number].longValue,
-        field(en, FIELD_APP_USER).asInstanceOf[String])
+        numberField(en, FIELD_START_TIME).longValue,
+        endTime,
+        endTime,
+        field(en, FIELD_APP_USER).asInstanceOf[String],
+        endTime > 0)
   }
 }

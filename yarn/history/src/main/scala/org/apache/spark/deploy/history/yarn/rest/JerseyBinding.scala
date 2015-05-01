@@ -29,6 +29,7 @@ import com.sun.jersey.api.json.JSONConfiguration
 import com.sun.jersey.client.urlconnection.{HttpURLConnectionFactory, URLConnectionClientHandler}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.PathPermissionException
+import org.apache.hadoop.security.token.delegation.web.DelegationTokenAuthenticatedURL
 import org.codehaus.jackson.jaxrs.JacksonJaxbJsonProvider
 import org.codehaus.jackson.map.ObjectMapper
 import org.codehaus.jackson.map.annotate.JsonSerialize.Inclusion
@@ -37,15 +38,16 @@ import org.codehaus.jackson.xc.JaxbAnnotationIntrospector
 import org.apache.spark.Logging
 
 /**
- * Jersey specific integration with the SPNEG Auth
+ * Jersey specific integration with the SPNEGO Auth
  * @param conf configuration to build off
  */
-private[spark] class JerseyBinding(conf: Configuration) extends Logging with HttpURLConnectionFactory {
-  private val connector = SpnegoUrlConnector.newInstance(conf)
+private[spark] class JerseyBinding(conf: Configuration, token: DelegationTokenAuthenticatedURL.Token)
+    extends Logging with HttpURLConnectionFactory {
+  private val connector = SpnegoUrlConnector.newInstance(conf, token)
   private val handler = new URLConnectionClientHandler(this);
 
   override def getHttpURLConnection(url: URL): HttpURLConnection = {
-    return connector.getHttpURLConnection(url)
+    connector.getHttpURLConnection(url)
   }
 }
 
@@ -182,19 +184,22 @@ private[spark] object JerseyBinding extends Logging {
   }
 
   /**
-   * Create a Jersey client with the UGI binding set up
+   * Create a Jersey client with the UGI binding set up.
    * @param conf Hadoop configuration
    * @param clientConfig jersey client config
+   * @param token optional delegation token
    * @return a new client instance
    */
-  def createJerseyClient(conf: Configuration, clientConfig: ClientConfig): Client = {
-    val jerseyBinding = new JerseyBinding(conf)
+  def createJerseyClient(conf: Configuration,
+      clientConfig: ClientConfig,
+      token: DelegationTokenAuthenticatedURL.Token = new DelegationTokenAuthenticatedURL.Token): Client = {
+    val jerseyBinding = new JerseyBinding(conf, token)
     new Client(jerseyBinding.handler, clientConfig);
   }
 
   /**
-   * Create the client config for Jersey. Made static
-   * @return
+   * Create the client config for Jersey.
+   * @return the client configuration
    */
   def createClientConfig(): ClientConfig = {
     val cc = new DefaultClientConfig()

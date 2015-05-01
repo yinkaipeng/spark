@@ -17,12 +17,17 @@
  */
 package org.apache.spark.deploy.history.yarn.rest
 
+import java.io.Closeable
 import java.net.{URI, URL}
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.ws.rs.core.MediaType
 
 import scala.collection.JavaConverters._
 
+import com.sun.jersey.api.client.config.ClientConfig
 import com.sun.jersey.api.client.{Client, WebResource}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.security.token.delegation.web.DelegationTokenAuthenticatedURL
 import org.apache.hadoop.yarn.api.records.timeline.{TimelineEntities, TimelineEntity}
 
 import org.apache.spark.Logging
@@ -30,13 +35,51 @@ import org.apache.spark.Logging
 /**
  * A class to make queries of the Timeline sever through a Jersey client.
  * Exceptions raised by Jersey are extracted and potentially translated.
- * @param jerseyClient client
  * @param timelineURI URI of the timeline service
  */
-private[spark] class TimelineQueryClient(timelineURI: URI, jerseyClient: Client) extends Logging {
+private[spark] class TimelineQueryClient(timelineURI: URI,
+    conf: Configuration,
+    jerseyClientConfig: ClientConfig)
+    extends Logging with Closeable {
+  require(timelineURI != null, "Null timelineURI")
 
-  val timelineResource = jerseyClient.resource(timelineURI)
-  val timelineURL = timelineURI.toURL
+  /**
+   * bool to stop `close()` executing more than once
+   */
+  private val closed = new AtomicBoolean(false)
+  private val timelineURL = timelineURI.toURL
+
+  /**
+   * the delegation token used
+   */
+  var token: DelegationTokenAuthenticatedURL.Token = new DelegationTokenAuthenticatedURL.Token
+
+  /**
+   * Jersey Client using config from constructor
+   */
+  val jerseyClient: Client = {
+    JerseyBinding.createJerseyClient(conf, jerseyClientConfig, token)
+  }
+
+  /**
+   * Base resource of ATS
+   */
+  private val timelineResource = jerseyClient.resource(timelineURI)
+
+  /**
+   * When this instance is closed, the jersey client is stopped
+   */
+  override def close(): Unit = {
+    if (!closed.getAndSet(true)) {
+      jerseyClient.destroy()
+    }
+  }
+
+  /**
+   * Get the timeline URI
+   * @return
+   */
+  def getTimelineURI() : URI = { timelineURI }
 
   /**
    * Construct a URI under the timeline service URI
@@ -70,13 +113,13 @@ private[spark] class TimelineQueryClient(timelineURI: URI, jerseyClient: Client)
 
   /**
    * Execute a POST operation against a specific URI, uprating jersey faults
-   * into more specific exceptions
-   * @param uri URI (used when handling exceptions)
+   * into more specific exceptions.
+   * @param uri URI (used when generating text reporting exceptions)
    * @param action action to perform
    * @tparam T type of response
    * @return the result of the action
    */
-  def exec[T](verb: String, uri: URI, action: (() => T)) = {
+  def exec[T](verb: String, uri: URI, action: (() => T)): T = {
     logDebug(s"$verb $uri")
     try {
       action()
@@ -93,10 +136,9 @@ private[spark] class TimelineQueryClient(timelineURI: URI, jerseyClient: Client)
   def about(): String = {
     val aboutURI = uri("")
     val resource = jerseyClient.resource(aboutURI)
-    val result = get(aboutURI,
+    get(aboutURI,
        (() => resource.accept(MediaType.APPLICATION_JSON)
              .get(classOf[String])))
-    result
   }
 
   /**
@@ -181,7 +223,7 @@ private[spark] class TimelineQueryClient(timelineURI: URI, jerseyClient: Client)
   def getEntity(entityType: String, entityId: String): TimelineEntity = {
     require(!entityId.isEmpty, "no entity ID")
     var resource = subresource(entityType).path(entityId)
-      get(resource.getURI,
+    get(resource.getURI,
         (() => resource
                .accept(MediaType.APPLICATION_JSON)
                .get(classOf[TimelineEntity])))

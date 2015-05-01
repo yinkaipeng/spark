@@ -34,7 +34,7 @@ import org.apache.hadoop.yarn.exceptions.YarnException
 
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.YarnService
+import org.apache.spark.scheduler.cluster.YarnExtensionService
 import org.apache.spark.{Logging, SparkContext}
 
 /**
@@ -50,7 +50,7 @@ import org.apache.spark.{Logging, SparkContext}
  * is in a `STOPPED` state will be discarded.
  */
 private[spark] class YarnHistoryService  extends AbstractService("History Service")
-  with YarnService with Logging {
+  with YarnExtensionService with Logging {
 
   private var sparkContext: SparkContext = _
   private var appId: ApplicationId = _
@@ -100,23 +100,22 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
 
   /**
    * Create a timeline client and start it. This does not update the
-   * `timelineClient` field.
+   * `timelineClient` field, though it does verify that the field
+   * is unset.
    *
    * The method is private to the package so that tests can access it, which
    * some of the mock tests do to override the timeline client creation.
    * @return the timeline client
    */
-  private [yarn] def createTimelineClient = {
+  private [yarn] def createTimelineClient(): TimelineClient = {
     require(timelineClient == None, "timeline client already set")
-    val client = TimelineClient.createTimelineClient()
-    client.init(sparkContext.hadoopConfiguration)
-    client.start
-    client
+    YarnHistoryService.createTimelineClient(sparkContext)
   }
 
   /**
-   * Get the timeline client; this will create it if needed
+   * Get the timeline client.
    * @return the client
+   * @throws Exception if the timeline client is not currently running
    */
   def getTimelineClient: TimelineClient = {
     timelineClient.getOrElse(throw new Exception("Timeline client not running"))
@@ -263,7 +262,7 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
     val conf: Configuration = getConfig
     if (timelineServiceEnabled) {
       timelineWebappAddress = rootTimelineUri(conf)
-      timelineClient = Some(createTimelineClient)
+      timelineClient = Some(createTimelineClient())
       domainId = createTimelineDomain
       eventHandlingThread = new Thread(new Dequeue(), "HistoryEventHandlingThread")
       eventHandlingThread.start
@@ -379,6 +378,7 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
 
       if (!appEndEventProcessed) {
         // push out an application stop event if none has been received
+        logDebug("Generating a SparkListenerApplicationEnd during  service stop()")
         val current = now()
         innerEnqueue(new HandleSparkEvent(SparkListenerApplicationEnd(current), current))
       }
@@ -418,7 +418,7 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
     curEntity.getOrElse {
       val entity: TimelineEntity = new TimelineEntity
       curEventNum = 0
-      entity.setEntityType(YarnHistoryService.ENTITY_TYPE)
+      entity.setEntityType(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
       entity.setEntityId(appId.toString)
       if (appStartEventProcessed) {
         entity.addPrimaryFilter(YarnHistoryService.FIELD_APP_NAME, appName)
@@ -765,7 +765,7 @@ private[spark] object YarnHistoryService {
   /**
    * Name of the entity type used to declare spark Applications
    */
-  val ENTITY_TYPE = "spark_event_v01"
+  val SPARK_EVENT_ENTITY_TYPE = "spark_event_v01"
 
   /**
    * Doman ID
@@ -816,4 +816,17 @@ private[spark] object YarnHistoryService {
    * The classname of the history service to instantiate in the YARN AM
    */
   val CLASSNAME = "org.apache.spark.deploy.history.yarn.YarnHistoryService"
+
+  /**
+   * Create and start a timeline client, using the configuration context to
+   * set up the binding
+   * @param sparkContext spark context
+   * @return the started instance
+   */
+  def createTimelineClient(sparkContext: SparkContext): TimelineClient = {
+    val client = TimelineClient.createTimelineClient()
+    client.init(sparkContext.hadoopConfiguration)
+    client.start
+    client
+  }
 }

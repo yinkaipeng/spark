@@ -19,11 +19,8 @@ package org.apache.spark.deploy.history.yarn.integration
 
 import java.io.File
 
-import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
-import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
-import org.apache.spark.deploy.history.yarn.rest.{JerseyBinding, TimelineQueryClient}
-import org.apache.spark.deploy.history.yarn.{HistoryServiceListeningToSparkContext, TimelineSingleEntryBatchSize, YarnHistoryProvider}
+import org.apache.spark.deploy.history.yarn.{HistoryServiceListeningToSparkContext, TimelineSingleEntryBatchSize}
 
 /**
  * full hookup from spark context to timeline.

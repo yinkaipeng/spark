@@ -100,7 +100,7 @@ abstract class AbstractYarnHistoryTests
   protected def startHistoryService(sc: SparkContext): YarnHistoryService = {
     assertNotNull(sc, "Spark context")
     val service = new YarnHistoryService()
-    assert(service.start(sc, appId), s"client start failed: $service")
+    assert(service.start(sc, applicationId), s"client start failed: $service")
     assert(service.isInState(Service.STATE.STARTED), s"wrong state: $service")
     service
   }
