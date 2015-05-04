@@ -25,7 +25,7 @@ import java.security.PrivilegedExceptionAction
  * @tparam T return type of the function
  */
 
-class PrivilegedFunction[T](function: (() => T)) extends PrivilegedExceptionAction[T] {
+private[spark] class PrivilegedFunction[T](function: (() => T)) extends PrivilegedExceptionAction[T] {
   override def run(): T = {
     function()
   }
