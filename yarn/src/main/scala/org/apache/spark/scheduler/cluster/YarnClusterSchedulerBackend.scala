@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler.cluster
 
 import org.apache.spark.SparkContext
+import org.apache.spark.deploy.yarn.ApplicationMaster
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.IntParam
@@ -26,9 +27,11 @@ private[spark] class YarnClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext)
   extends YarnSchedulerBackend(scheduler, sc) {
+  private val services: YarnExtensionServices = new YarnExtensionServices()
 
   override def start() {
     super.start()
+    services.start(sc, ApplicationMaster.getAttemptId.getApplicationId())
     totalExpectedExecutors = DEFAULT_NUMBER_EXECUTORS
     if (System.getenv("SPARK_EXECUTOR_INSTANCES") != null) {
       totalExpectedExecutors = IntParam.unapply(System.getenv("SPARK_EXECUTOR_INSTANCES"))

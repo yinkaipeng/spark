@@ -26,7 +26,6 @@ import org.apache.hadoop.yarn.client.api.TimelineClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.rest.{JerseyBinding, TimelineQueryClient}
 import org.apache.spark.deploy.history.{HistoryServer, ApplicationHistoryInfo, ApplicationHistoryProvider}
@@ -89,10 +88,9 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @return List of all known applications.
    */
   override def getListing(): Seq[ApplicationHistoryInfo] = {
-    logDebug(s"getListing from: $timelineUri")
+    logInfo(s"getListing from: $timelineUri")
     val timelineEntities = timelineQueryClient.listEntities(
-         YarnHistoryService.SPARK_EVENT_ENTITY_TYPE,
-         primaryFilter = Some(FILTER_APP_END, FILTER_APP_END_VALUE))
+         YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
 
     val listing = timelineEntities.flatMap { en =>
       try { {

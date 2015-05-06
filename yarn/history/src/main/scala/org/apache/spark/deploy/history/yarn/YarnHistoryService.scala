@@ -37,6 +37,8 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.YarnExtensionService
 import org.apache.spark.{Logging, SparkContext}
 
+import scala.util.control.NonFatal
+
 /**
  * Implements a Hadoop service with the init/start logic replaced by that
  * of the YarnService.
@@ -516,8 +518,12 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
         true
 
       case event: HandleSparkEvent =>
-        handleEvent(event)
-        false
+        try {
+          handleEvent(event)
+          false
+        } catch {
+          case NonFatal(e) => false
+        }
 
       case FlushTimelineEvents() =>
         logDebug("Flush queue action received")

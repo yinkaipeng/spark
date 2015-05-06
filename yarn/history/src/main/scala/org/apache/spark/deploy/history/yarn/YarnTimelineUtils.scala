@@ -40,6 +40,8 @@ import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.util.{JsonProtocol, Utils}
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 
+import scala.util.control.NonFatal
+
 private[spark] object YarnTimelineUtils extends Logging {
 
   /**
@@ -340,9 +342,9 @@ private[spark] object YarnTimelineUtils extends Logging {
    * @throws Exception if the field is not found
    */
   private def field(en: TimelineEntity, name: String) : Object = {
-    val value = en.getOtherInfo().get(name)
+    var value = en.getOtherInfo().get(name)
     if (value == null) {
-      throw new Exception(s"No field ${name} in ${describeEntity(en)}")
+      value = "Undefined"
     }
     value
   }
@@ -358,7 +360,7 @@ private[spark] object YarnTimelineUtils extends Logging {
     val contents = field(en, name)
     contents match {
       case n: Number => n
-      case _ => throw new Exception(s"Required a number in field ${name} -got $contents")
+      case _ => 0L
     }
   }
 
@@ -373,13 +375,18 @@ private[spark] object YarnTimelineUtils extends Logging {
    *                            could not be converted to the desired type
    */
   def toApplicationHistoryInfo(en: TimelineEntity) : ApplicationHistoryInfo = {
-    val endTime = numberField(en, FIELD_END_TIME).longValue
+    var endTime: Long = 0L
+    try {
+      endTime = numberField(en, FIELD_END_TIME).longValue
+    } catch {
+      case NonFatal(e) => endTime = 0L
+    }
     ApplicationHistoryInfo(en.getEntityId(),
-        field(en, FIELD_APP_NAME).asInstanceOf[String],
-        numberField(en, FIELD_START_TIME).longValue,
-        endTime,
-        endTime,
-        field(en, FIELD_APP_USER).asInstanceOf[String],
-        endTime > 0)
+      field(en, FIELD_APP_NAME).asInstanceOf[String],
+      numberField(en, FIELD_START_TIME).longValue,
+      endTime,
+      endTime,
+      field(en, FIELD_APP_USER).asInstanceOf[String],
+      endTime > 0)
   }
 }
