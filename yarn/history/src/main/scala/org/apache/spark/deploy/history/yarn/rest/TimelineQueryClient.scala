@@ -122,11 +122,24 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
   def exec[T](verb: String, uri: URI, action: (() => T)): T = {
     logDebug(s"$verb $uri")
     try {
-      action()
+      innerExecAction(action)
     } catch {
       case e: Exception =>
+        logWarning(s"$verb $uri failed", e)
         throw JerseyBinding.translateException(verb, uri, e)
     }
+  }
+
+  /**
+   * Invoke the action without any failure handling.
+   * <p>
+   * This is intended as a point to inject mock failures.
+   * @param action action to perform
+   * @tparam T type of response
+   * @return the result of the action
+   */
+  protected def innerExecAction[T](action: () => T): T = {
+    action()
   }
 
   /**

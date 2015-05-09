@@ -50,11 +50,14 @@ class YarnHistoryProviderSuite extends AbstractTestsWithHistoryServices {
     }
   }
 
-
   test("getAppUi(\"\")") {
     describe("getAppUi(\"\") -expect exception")
-    intercept[IllegalArgumentException] {
+    assertResult(None) {
       getAppUI("")
+    }
+    val Some((ex, _)) = provider.getLastException()
+    if (!ex.isInstanceOf[IllegalArgumentException]) {
+      throw ex;
     }
   }
 

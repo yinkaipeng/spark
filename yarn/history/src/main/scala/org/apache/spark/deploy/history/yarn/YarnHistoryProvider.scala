@@ -17,12 +17,13 @@
 
 package org.apache.spark.deploy.history.yarn
 
-import java.io.FileNotFoundException
+import java.io.{PrintWriter, StringWriter, FileNotFoundException}
+import java.net.URI
+import java.util.Date
 
 import scala.collection.JavaConversions._
 
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity
-import org.apache.hadoop.yarn.client.api.TimelineClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -35,11 +36,27 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 /**
  * A  History provider which reads in the history from
- * the YARN Application Timeline Service
+ * the YARN Timeline Service.
+ * <p>
+ * The service is a remote HTTP service, so failure modes are
+ * different from simple file IO. To be compatible with a
+ * Web UI that does not expect operations to fail, some
+ * method calls swallow exceptions, caching the value.
+ * <p>
+ * The [[getLastException()]] call will return the last exception
+ * or `None`. It is shared across threads so is primarily there for
+ * tests and basic diagnostics.
  * @param sparkConf configuration of the provider
  */
 private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   extends ApplicationHistoryProvider with Logging {
+
+  /**
+   * Empty constructor. This is purely for mocking
+   */
+  def this() {
+    this(new SparkConf())
+  }
 
   /**
    * The configuration here is a YarnConfiguration built off the spark configuration
@@ -50,6 +67,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   private val yarnConf = {
     new YarnConfiguration(SparkHadoopUtil.get.newConfiguration(sparkConf))
   }
+
   private val NOT_STARTED = "<Not Started>"
 
   /**
@@ -65,10 +83,6 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   }
 
   /**
-   * The post-side `TimelineClient` handles delegation token renewal
-   */
-
-  /**
    * The timeline query client which uses the `jersey`
    * Jersey instance to talk to a timeline service running
    * at `timelineUri`, and creates a timeline (write) client instance
@@ -76,11 +90,40 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    *
    */
   private val timelineQueryClient = {
-    val timelineClient = TimelineClient.createTimelineClient()
-    timelineClient.init(yarnConf)
-    timelineClient.start();
-
     new TimelineQueryClient(timelineUri, yarnConf, JerseyBinding.createClientConfig())
+  }
+
+  /**
+   * Get the timeline query client. Used internally to ease mocking
+   * @return the client.
+   */
+  def getTimelineQueryClient(): TimelineQueryClient = {
+    timelineQueryClient
+  }
+
+  /**
+   * Last exception seen and when
+   */
+  private var lastException: Option[(Exception, Date)] = None
+
+  /**
+   * Set the last exception
+   * @param ex exception seen
+   */
+  private def setLastException(ex: Exception): Unit = {
+    this.synchronized {
+      lastException = Some(ex, new Date())
+    }
+  }
+
+  /**
+   * Get the last exception
+   * @return
+   */
+  def getLastException(): Option[(Exception, Date)] = {
+    this.synchronized {
+      lastException
+    }
   }
 
   /**
@@ -88,26 +131,34 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @return List of all known applications.
    */
   override def getListing(): Seq[ApplicationHistoryInfo] = {
-    logInfo(s"getListing from: $timelineUri")
-    val timelineEntities = timelineQueryClient.listEntities(
-         YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
+    val client = getTimelineQueryClient()
+    logInfo(s"getListing from: $client")
+    val timelineEntities = try {
+      client.listEntities(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
+    } catch {
+      case e: Exception =>
+        logWarning(s"Failed to list entities from $timelineUri", e)
+        setLastException(e)
+        // choice of two actions: swallow or rethrow
+        // Nil
+        throw e;
+    }
 
     val listing = timelineEntities.flatMap { en =>
-      try { {
+      try {
         val historyInfo = toApplicationHistoryInfo(en)
         Some(toApplicationHistoryInfo(en))
-      }
       } catch {
         case e: Exception =>
-          logInfo(s"Failed to parse entity. ${YarnTimelineUtils.describeEntity(en)}" , e)
+          logWarning(s"Failed to parse entity. ${YarnTimelineUtils.describeEntity(en)}" , e)
           // skip this result
           None
       }
     }
     logDebug(s"Listed ${listing.size} applications")
     listing
-
   }
+
 
   /**
    * Look up the timeline entity
@@ -115,8 +166,9 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @return the entity associated with the given application
    * @throws FileNotFoundException if no entry was found
    */
-  private def getTimelineEntity(appId: String): TimelineEntity = {
-    timelineQueryClient.getEntity(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE, appId)
+  def getTimelineEntity(appId: String): TimelineEntity = {
+    logDebug(s"GetTimelineEntity $appId")
+    getTimelineQueryClient().getEntity(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE, appId)
   }
 
   /**
@@ -126,7 +178,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    */
   override def getAppUI(appId: String): Option[SparkUI] = {
     logDebug(s"Request UI with appId $appId")
-    try { {
+    try {
       val entity = getTimelineEntity(appId)
 
       if (log.isDebugEnabled) {
@@ -158,10 +210,14 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       ui.getSecurityManager.setViewAcls(appListener.sparkUser.getOrElse(NOT_STARTED),
                                          appListener.viewAcls.getOrElse(""))
       Some(ui)
-    }
     } catch {
       case e: FileNotFoundException =>
         logInfo(s"Unknown application $appId", e)
+        setLastException(e)
+        None
+      case e: Exception =>
+        logWarning(s"Failed to get attempt information for $appId", e)
+        setLastException(e)
         None
     }
   }
@@ -171,14 +227,36 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @return A map with the configuration data. Data is show in the order returned by the map.
    */
   override def getConfig(): Map[String, String] = {
-    val timelineURI = timelineUri.resolve("/")
-    logDebug(s"getConfig $timelineURI")
-    Map(
-      YarnHistoryProvider.KEY_PROVIDER_NAME ->
-          "Apache Hadoop YARN Timeline Service",
-      YarnHistoryProvider.KEY_SERVICE_URL ->
-          s"${timelineURI}"
-       )
+      val timelineURI = getRootURI()
+      logDebug(s"getConfig $timelineURI")
+      val staticMap = Map(
+           YarnHistoryProvider.KEY_PROVIDER_NAME ->
+               "Apache Hadoop YARN Timeline Service",
+           YarnHistoryProvider.KEY_SERVICE_URL ->
+               s"${timelineURI }"
+         )
+    this.synchronized {
+      lastException match {
+
+        case Some((ex, date)) =>
+          // there was an exception, so set it
+          val sw = new StringWriter()
+          ex.printStackTrace(new PrintWriter(sw))
+
+          staticMap ++ Map(
+                 YarnHistoryProvider.KEY_LAST_EXCEPTION -> ex.toString,
+                 YarnHistoryProvider.KEY_LAST_EXCEPTION_STACK -> sw.toString,
+                 YarnHistoryProvider.KEY_LAST_EXCEPTION_DATE -> date.toString
+               )
+
+        case None =>
+          staticMap
+      }
+    }
+  }
+
+  def getRootURI(): URI = {
+    timelineUri.resolve("/")
   }
 
   /**
@@ -210,6 +288,7 @@ object YarnHistoryProvider {
    * Key used when listing the URL of the ATS instance
    */
   val KEY_SERVICE_URL = "Timeline Service Location"
+
   /**
    * Key used to identify the history provider
    */
@@ -219,4 +298,16 @@ object YarnHistoryProvider {
    * Value of the [[KEY_PROVIDER_NAME]] entry
    */
   val KEY_PROVIDER_DETAILS = "Apache Hadoop YARN Timeline Service"
+
+  /**
+   * Key used to declare the last exception
+   */
+  val KEY_LAST_EXCEPTION = "Last Exception: message"
+
+  /**
+   * Key used to contain the exception stack
+   */
+  val KEY_LAST_EXCEPTION_STACK = "Last Exception: stack"
+  val KEY_LAST_EXCEPTION_DATE = "Last Exception: date"
+
 }

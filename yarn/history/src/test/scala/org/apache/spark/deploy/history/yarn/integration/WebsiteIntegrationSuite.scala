@@ -29,10 +29,6 @@ import org.apache.spark.{SecurityManager, SparkConf}
 
 class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
 
-  private val incomplete_flag = "showIncomplete=true"
-
-  private val no_completed_applications = "No completed applications found!"
-  private val no_incomplete_applications = "No incomplete applications found!"
 
   override def setupConfiguration(sparkConf: SparkConf): SparkConf = {
     super.setupConfiguration(sparkConf)
@@ -41,70 +37,12 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
     sparkConf.set(SPARK_HISTORY_UI_PORT, findPort().toString)
   }
 
-  protected def createHistoryProvider(conf: SparkConf): (String, YarnHistoryProvider) = {
-    val providerName = conf.getOption("spark.history.provider")
-        .getOrElse(classOf[FsHistoryProvider].getName())
-    val provider = Class.forName(providerName)
-        .getConstructor(classOf[SparkConf])
-        .newInstance(conf)
-        .asInstanceOf[ApplicationHistoryProvider]
-    assert(provider.isInstanceOf[YarnHistoryProvider],
-            s"Instantiated $providerName to get $provider")
-
-    (providerName, provider.asInstanceOf[YarnHistoryProvider])
-  }
-
-  def webUITest(probe: (URL, YarnHistoryProvider) => Unit) {
-    val (port, server, webUI, provider) = createHistoryServer()
-    try {
-      server.bind()
-      probe(webUI, provider)
-    }
-    finally {
-      server.stop()
-    }
-  }
-
-
-  /**
-   * Create a [[HistoryServer]] instance
-   * @return (port, server, web UI URL, history provider)
-   */
-  protected def createHistoryServer(): (Int, HistoryServer, URL, YarnHistoryProvider) = {
-    val conf = sparkCtx.getConf
-    val securityManager = new SecurityManager(conf)
-    val args: List[String] = Nil
-    new HistoryServerArguments(conf, args.toArray)
-    val port = conf.getInt("spark.history.ui.port", 18080)
-    val (providerName: String, provider: YarnHistoryProvider) =
-      createHistoryProvider(sparkCtx.getConf)
-    val server = new HistoryServer(conf, provider, securityManager, port)
-    val webUI = new URL("http", "localhost", port, "/")
-    (port, server, webUI, provider)
-  }
-
-
   test("Instantiate HistoryProvider") {
-    val (providerName: String, provider: YarnHistoryProvider) =
-      createHistoryProvider(sparkCtx.getConf)
+    createHistoryProvider(sparkCtx.getConf)
   }
 
   test("WebUI hooked up") {
-    def checkEmptyWebUI(webUI: URL, provider: YarnHistoryProvider): Unit = {
-      val connector = createUrlConnector()
-      val outcome = connector.execHttpOperation("GET", webUI, null, "")
-      logInfo(s"$webUI => $outcome")
-      assert(outcome.contentType.startsWith("text/html"),
-              s"content type of $outcome")
-      val body = outcome.responseBody
-      logInfo(s"$body")
-      assertContains(body, "<title>History Server</title>")
-      assertContains(body, no_completed_applications)
-      assertContains(body, YarnHistoryProvider.KEY_PROVIDER_NAME)
-      assertContains(body, YarnHistoryProvider.KEY_PROVIDER_DETAILS)
-    }
-
-    webUITest(checkEmptyWebUI)
+    webUITest(probeEmptyWebUI)
   }
 
 /* // disabled while failing on branch 1.3.x
@@ -141,7 +79,7 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
       val queryClient = createTimelineQueryClient()
 
 /*
-
+     // check for work in progress
       val incomplete = connector.execHttpOperation("GET",
         new URL(webUI, "/?" + incomplete), null, "")
       val body = incomplete.responseBody

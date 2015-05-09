@@ -17,7 +17,7 @@
  */
 package org.apache.spark.deploy.history.yarn.integration
 
-import java.net.URI
+import java.net.{URL, URI}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.service.{Service, ServiceOperations}
@@ -26,11 +26,13 @@ import org.apache.hadoop.yarn.client.api.TimelineClient
 import org.apache.hadoop.yarn.server.applicationhistoryservice.ApplicationHistoryServer
 import org.apache.hadoop.yarn.server.timeline.TimelineStore
 
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.deploy.history.{HistoryServerArguments, HistoryServer, ApplicationHistoryProvider, FsHistoryProvider}
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.rest.JerseyBinding._
 import org.apache.spark.deploy.history.yarn.rest.{TimelineQueryClient, SpnegoUrlConnector}
-import org.apache.spark.deploy.history.yarn.{AbstractYarnHistoryTests, FreePortFinder, HandleSparkEvent, HistoryServiceNotListeningToSparkContext, TimelineServiceEnabled, YarnHistoryService, YarnTimelineUtils}
+import org.apache.spark.deploy.history.yarn.{YarnHistoryProvider, AbstractYarnHistoryTests, FreePortFinder, HandleSparkEvent, HistoryServiceNotListeningToSparkContext, TimelineServiceEnabled, YarnHistoryService, YarnTimelineUtils}
 import org.apache.spark.scheduler.SparkListenerEvent
 
 /**
@@ -45,6 +47,11 @@ abstract class AbstractTestsWithHistoryServices
   private var _applicationHistoryServer: ApplicationHistoryServer = _;
   private var _timelineClient: TimelineClient = _
   protected var historyService: YarnHistoryService = _
+
+  protected val incomplete_flag = "showIncomplete=true"
+
+  protected val no_completed_applications = "No completed applications found!"
+  protected val no_incomplete_applications = "No incomplete applications found!"
 
   def applicationHistoryServer: ApplicationHistoryServer = _applicationHistoryServer
   def timelineClient: TimelineClient = _timelineClient
@@ -164,5 +171,69 @@ abstract class AbstractTestsWithHistoryServices
     assertResult(0, s"-Post failure count: $historyService") {
       historyService.getEventPostFailures
     }
+  }
+
+  /**
+   * Create a history provider instance
+   * @param conf configuration
+   * @return the instance
+   */
+  protected def createHistoryProvider(conf: SparkConf): YarnHistoryProvider = {
+    val providerName = conf.getOption("spark.history.provider")
+        .getOrElse(classOf[FsHistoryProvider].getName())
+    val provider = Class.forName(providerName)
+        .getConstructor(classOf[SparkConf])
+        .newInstance(conf)
+        .asInstanceOf[ApplicationHistoryProvider]
+    assert(provider.isInstanceOf[YarnHistoryProvider],
+            s"Instantiated $providerName to get $provider")
+
+    provider.asInstanceOf[YarnHistoryProvider]
+  }
+
+  def webUITest(probe: (URL, YarnHistoryProvider) => Unit) {
+    val (port, server, webUI, provider) = createHistoryServer()
+    try {
+      server.bind()
+      probe(webUI, provider)
+    }
+    finally {
+      server.stop()
+    }
+  }
+
+  /**
+   * Probe the empty web UI for not having any completed apps
+   * @param webUI web UI
+   * @param provider provider
+   */
+  def probeEmptyWebUI(webUI: URL, provider: YarnHistoryProvider): Unit = {
+    val connector = createUrlConnector()
+    val outcome = connector.execHttpOperation("GET", webUI, null, "")
+    logInfo(s"$webUI => $outcome")
+    assert(outcome.contentType.startsWith("text/html"),
+            s"content type of $outcome")
+    val body = outcome.responseBody
+    logInfo(s"$body")
+    assertContains(body, "<title>History Server</title>")
+    assertContains(body, no_completed_applications)
+    assertContains(body, YarnHistoryProvider.KEY_PROVIDER_NAME)
+    assertContains(body, YarnHistoryProvider.KEY_PROVIDER_DETAILS)
+  }
+
+  /**
+   * Create a [[HistoryServer]] instance with a coupled history provider.
+   * @return (port, server, web UI URL, history provider)
+   */
+  protected def createHistoryServer(): (Int, HistoryServer, URL, YarnHistoryProvider) = {
+    val conf = sparkCtx.getConf
+    val securityManager = new SecurityManager(conf)
+    val args: List[String] = Nil
+    new HistoryServerArguments(conf, args.toArray)
+    val port = conf.getInt("spark.history.ui.port", 18080)
+    val provider = createHistoryProvider(sparkCtx.getConf)
+    val server = new HistoryServer(conf, provider, securityManager, port)
+    val webUI = new URL("http", "localhost", port, "/")
+    (port, server, webUI, provider)
   }
 }
