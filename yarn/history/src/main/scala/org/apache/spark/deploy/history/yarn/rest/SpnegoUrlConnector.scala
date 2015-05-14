@@ -115,7 +115,8 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
   }
 
   /**
-   * Uprate error codes 400 and up into exceptions, which are thrn thrown;
+   * Uprate error codes 400 and up into exceptions, which are then thrown
+   * <p>
    * 404 is converted to a {@link NotFoundException},
    * 401 to {@link ForbiddenException}
    * all others above 400: <code>IOException</code>
@@ -123,18 +124,12 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
    * @param verb HTTP Verb used
    * @param url URL as string
    * @param resultCode response from the request
-   * @param bodyAsString optional body as a string. If set, used in preference to <code>body</code>
    * @param body optional body of the request. If set (and bodyAsString) unset, the body is
    *             converted to a string and used in the response
    * @throws IOException if the result code was 400 or higher
    */
   @throws(classOf[IOException])
-  def uprateFaults(
-    verb: String,
-    url: String,
-    resultCode: Int,
-    bodyAsString: String,
-    body: Array[Byte]): Unit = {
+  def uprateFaults(verb: String, url: String, resultCode: Int, body: Array[Byte]): Unit = {
     if (resultCode >= 400) {
       val msg = s"$verb $url"
       if (resultCode == 404) {
@@ -142,9 +137,7 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
       } else if (resultCode == 401) {
         throw new PathPermissionException(msg)
       }
-      val bodyText = if (bodyAsString != null) {
-          bodyAsString
-        } else if (body != null && body.length > 0) {
+      val bodyText = if (body != null && body.length > 0) {
           new String(body)
         } else {
           ""
@@ -152,7 +145,7 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
       val message = s"$msg failed with exit code $resultCode, body length" +
           s" ${bodyText.length}\n${bodyText}"
       logError(message)
-      throw new IOException(message)
+      throw new HttpRequestException(resultCode, verb, url, message, bodyText)
     }
   }
 
@@ -201,7 +194,7 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
         conn.disconnect
       }
     }
-    uprateFaults(verb, url.toString, resultCode, "", body)
+    uprateFaults(verb, url.toString, resultCode, body)
     outcome.responseCode = resultCode
     outcome.data = body
     outcome
@@ -245,7 +238,7 @@ private object KerberosUgiAuthenticator extends KerberosAuthenticator {
   private object UgiAuthenticator extends PseudoAuthenticator {
     protected override def getUserName: String = {
       try {
-        return UserGroupInformation.getLoginUser.getUserName
+        UserGroupInformation.getLoginUser.getUserName
       } catch {
         case e: IOException => {
           throw new SecurityException("Failed to obtain current username", e)
@@ -255,7 +248,7 @@ private object KerberosUgiAuthenticator extends KerberosAuthenticator {
   }
   
   protected override def getFallBackAuthenticator: Authenticator = {
-    return UgiAuthenticator;
+    UgiAuthenticator
   }
 }
 

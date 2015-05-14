@@ -26,7 +26,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
-import org.apache.spark.deploy.history.yarn.rest.{JerseyBinding, SpnegoUrlConnector}
+import org.apache.spark.deploy.history.yarn.rest.JerseyBinding
 import org.apache.spark.deploy.history.yarn.{YarnHistoryService, YarnTimelineUtils}
 
 class BasicTimelineGetSuite extends AbstractTestsWithHistoryServices {

@@ -15,28 +15,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.history.yarn.integration
+package org.apache.spark.deploy.history.yarn.rest
 
-import org.apache.spark.deploy.history.yarn.YarnEventListener
-import org.apache.spark.deploy.history.yarn.YarnTestUtils._
+import java.io.IOException
 
-class TimelinePostSuite extends AbstractTestsWithHistoryServices {
+/**
+ * Specific HTTP error request exception which includes the error code
+ * and other information.
+ * @param _status HTTP status code
+ * @param _verb verb
+ * @param _url URL of request
+ * @param _message non-null error message
+ * @param _body optional body.
+ */
+private [spark] class HttpRequestException(_status: Int,
+    _verb: String,
+    _url: String,
+    _message: String,
+    _body:String = "")
+    extends IOException(_message) {
 
-  test("Round Trip App Stop") {
-    historyService = startHistoryService(sparkCtx)
-    val sparkEvt = appStopEvent()
-    val outcome = postEvent(sparkEvt, 100)
-    historyService.stop()
-    awaitEmptyQueue(historyService,1000)
-  }
-
-
-  test("App Start Via Event Listener") {
-    historyService = startHistoryService(sparkCtx)
-    val listener = new YarnEventListener(sparkCtx, historyService)
-    val sparkEvt = appStartEvent()
-    listener.onApplicationStart(sparkEvt)
-  }
-
+  def status: Int = _status
+  def verb: String = _verb
+  def url: String = _url
+  def body: String = _body
 
 }

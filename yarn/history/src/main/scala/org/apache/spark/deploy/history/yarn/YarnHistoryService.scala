@@ -22,6 +22,7 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import scala.collection.mutable.LinkedList
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.UserGroupInformation
@@ -36,8 +37,6 @@ import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.YarnExtensionService
 import org.apache.spark.{Logging, SparkContext}
-
-import scala.util.control.NonFatal
 
 /**
  * Implements a Hadoop service with the init/start logic replaced by that
@@ -260,18 +259,20 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
    */
   override protected def serviceStart {
     require(sparkContext != null, "No spark context set")
-    super.serviceStart()
     val conf: Configuration = getConfig
     if (timelineServiceEnabled) {
-      timelineWebappAddress = rootTimelineUri(conf)
+      timelineWebappAddress = getTimelineEndpoint(conf)
       timelineClient = Some(createTimelineClient())
       domainId = createTimelineDomain
+      // declare that the processing is started
+      stopped.set(false)
       eventHandlingThread = new Thread(new Dequeue(), "HistoryEventHandlingThread")
       eventHandlingThread.start
     }
     // irrespective of state, hook up to the listener
     registerListener
     logInfo(s"$this")
+    super.serviceStart()
   }
 
   /**
@@ -280,8 +281,7 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
    *         is set.
    */
   def timelineServiceEnabled: Boolean = {
-    getConfig.getBoolean(YarnConfiguration.TIMELINE_SERVICE_ENABLED,
-                          YarnConfiguration.DEFAULT_TIMELINE_SERVICE_ENABLED)
+    YarnTimelineUtils.timelineServiceEnabled(getConfig)
   }
 
   /**
@@ -306,7 +306,7 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
    * @return true if it has registered as a listener
    */
   def listening: Boolean = {
-    listener != null;
+    listener != null
   }
 
   /**
@@ -316,7 +316,7 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
    * @return true if the service has a timeline client
    */
   def bondedToATS: Boolean = {
-    timelineClient != None;
+    timelineClient != None
   }
 
   /**
@@ -458,7 +458,7 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
             false
           } else {
             if (domainId != null) {
-              en.setDomainId(domainId);
+              en.setDomainId(domainId)
             }
             val entityDescription = describeEntity(en)
             logDebug(s"About to put $entityDescription")
@@ -700,8 +700,6 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
       try {
         var shouldStop = false
         logInfo(s"Starting Dequeue service for AppId $appId")
-        // declare that the processing is started
-        stopped.set(false)
         while (!stopped.get) {
           try {
             val action = actionQueue.take

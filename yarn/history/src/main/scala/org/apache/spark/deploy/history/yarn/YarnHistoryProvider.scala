@@ -17,9 +17,10 @@
 
 package org.apache.spark.deploy.history.yarn
 
-import java.io.{PrintWriter, StringWriter, FileNotFoundException}
+import java.io.FileNotFoundException
 import java.net.URI
 import java.util.Date
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConversions._
 
@@ -29,7 +30,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.rest.{JerseyBinding, TimelineQueryClient}
-import org.apache.spark.deploy.history.{HistoryServer, ApplicationHistoryInfo, ApplicationHistoryProvider}
+import org.apache.spark.deploy.history.{ApplicationHistoryInfo, ApplicationHistoryProvider, HistoryServer}
 import org.apache.spark.scheduler.{ApplicationEventListener, SparkListenerBus}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
@@ -39,24 +40,20 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf}
  * the YARN Timeline Service.
  * <p>
  * The service is a remote HTTP service, so failure modes are
- * different from simple file IO. To be compatible with a
- * Web UI that does not expect operations to fail, some
- * method calls swallow exceptions, caching the value.
+ * different from simple file IO.
  * <p>
  * The [[getLastException()]] call will return the last exception
  * or `None`. It is shared across threads so is primarily there for
  * tests and basic diagnostics.
+ * <p>
+ * If the timeline is  not enabled, the API calls used by the web UI
+ * downgrade gracefully (returning empty entries), rather than fail.
+ * 
+ *
  * @param sparkConf configuration of the provider
  */
 private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   extends ApplicationHistoryProvider with Logging {
-
-  /**
-   * Empty constructor. This is purely for mocking
-   */
-  def this() {
-    this(new SparkConf())
-  }
 
   /**
    * The configuration here is a YarnConfiguration built off the spark configuration
@@ -71,40 +68,98 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   private val NOT_STARTED = "<Not Started>"
 
   /**
-   * Timeline root URI
+   * Timeline endpoint URI
    */
-  private val timelineUri = rootTimelineUri(yarnConf)
+  protected val timelineEndpoint = createTimelineEndpoint
 
   /**
    * The Jersey client used for HTTP operations
    */
-  private val jersey = {
+  protected val jersey = {
     JerseyBinding.createJerseyClient(yarnConf, JerseyBinding.createClientConfig())
   }
 
   /**
    * The timeline query client which uses the `jersey`
    * Jersey instance to talk to a timeline service running
-   * at `timelineUri`, and creates a timeline (write) client instance
+   * at [[timelineEndpoint]], and creates a timeline (write) client instance
    * to handle token renewal
    *
    */
-  private val timelineQueryClient = {
-    new TimelineQueryClient(timelineUri, yarnConf, JerseyBinding.createClientConfig())
+  protected val timelineQueryClient = {
+    createTimelineQueryClient
+  }
+
+
+  /**
+   * Override point: create the timeline endpoint
+   * @return a URI to the timeline web service
+   */
+  protected def createTimelineEndpoint: URI = {
+    getTimelineEndpoint(yarnConf)
   }
 
   /**
-   * Get the timeline query client. Used internally to ease mocking
-   * @return the client.
+   * Override point: create the timeline query client.
+   * This is called during instance creation.
+   * @return a timeline query client ot use for the duration
+   *         of this instance
    */
-  def getTimelineQueryClient(): TimelineQueryClient = {
-    timelineQueryClient
+  protected def createTimelineQueryClient: TimelineQueryClient = {
+    new TimelineQueryClient(timelineEndpoint, yarnConf, JerseyBinding.createClientConfig())
   }
 
   /**
    * Last exception seen and when
    */
-  private var lastException: Option[(Exception, Date)] = None
+  protected var lastException: Option[(Exception, Date)] = None
+
+  /**
+   * Health marker
+   */
+  private val healthy = new AtomicBoolean(false)
+
+  /**
+   * Enabled flag
+   */
+  private val _enabled = timelineServiceEnabled(yarnConf)
+
+  /**
+   * Initialize the provider
+   */
+  init()
+
+  /**
+   * Check the configuration and log whether or not it is enabled;
+   * if it is enabled then the URL is logged too.
+   */
+  private def init(): Unit = {
+    if (!enabled) {
+      logError(YarnHistoryProvider.TEXT_SERVICE_DISABLED)
+    } else {
+      logInfo(YarnHistoryProvider.TEXT_SERVICE_ENABLED)
+      logInfo(YarnHistoryProvider.KEY_SERVICE_URL
+          + ": " + timelineEndpoint)
+    }
+  }
+
+  /**
+   * Is the timeline service (and therefore this provider) enabled.
+   * (override point for tests)
+   * @return true if the provider/YARN configuration enables the timeline
+   *         service.
+   */
+  def enabled: Boolean = {
+    _enabled
+  }
+  
+  /**
+   * Get the timeline query client. Used internally to ease testing
+   * @return the client.
+   */
+  def getTimelineQueryClient(): TimelineQueryClient = {
+    timelineQueryClient
+  }
 
   /**
    * Set the last exception
@@ -118,7 +173,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
 
   /**
    * Get the last exception
-   * @return
+   * @return the last exception or  null
    */
   def getLastException(): Option[(Exception, Date)] = {
     this.synchronized {
@@ -126,22 +181,64 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
     }
   }
 
+  def isHealthy(): Boolean = {
+    healthy.get()
+  }
+
+  /**
+   * Get that the health flag itself. This allows test code to initialize it properly.
+   * Also: if accessed and set to false, it will trigger another health chek.
+   * @return
+   */
+  protected def getHealthFlag(): AtomicBoolean = {
+    healthy;
+  }
+
+  /**
+   * Health check to call before any other operation is attempted
+   */
+  private def maybeCheckHealth(): Unit = {
+    val h = getHealthFlag();
+    if (!h.getAndSet(true)) {
+      val client = getTimelineQueryClient()
+      try {
+        client.healthCheck()
+      } catch {
+        case e: Exception =>
+          // failure
+          logWarning(s"Health check of $client failed", e)
+          setLastException(e)
+          // reset health so another caller may attempt it.
+          h.set(false)
+          // propagate the failure
+          throw e;
+      }
+    }
+  }
+
   /**
    * List applications. This currently finds completed applications only.
+   * <p>
+   * If the timeline is  not enabled, returns an empty list
    * @return List of all known applications.
    */
   override def getListing(): Seq[ApplicationHistoryInfo] = {
+    if (!enabled) {
+      // Timeline is disabled: return nothing
+      return Nil
+    }
+    maybeCheckHealth()
     val client = getTimelineQueryClient()
     logInfo(s"getListing from: $client")
     val timelineEntities = try {
       client.listEntities(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
     } catch {
       case e: Exception =>
-        logWarning(s"Failed to list entities from $timelineUri", e)
+        logWarning(s"Failed to list entities from $timelineEndpoint", e)
         setLastException(e)
         // choice of two actions: swallow or rethrow
         // Nil
-        throw e;
+        throw e
     }
 
     val listing = timelineEntities.flatMap { en =>
@@ -168,16 +265,24 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    */
   def getTimelineEntity(appId: String): TimelineEntity = {
     logDebug(s"GetTimelineEntity $appId")
+    maybeCheckHealth()
     getTimelineQueryClient().getEntity(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE, appId)
   }
 
   /**
    * Build the application UI for an application
+   * <p>
+   * If the timeline is  not enabled, returns `None`
    * @param appId The application ID.
-   * @return The application's UI, or None if the application is not found.
+   * @return The application's UI, or `None` if application is not found.
    */
   override def getAppUI(appId: String): Option[SparkUI] = {
     logDebug(s"Request UI with appId $appId")
+    if (!enabled) {
+      // Timeline is disabled: return nothing
+      return None
+    }
+    maybeCheckHealth()
     try {
       val entity = getTimelineEntity(appId)
 
@@ -227,36 +332,19 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @return A map with the configuration data. Data is show in the order returned by the map.
    */
   override def getConfig(): Map[String, String] = {
-      val timelineURI = getRootURI()
+      val timelineURI = getEndpointURI()
       logDebug(s"getConfig $timelineURI")
-      val staticMap = Map(
-           YarnHistoryProvider.KEY_PROVIDER_NAME ->
-               "Apache Hadoop YARN Timeline Service",
-           YarnHistoryProvider.KEY_SERVICE_URL ->
-               s"${timelineURI }"
+      Map(
+       YarnHistoryProvider.KEY_PROVIDER_NAME -> "Apache Hadoop YARN Timeline Service",
+       YarnHistoryProvider.KEY_SERVICE_URL -> s"$timelineURI",
+       YarnHistoryProvider.KEY_ENABLED ->
+           (if (enabled) YarnHistoryProvider.TEXT_SERVICE_ENABLED
+            else YarnHistoryProvider.TEXT_SERVICE_DISABLED)
          )
-    this.synchronized {
-      lastException match {
-
-        case Some((ex, date)) =>
-          // there was an exception, so set it
-          val sw = new StringWriter()
-          ex.printStackTrace(new PrintWriter(sw))
-
-          staticMap ++ Map(
-                 YarnHistoryProvider.KEY_LAST_EXCEPTION -> ex.toString,
-                 YarnHistoryProvider.KEY_LAST_EXCEPTION_STACK -> sw.toString,
-                 YarnHistoryProvider.KEY_LAST_EXCEPTION_DATE -> date.toString
-               )
-
-        case None =>
-          staticMap
-      }
-    }
   }
 
-  def getRootURI(): URI = {
-    timelineUri.resolve("/")
+  def getEndpointURI(): URI = {
+    timelineEndpoint.resolve("/")
   }
 
   /**
@@ -269,7 +357,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   }
 
   override def toString: String = {
-    s"YarnHistoryProvider bound to history server at $timelineUri"
+    s"YarnHistoryProvider bound to history server at $timelineEndpoint"
   }
 }
 
@@ -290,6 +378,11 @@ object YarnHistoryProvider {
   val KEY_SERVICE_URL = "Timeline Service Location"
 
   /**
+   * is the service enabled?
+   */
+  val KEY_ENABLED = "Timeline Service"
+
+  /**
    * Key used to identify the history provider
    */
   val KEY_PROVIDER_NAME = "History Provider"
@@ -299,15 +392,7 @@ object YarnHistoryProvider {
    */
   val KEY_PROVIDER_DETAILS = "Apache Hadoop YARN Timeline Service"
 
-  /**
-   * Key used to declare the last exception
-   */
-  val KEY_LAST_EXCEPTION = "Last Exception: message"
-
-  /**
-   * Key used to contain the exception stack
-   */
-  val KEY_LAST_EXCEPTION_STACK = "Last Exception: stack"
-  val KEY_LAST_EXCEPTION_DATE = "Last Exception: date"
-
+  val TEXT_SERVICE_ENABLED = "Timeline service is enabled"
+  val TEXT_SERVICE_DISABLED =
+    "Timeline service is disabled: application history cannot be retrieved"
 }

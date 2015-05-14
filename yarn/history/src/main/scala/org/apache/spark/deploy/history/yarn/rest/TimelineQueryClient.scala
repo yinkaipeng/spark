@@ -20,15 +20,19 @@ package org.apache.spark.deploy.history.yarn.rest
 import java.io.Closeable
 import java.net.{URI, URL}
 import java.util.concurrent.atomic.AtomicBoolean
+import javax.servlet.http.HttpServletResponse
 import javax.ws.rs.core.MediaType
 
 import scala.collection.JavaConverters._
 
 import com.sun.jersey.api.client.config.ClientConfig
-import com.sun.jersey.api.client.{Client, WebResource}
+import com.sun.jersey.api.client.{Client, ClientResponse, WebResource}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.token.delegation.web.DelegationTokenAuthenticatedURL
 import org.apache.hadoop.yarn.api.records.timeline.{TimelineEntities, TimelineEntity}
+import org.codehaus.jackson.annotate.{JsonAnySetter, JsonIgnoreProperties}
+import org.json4s._
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.Logging
 
@@ -112,7 +116,7 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
   }
 
   /**
-   * Execute a POST operation against a specific URI, uprating jersey faults
+   * Execute an HTTP operation against a specific URI, uprating jersey faults
    * into more specific exceptions.
    * @param uri URI (used when generating text reporting exceptions)
    * @param action action to perform
@@ -133,7 +137,8 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
   /**
    * Invoke the action without any failure handling.
    * <p>
-   * This is intended as a point to inject mock failures.
+   * This is intended as a point for subclasses to simulate failures
+   * and so verify the failure handling code paths.
    * @param action action to perform
    * @tparam T type of response
    * @return the result of the action
@@ -144,14 +149,69 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
 
   /**
    * Peform an about query
-   * @return information about the seervice
+   * @return information about the service.
    */
   def about(): String = {
     val aboutURI = uri("")
     val resource = jerseyClient.resource(aboutURI)
-    get(aboutURI,
-       (() => resource.accept(MediaType.APPLICATION_JSON)
-             .get(classOf[String])))
+    val body = get(aboutURI,
+         (() => resource.accept(MediaType.APPLICATION_JSON).get(classOf[String])))
+    val json = parse(body)
+    json \ "About" match {
+      case s: JString =>
+        s.toString
+      case _ =>
+        throw new HttpRequestException(200, "GET", aboutURI.toString, body)
+    }
+  }
+
+  /**
+   * This is a low-cost, non-side-effecting timeline service
+   * health check operation.
+   * <p>
+   * It does a GET of the about URL, and verifies
+   * it for validity (response type, body).
+   * @throws Exception on a failure
+   */
+  def healthCheck(): Unit = {
+    val aboutURI = uri("")
+    val resource = jerseyClient.resource(aboutURI)
+
+    val clientResponse = get(aboutURI,
+         (() => {
+           val response = resource.get(classOf[ClientResponse])
+           val status = response.getClientResponseStatus
+           if (status.getStatusCode != HttpServletResponse.SC_OK) {
+             // error code. Repeat looking for a string and so
+             // trigger a failure and the exception conversion logic
+             resource.get(classOf[String])
+           }
+           response
+         } ))
+
+    val endpoint = aboutURI.toString
+    val status = clientResponse.getClientResponseStatus.getStatusCode
+    val body = clientResponse.getEntity(classOf[String])
+    val contentType = clientResponse.getType
+    if (MediaType.APPLICATION_JSON_TYPE != contentType) {
+      // wrong media type
+      val m = s"Wrong content type: expected application/json but got $contentType." +
+          s" Check the URL of the timeline service: $aboutURI"
+      val text = if (contentType.isCompatible(MediaType.valueOf("text/*"))) {
+        m + "\n" + body
+      } else {
+        m
+      }
+      throw new HttpRequestException(status, "GET", endpoint ,
+          text,
+          body)
+    }
+    if (body.isEmpty) {
+      throw new HttpRequestException(status, "GET", endpoint,
+              s"No data in the response")
+    }
+    // finally, issue an about() operation again to force the JSON parse
+    about()
   }
 
   /**
@@ -249,4 +309,22 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
   override def toString: String = {
     s"Timeline Query Client against $timelineURI"
   }
+}
+
+/**
+ * Simple About response. The timeline V1 API keeps this type hidden in the server code, even though
+ * it is tagged `@Public`
+ */
+@JsonIgnoreProperties(ignoreUnknown = true)
+private [spark] class AboutResponse {
+
+  var other: Map[String, Object] = Map()
+
+  var About: String = _
+
+  @JsonAnySetter
+  def handleUnknown(key: String, value: Object) {
+    other += (key -> value)
+  }
+
 }

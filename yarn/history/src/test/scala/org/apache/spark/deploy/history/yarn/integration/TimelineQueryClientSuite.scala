@@ -17,19 +17,17 @@
  */
 package org.apache.spark.deploy.history.yarn.integration
 
-import java.net.URI
+import java.io.IOException
+import java.net.{URI, URL}
 
 import com.sun.jersey.api.client.Client
 import com.sun.jersey.api.client.config.ClientConfig
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity
-import org.apache.hadoop.yarn.client.api.TimelineClient
-import org.json4s._
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
 import org.apache.spark.deploy.history.yarn.rest.JerseyBinding._
-import org.apache.spark.deploy.history.yarn.rest.TimelineQueryClient
+import org.apache.spark.deploy.history.yarn.rest.{HttpRequestException, TimelineQueryClient}
 
 class TimelineQueryClientSuite extends AbstractTestsWithHistoryServices {
 
@@ -46,11 +44,10 @@ class TimelineQueryClientSuite extends AbstractTestsWithHistoryServices {
   }
 
   test("About") {
-    val response = queryClient.about();
+    val response = queryClient.about()
     logInfo(s"$timeline/about => \n$response")
-    val json = parse(response)
-    val text = json \ "About"
-    assert(text.isInstanceOf[JString], s"wrong type for $text from $response under $timeline")
+    assertNotNull(response, s"$queryClient about()")
+    assertContains(response, "Timeline")
   }
 
   test("ListNoEntityTypes") {
@@ -86,6 +83,28 @@ class TimelineQueryClientSuite extends AbstractTestsWithHistoryServices {
     assertEquals(te, listing2.head)
   }
 
+  def createTimelineClientRootPath: TimelineQueryClient = {
+    val realTimelineEndpoint = historyService.getTimelineServiceAddress().toURL
+    val rootTimelineServer = new URL(realTimelineEndpoint, "/").toURI
+    new TimelineQueryClient(rootTimelineServer,
+        sparkCtx.hadoopConfiguration,
+        createClientConfig())
+  }
+
+  test("Client about() Against Wrong URL") {
+    intercept[IOException] {
+      val about = createTimelineClientRootPath.about()
+    }
+  }
+
+  test("Client healthcheck() Against Wrong URL") {
+    val client: TimelineQueryClient = createTimelineClientRootPath
+    val ex = intercept[HttpRequestException] {
+      client.healthCheck()
+    }
+    log.debug(s"GET $client",ex)
+    assertContains(ex.toString(),"<html>")
+  }
 
 }
 

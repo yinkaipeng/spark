@@ -19,13 +19,12 @@ package org.apache.spark.deploy.history.yarn.integration
 
 import java.net.URL
 
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
 import org.apache.spark.deploy.history.yarn.{YarnEventListener, YarnHistoryProvider, YarnHistoryService}
-import org.apache.spark.deploy.history.{HistoryServer, ApplicationHistoryProvider, FsHistoryProvider, HistoryServerArguments}
 import org.apache.spark.scheduler.cluster.YarnExtensionServices
 import org.apache.spark.util.Utils
-import org.apache.spark.{SecurityManager, SparkConf}
 
 class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
 

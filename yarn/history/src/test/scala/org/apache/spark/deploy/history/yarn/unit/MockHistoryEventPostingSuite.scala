@@ -68,7 +68,7 @@ class MockHistoryEventPostingSuite extends AbstractMockHistorySuite {
       awaitEventsProcessed(service, 1, 2000)
       verify(timelineClient, times(1)).putEntities(any(classOf[TimelineEntity]))
     } finally {
-      service.stop();
+      service.stop()
     }
   }
 

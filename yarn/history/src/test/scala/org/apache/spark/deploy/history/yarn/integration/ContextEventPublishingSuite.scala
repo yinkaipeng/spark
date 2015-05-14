@@ -48,7 +48,7 @@ class ContextEventPublishingSuite
 
     // add a local file
     val tempFile: File = File.createTempFile("test",".txt")
-    sparkCtx.addFile(tempFile.getAbsolutePath)
+    sparkCtx.addFile(tempFile.toURI.toString)
     tempFile.delete()
 
 

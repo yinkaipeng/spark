@@ -87,7 +87,7 @@ abstract class AbstractYarnHistoryTests
   protected def stopSparkContext: Unit = {
     if (sparkCtx != null) {
       sparkCtx.stop()
-      sparkCtx = null;
+      sparkCtx = null
     }
   }
 
@@ -122,7 +122,7 @@ abstract class AbstractYarnHistoryTests
     } finally {
       service.stop()
       // as this adds an event to the history, it is incremented
-      eventsPosted += 1;
+      eventsPosted += 1
     }
     (service, eventsPosted)
   }

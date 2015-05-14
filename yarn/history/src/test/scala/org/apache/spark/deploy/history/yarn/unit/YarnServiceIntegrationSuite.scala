@@ -20,7 +20,6 @@ package org.apache.spark.deploy.history.yarn.unit
 import org.apache.hadoop.service.{Service, ServiceStateException}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.history.{ApplicationHistoryProvider, FsHistoryProvider}
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
 import org.apache.spark.deploy.history.yarn.{AbstractYarnHistoryTests, YarnHistoryProvider, YarnHistoryService}
 import org.apache.spark.scheduler.cluster.YarnExtensionServices

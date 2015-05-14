@@ -44,7 +44,7 @@ import org.apache.spark.Logging
 private[spark] class JerseyBinding(conf: Configuration, token: DelegationTokenAuthenticatedURL.Token)
     extends Logging with HttpURLConnectionFactory {
   private val connector = SpnegoUrlConnector.newInstance(conf, token)
-  private val handler = new URLConnectionClientHandler(this);
+  private val handler = new URLConnectionClientHandler(this)
 
   override def getHttpURLConnection(url: URL): HttpURLConnection = {
     connector.getHttpURLConnection(url)
@@ -116,12 +116,12 @@ private[spark] object JerseyBinding extends Logging {
   }
 
   /**
-   * Get the body of a response. Only the
-   * first 256 chars are returned.
+   * Get the body of a response. A failure to extract the body is logged
    * @param response response
-   * @return string body; "" for no body
+   * @param limit the limit: 0 means "the entire HTTP response"
+   * @return string body; may mean "" an empty body or the operation failed.
    */
-  private def bodyOfResponse(response: ClientResponse) : String = {
+  def bodyOfResponse(response: ClientResponse, limit: Int = 0) : String = {
     var body: String = ""
     try {
       if (response.hasEntity) {
@@ -138,7 +138,11 @@ private[spark] object JerseyBinding extends Logging {
       }
     }
     //shorten the body
-    body.substring(0, Math.min(256, body.length))
+    if (limit > 0) {
+      body.substring(0, Math.min(limit, body.length))
+    } else {
+      body
+    }
   }
 
   /**
@@ -159,7 +163,7 @@ private[spark] object JerseyBinding extends Logging {
     val uri = if (targetURL != null) targetURL.toString else ("unknown URL")
     if (response != null) {
       val status: Int = response.getStatus
-      val body = bodyOfResponse(response)
+      val body = bodyOfResponse(response, 256)
       val errorText = s"Bad $verb request: status code $status against $uri; $body"
       if (status == HttpServletResponse.SC_UNAUTHORIZED ||
           status == HttpServletResponse.SC_FORBIDDEN) {
@@ -194,7 +198,7 @@ private[spark] object JerseyBinding extends Logging {
       clientConfig: ClientConfig,
       token: DelegationTokenAuthenticatedURL.Token = new DelegationTokenAuthenticatedURL.Token): Client = {
     val jerseyBinding = new JerseyBinding(conf, token)
-    new Client(jerseyBinding.handler, clientConfig);
+    new Client(jerseyBinding.handler, clientConfig)
   }
 
   /**

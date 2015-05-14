@@ -17,10 +17,10 @@
  */
 package org.apache.spark.deploy.history.yarn.unit
 
-import java.io.{ByteArrayInputStream, IOException, FileNotFoundException}
+import java.io.{ByteArrayInputStream, FileNotFoundException, IOException}
 import java.net.URI
 
-import com.sun.jersey.api.client.{ClientResponse, UniformInterfaceException, ClientHandlerException}
+import com.sun.jersey.api.client.{ClientHandlerException, ClientResponse, UniformInterfaceException}
 import org.apache.hadoop.fs.PathPermissionException
 
 import org.apache.spark.deploy.history.yarn.AbstractYarnHistoryTests

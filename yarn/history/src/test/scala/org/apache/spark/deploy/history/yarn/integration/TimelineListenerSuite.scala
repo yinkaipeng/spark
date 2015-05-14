@@ -19,14 +19,10 @@ package org.apache.spark.deploy.history.yarn.integration
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity
-
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
-import org.apache.spark.deploy.history.yarn.rest.JerseyBinding._
-import org.apache.spark.deploy.history.yarn.rest.TimelineQueryClient
-import org.apache.spark.deploy.history.yarn.{YarnHistoryService, YarnTimelineUtils, YarnEventListener, YarnHistoryProvider}
+import org.apache.spark.deploy.history.yarn.{YarnEventListener, YarnHistoryProvider, YarnHistoryService}
 import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerApplicationStart}
 import org.apache.spark.util.Utils
 

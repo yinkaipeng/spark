@@ -27,7 +27,9 @@ import org.apache.spark.deploy.history.yarn.rest.TimelineQueryClient
 /**
  * A timeline query client that always throws an exception
  */
-class FailingTimelineQueryClient(timelineURI: URI, conf: Configuration, jerseyClientConfig: ClientConfig)
+class FailingTimelineQueryClient(timelineURI: URI,
+    conf: Configuration,
+    jerseyClientConfig: ClientConfig)
     extends TimelineQueryClient(timelineURI, conf, jerseyClientConfig) {
 
   /**

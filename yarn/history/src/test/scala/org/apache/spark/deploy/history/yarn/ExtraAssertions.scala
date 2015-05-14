@@ -40,7 +40,7 @@ trait ExtraAssertions extends Logging with Assertions {
   def assertExceptionMessageContains(ex: Exception, text: String): Unit =  {
     if (!ex.toString.contains(text)) {
       logError(s"Did not find text ${text} in $ex", ex)
-      throw ex;
+      throw ex
     }
   }
 
@@ -135,4 +135,21 @@ trait ExtraAssertions extends Logging with Assertions {
           s"did not find '${contained}' in '${source}'")
   }
 
+  /**
+   * Assert that a [String, String] map contains a key:value mapping,
+   * and that the value contains the specified text.
+   * @param map map to query
+   * @param key key to retrieve
+   * @param text text to look for in the resolved value
+   */
+  protected def assertMapValueContains(map: Map[String, String], key: String, text: String): Unit = {
+    map.get(key) match {
+      case Some(s) =>
+        if (!text.isEmpty && !s.contains(text)) {
+          fail(s"Did not find '$text' in key[$key] = '$s'")
+        }
+      case None =>
+        fail(s"No entry for key $key")
+    }
+  }
 }

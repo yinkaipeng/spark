@@ -25,9 +25,9 @@ import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.timeline.MemoryTimelineStore
 
+import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerEnvironmentUpdate, SparkListenerEvent}
 import org.apache.spark.util.Utils
-import org.apache.spark.SparkConf
 
 object YarnTestUtils extends ExtraAssertions with FreePortFinder {
 
@@ -172,11 +172,11 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
   def appStartEvent(time: Long = 1,
       eventId: String = EVENT_ID,
       user:String = APP_USER): SparkListenerApplicationStart = {
-    new SparkListenerApplicationStart(APP_NAME, Some(eventId), time, user);
+    new SparkListenerApplicationStart(APP_NAME, Some(eventId), time, user)
   }
 
   def appStopEvent(time: Long = 1): SparkListenerApplicationEnd = {
-    new SparkListenerApplicationEnd(time);
+    new SparkListenerApplicationEnd(time)
   }
 
   def newEntity(time: Long): TimelineEntity = {
@@ -203,17 +203,15 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    * @param probe probe to execute
    * @param failure closure invoked on timeout/probe failure
    */
-  def spinForState(interval: Long,
-          timeout: Long,
-          probe: () => Outcome,
-          failure: (Int, Boolean) => Unit): Unit = {
-    val timelimit = now() + timeout;
+  def spinForState(description: String, interval: Long, timeout: Long, probe: () => Outcome, failure: (Int, Boolean) => Unit): Unit = {
+    logInfo(description)
+    val timelimit = now() + timeout
     var result: Outcome = Retry()
-    var current = 0L;
-    var iterations = 0;
+    var current = 0L
+    var iterations = 0
     do {
       iterations += 1
-      result = probe();
+      result = probe()
       if (result == Retry()) {
         // probe says retry
         current = now()
@@ -284,7 +282,11 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
       }
     }
 
-    spinForState(50, timeout, eventsProcessedCheck, eventProcessFailure)
+    spinForState("awaitEventsProcessed",
+                  interval = 50,
+                  timeout = timeout,
+                  probe = eventsProcessedCheck,
+                  failure = eventProcessFailure)
   }
 
   /**
@@ -311,8 +313,8 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
       url.openStream().close()
     }
 
-    logInfo(s"Awaiting a response from URL $url")
-    spinForState(50, timeout, probe, failure)
+    spinForState(s"Awaiting a response from URL $url",
+                  interval = 50, timeout = timeout, probe = probe, failure = failure)
 
   }
 
@@ -323,9 +325,14 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    * @param timeout timeout
    */
   def awaitEmptyQueue(historyService: YarnHistoryService, timeout: Long): Unit = {
-    spinForState(50, timeout,
-          (() => outcomeFromBool(historyService.getQueueSize == 0)),
-          ((_, _) => fail(s"queue never cleared: ${historyService.getQueueSize}")))
+
+    spinForState("awaiting empty queue",
+                  interval = 50,
+                  timeout = timeout,
+                  probe = (() => outcomeFromBool(historyService.getQueueSize == 0)),
+                  failure = ((_, _) => fail(s"queue never cleared: ${
+                    historyService.getQueueSize
+                  }")))
   }
 
   /**
@@ -335,9 +342,11 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    * @param timeout timeout
    */
   def awaitFlushCount(historyService: YarnHistoryService, count: Int, timeout: Long): Unit = {
-    spinForState(50, timeout,
-          (() => outcomeFromBool(historyService.getFlushCount() == count)),
-          ((_, _) => fail(s"flush count not $count in $historyService")))
+    spinForState(s"awaiting flush count of $count",
+                  interval = 50,
+                  timeout = timeout,
+                  probe = (() => outcomeFromBool(historyService.getFlushCount() == count)),
+                  failure = ((_, _) => fail(s"flush count not $count in $historyService")))
   }
 
 
@@ -348,9 +357,12 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    */
   def awaitServiceThreadStopped(historyService: YarnHistoryService, timeout: Long): Unit = {
     assertNotNull(historyService, "null historyService")
-    spinForState(50, timeout,
-                  (() => outcomeFromBool(!historyService.isPostThreadActive)),
-                  ((_, _) => fail(s"history service post thread did not finish : $historyService")))
+    spinForState("awaitServiceThreadStopped",
+                  interval = 50,
+                  timeout = timeout,
+                  probe = (() => outcomeFromBool(!historyService.isPostThreadActive)),
+                  failure = ((_,
+                      _) => fail(s"history service post thread did not finish : $historyService")))
   }
 
 }

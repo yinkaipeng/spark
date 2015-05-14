@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.history.yarn.unit
 
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity
-import org.mockito.ArgumentCaptor
 import org.mockito.Matchers._
 import org.mockito.Mockito._
 

@@ -20,19 +20,14 @@ package org.apache.spark.deploy.history.yarn.failures
 import java.net.{NoRouteToHostException, URI}
 
 import org.apache.hadoop.conf.Configuration
-import org.mockito.Matchers._
-import org.mockito.Mockito._
 import org.scalatest.exceptions.TestFailedException
-import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
 import org.apache.spark.deploy.history.yarn.integration.AbstractTestsWithHistoryServices
-import org.apache.spark.deploy.history.yarn.rest.JerseyBinding
 import org.apache.spark.deploy.history.yarn.{YarnHistoryProvider, YarnHistoryService}
 
-class MockTimelineQueryFailure extends AbstractTestsWithHistoryServices
-    with MockitoSugar {
+class TimelineQueryFailureSuite extends AbstractTestsWithHistoryServices {
 
 
   /**
@@ -49,14 +44,14 @@ class MockTimelineQueryFailure extends AbstractTestsWithHistoryServices
    * @return the instance
    */
   override protected def createHistoryProvider(conf: SparkConf): YarnHistoryProvider = {
-     MockProviderHelper.createFailingProvider()
+     FailingYarnHistoryProvider.createFailingProvider(false)
   }
 
   /**
    * Verifies that failures are propagated
    */
   test("ClientGETFails") {
-    val failingClient = MockProviderHelper.createQueryClient()
+    val failingClient = FailingYarnHistoryProvider.createQueryClient()
     intercept[NoRouteToHostException] {
       failingClient.get(new URI("http://localhost:80/"),
                          (() => "failed"))
@@ -64,7 +59,7 @@ class MockTimelineQueryFailure extends AbstractTestsWithHistoryServices
   }
 
   test("ClientListFails") {
-    val failingClient = MockProviderHelper.createQueryClient()
+    val failingClient = FailingYarnHistoryProvider.createQueryClient()
     intercept[NoRouteToHostException] {
       failingClient.listEntities(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
     }
@@ -88,19 +83,20 @@ class MockTimelineQueryFailure extends AbstractTestsWithHistoryServices
         throw ex
       case ex: Exception =>
         logError("Wrong exception: ", ex)
-        throw ex;
+        throw ex
     }
   }
 
   test("getTimelineEntity to fail") {
     describe("getTimelineEntity to fail")
-    val provider = createHistoryProvider(new SparkConf())
+    val provider = createHistoryProvider(new SparkConf()).asInstanceOf[FailingYarnHistoryProvider]
+    provider.setHealthChecked(true)
+
     // not using intercept[] for better diagnostics on failure (i.e. rethrow the unwanted
     // exception
-    try { {
+    try {
       val entity = provider.getTimelineEntity("app1")
       fail(s"Expected failure, got $entity")
-    }
     } catch {
       case ioe: NoRouteToHostException =>
         logInfo(s"expected exception caught: $ioe")
@@ -108,13 +104,17 @@ class MockTimelineQueryFailure extends AbstractTestsWithHistoryServices
         throw ex
       case ex: Exception =>
         logError("Wrong exception: ", ex)
-        throw ex;
+        throw ex
     }
   }
 
   test("getAppUI to recover") {
     describe("getTimelineEntity to recover")
     val provider = createHistoryProvider(new SparkConf())
+        .asInstanceOf[FailingYarnHistoryProvider]
+    // skip that initial health check
+    provider.setHealthChecked(true)
+
     assertResult(None) {
       provider.getAppUI("app1")
     }
@@ -128,55 +128,7 @@ class MockTimelineQueryFailure extends AbstractTestsWithHistoryServices
       case None =>
         fail("No logged exception")
     }
-    // and getting the config returns it
-    val config = provider.getConfig()
-
-    assertMapContains(config, YarnHistoryProvider.KEY_LAST_EXCEPTION,
-                       FailingTimelineQueryClient.ERROR_TEXT)
-    assertMapContains(config, YarnHistoryProvider.KEY_LAST_EXCEPTION_STACK, "")
-    assertMapContains(config, YarnHistoryProvider.KEY_LAST_EXCEPTION_DATE, "")
-
   }
 
-
-  protected def assertMapContains(config: Map[String, String], key: String, text: String): Unit = {
-    config.get(key) match {
-      case Some(s) =>
-        if (!text.isEmpty && !s.contains(text)) {
-          fail(s"Did not find '$text' in key[$key] = '$s'")
-        }
-      case None =>
-        fail(s"No entry for key $key")
-    }
-  }
 }
 
-/**
- * Some operations to help the mock failing tests
- */
-object MockProviderHelper extends MockitoSugar {
-
-  def createQueryClient(): FailingTimelineQueryClient = {
-    new FailingTimelineQueryClient(new URI("http://localhost:80/"),
-                                    new Configuration(),
-                                    JerseyBinding.createClientConfig())
-  }
-
-
-  /**
-   * This inner provider calls most of its internal methods.
-   * @return
-   */
-  def createFailingProvider(): YarnHistoryProvider = {
-    val failingClient = createQueryClient()
-    val provider = mock[YarnHistoryProvider]
-    doReturn(failingClient).when(provider).getTimelineQueryClient()
-    doCallRealMethod().when(provider).getAppUI(anyString())
-    doCallRealMethod().when(provider).getListing()
-    doCallRealMethod().when(provider).getConfig()
-    doCallRealMethod().when(provider).getTimelineEntity(anyString())
-    doCallRealMethod().when(provider).getLastException()
-    doReturn(new URI("http://localhost:80/")).when(provider).getRootURI()
-    provider
-  }
-}

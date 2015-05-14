@@ -21,7 +21,6 @@ package org.apache.spark.deploy.yarn.history
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
 import org.apache.spark.deploy.history.yarn.integration.AbstractTestsWithHistoryServices
-import org.apache.spark.deploy.history.yarn.YarnHistoryService
 import org.apache.spark.scheduler.cluster.YarnExtensionServices
 
 class ProviderInstantiationSuite extends AbstractTestsWithHistoryServices {
@@ -38,9 +37,12 @@ class ProviderInstantiationSuite extends AbstractTestsWithHistoryServices {
     super.teardown()
   }
 
+  val classname = "org.apache.spark.deploy.yarn.history.YarnHistoryService"
+  val provider_name = "org.apache.spark.deploy.yarn.history.YarnHistoryProvider"
+
   override def setupConfiguration(sparkConf: SparkConf): SparkConf = {
     super.setupConfiguration(sparkConf)
-    sparkConf.set(YarnExtensionServices.SPARK_YARN_SERVICES, YarnHistoryService.CLASSNAME)
+    sparkConf.set(YarnExtensionServices.SPARK_YARN_SERVICES, classname)
     sparkConf.set(SPARK_HISTORY_PROVIDER, provider_name)
     sparkConf.set(SPARK_HISTORY_UI_PORT, findPort().toString)
   }
@@ -49,10 +51,10 @@ class ProviderInstantiationSuite extends AbstractTestsWithHistoryServices {
     new YarnHistoryProvider(new SparkConf())
   }
 
-  private val provider_name = "org.apache.spark.deploy.yarn.history.YarnHistoryProvider"
+
   test("CreateViaConfig") {
     val conf = new SparkConf()
-    conf.set(YarnExtensionServices.SPARK_YARN_SERVICES, YarnHistoryService.CLASSNAME)
+    conf.set(YarnExtensionServices.SPARK_YARN_SERVICES, classname)
     conf.set(SPARK_HISTORY_PROVIDER,
         provider_name)
     conf.set(SPARK_HISTORY_UI_PORT, findPort().toString)

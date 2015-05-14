@@ -17,23 +17,22 @@
  */
 package org.apache.spark.deploy.history.yarn.integration
 
-import java.net.{URL, URI}
+import java.net.URL
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.service.{Service, ServiceOperations}
 import org.apache.hadoop.yarn.api.records.timeline.{TimelineEntity, TimelineEvent, TimelinePutResponse}
 import org.apache.hadoop.yarn.client.api.TimelineClient
 import org.apache.hadoop.yarn.server.applicationhistoryservice.ApplicationHistoryServer
-import org.apache.hadoop.yarn.server.timeline.TimelineStore
 
-import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.deploy.history.{HistoryServerArguments, HistoryServer, ApplicationHistoryProvider, FsHistoryProvider}
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.rest.JerseyBinding._
-import org.apache.spark.deploy.history.yarn.rest.{TimelineQueryClient, SpnegoUrlConnector}
-import org.apache.spark.deploy.history.yarn.{YarnHistoryProvider, AbstractYarnHistoryTests, FreePortFinder, HandleSparkEvent, HistoryServiceNotListeningToSparkContext, TimelineServiceEnabled, YarnHistoryService, YarnTimelineUtils}
+import org.apache.spark.deploy.history.yarn.rest.{SpnegoUrlConnector, TimelineQueryClient}
+import org.apache.spark.deploy.history.yarn.{AbstractYarnHistoryTests, FreePortFinder, HandleSparkEvent, HistoryServiceNotListeningToSparkContext, TimelineServiceEnabled, YarnHistoryProvider, YarnHistoryService, YarnTimelineUtils}
+import org.apache.spark.deploy.history.{ApplicationHistoryProvider, FsHistoryProvider, HistoryServer}
 import org.apache.spark.scheduler.SparkListenerEvent
+import org.apache.spark.{SecurityManager, SparkConf}
 
 /**
  * Integration tests with history services setup and torn down
@@ -44,8 +43,8 @@ abstract class AbstractTestsWithHistoryServices
     with HistoryServiceNotListeningToSparkContext
     with TimelineServiceEnabled {
 
-  private var _applicationHistoryServer: ApplicationHistoryServer = _;
-  private var _timelineClient: TimelineClient = _
+  protected var _applicationHistoryServer: ApplicationHistoryServer = _
+  protected var _timelineClient: TimelineClient = _
   protected var historyService: YarnHistoryService = _
 
   protected val incomplete_flag = "showIncomplete=true"
@@ -75,9 +74,11 @@ abstract class AbstractTestsWithHistoryServices
     logInfo("Teardown of history server, timeline client and history service")
     if (historyService != null && !historyService.isInState(Service.STATE.STARTED)) {
       flushHistoryServiceToSuccess()
-      spinForState(50, 5000,
-                    (() => outcomeFromBool(!historyService.isPostThreadActive)),
-                    (_, _) => ())
+      spinForState("post thread halting in teardown",
+                    interval = 50,
+                    timeout = 5000,
+                    probe = (() => outcomeFromBool(!historyService.isPostThreadActive)),
+                    failure = (_, _) => ())
       ServiceOperations.stopQuietly(historyService)
       awaitServiceThreadStopped(historyService, 5000)
     }
@@ -92,15 +93,6 @@ abstract class AbstractTestsWithHistoryServices
    */
   protected def createUrlConnector(): SpnegoUrlConnector = {
     SpnegoUrlConnector.newInstance(sparkCtx.hadoopConfiguration)
-  }
-
-  /**
-   * Get at the timeline store
-   * @return timeline store
-   */
-  protected def timelinestore: TimelineStore = {
-    assertNotNull(applicationHistoryServer,"applicationHistoryServer")
-    applicationHistoryServer.getTimelineStore
   }
 
   /**
@@ -132,14 +124,13 @@ abstract class AbstractTestsWithHistoryServices
   /**
    * Put a timeline entity to the timeline client; this is expected
    * to eventually make it to the history server
-   * @param entity
-   * @return
+   * @param entity entity to put
+   * @return the response
    */
   def putTimelineEntity(entity: TimelineEntity): TimelinePutResponse = {
     assertNotNull(_timelineClient, "timelineClient")
     _timelineClient.putEntities(entity)
   }
-
 
   /**
    * Marshall and post a spark event to the timeline; return the outcome
@@ -148,12 +139,12 @@ abstract class AbstractTestsWithHistoryServices
    * @return a triple of the wrapped event, marshalled entity and the response
    */
   protected def postEvent(sparkEvt: SparkListenerEvent, time: Long):
-  (TimelineEvent, TimelineEntity, TimelinePutResponse) = {
+      (TimelineEvent, TimelineEntity, TimelinePutResponse) = {
     val event = toTimelineEvent(new HandleSparkEvent(sparkEvt, time))
     val entity = newEntity(time)
     entity.addEvent(event)
     val response = putTimelineEntity(entity)
-    val description = describePutResponse(response);
+    val description = describePutResponse(response)
     logInfo(s"response: $description")
     assert(response.getErrors.isEmpty,
             s"errors in response: $description")
@@ -174,7 +165,10 @@ abstract class AbstractTestsWithHistoryServices
   }
 
   /**
-   * Create a history provider instance
+   * Create a history provider instance, following the same process
+   * as the history web UI itself: querying the configuration for the
+   * provider and falling back to the [[FsHistoryProvider]]. If
+   * that falback does take place, however, and assertion is raised.
    * @param conf configuration
    * @return the instance
    */
@@ -191,34 +185,56 @@ abstract class AbstractTestsWithHistoryServices
     provider.asInstanceOf[YarnHistoryProvider]
   }
 
+  /**
+   * Crete a history server and maching provider, execute the
+   * probe against it. After the probe completes, the history server
+   * is stopped.
+   * @param probe probe to run
+   */
   def webUITest(probe: (URL, YarnHistoryProvider) => Unit) {
     val (port, server, webUI, provider) = createHistoryServer()
     try {
       server.bind()
       probe(webUI, provider)
-    }
-    finally {
+    } finally {
       server.stop()
     }
   }
 
   /**
-   * Probe the empty web UI for not having any completed apps
+   * Probe the empty web UI for not having any completed apps; expect
+   * a text/html response with specific text and history provider configuration
+   * elements.
    * @param webUI web UI
    * @param provider provider
    */
   def probeEmptyWebUI(webUI: URL, provider: YarnHistoryProvider): Unit = {
+    val body: String = getHtmlPage(webUI,
+       "<title>History Server</title>"
+        :: no_completed_applications
+        :: YarnHistoryProvider.KEY_PROVIDER_NAME
+        :: YarnHistoryProvider.KEY_PROVIDER_DETAILS
+        :: Nil)
+    logInfo(s"$body")
+  }
+
+  /**
+   * Get an HTML page. Includes a check that the content type is `text/html`
+   * @param page web UI
+   * @param checks list of strings to assert existing in the response
+   * @return the body of the response
+   */
+  protected def getHtmlPage(page: URL, checks: List[String]): String = {
     val connector = createUrlConnector()
-    val outcome = connector.execHttpOperation("GET", webUI, null, "")
-    logInfo(s"$webUI => $outcome")
+    val outcome = connector.execHttpOperation("GET", page, null, "")
+    logInfo(s"$page => $outcome")
     assert(outcome.contentType.startsWith("text/html"),
             s"content type of $outcome")
     val body = outcome.responseBody
-    logInfo(s"$body")
-    assertContains(body, "<title>History Server</title>")
-    assertContains(body, no_completed_applications)
-    assertContains(body, YarnHistoryProvider.KEY_PROVIDER_NAME)
-    assertContains(body, YarnHistoryProvider.KEY_PROVIDER_DETAILS)
+    checks foreach { text =>
+      assertContains(body, text)
+    }
+    body
   }
 
   /**
@@ -229,7 +245,6 @@ abstract class AbstractTestsWithHistoryServices
     val conf = sparkCtx.getConf
     val securityManager = new SecurityManager(conf)
     val args: List[String] = Nil
-    new HistoryServerArguments(conf, args.toArray)
     val port = conf.getInt("spark.history.ui.port", 18080)
     val provider = createHistoryProvider(sparkCtx.getConf)
     val server = new HistoryServer(conf, provider, securityManager, port)

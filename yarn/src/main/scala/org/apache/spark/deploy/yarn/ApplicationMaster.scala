@@ -78,7 +78,7 @@ private[spark] class ApplicationMaster(
   // Fields used in cluster mode.
   private val sparkContextRef = new AtomicReference[SparkContext](null)
 
-  def getAttemptId() = {
+  def getAttemptId(): ApplicationAttemptId = {
     client.getAttemptId()
   }
 
@@ -588,7 +588,7 @@ object ApplicationMaster extends Logging {
     master.sparkContextStopped(sc)
   }
 
-  def getAttemptId() = {
+  private[spark] def getAttemptId(): ApplicationAttemptId = {
     master.getAttemptId
   }
 

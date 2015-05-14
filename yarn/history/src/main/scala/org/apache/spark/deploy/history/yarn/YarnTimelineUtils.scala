@@ -24,6 +24,7 @@ import java.util
 import java.util.{ArrayList => JArrayList, Collection => JCollection, Date, HashMap => JHashMap, Map => JMap}
 
 import scala.collection.JavaConversions._
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.service.Service
@@ -36,11 +37,9 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.history.ApplicationHistoryInfo
+import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.util.{JsonProtocol, Utils}
-import org.apache.spark.deploy.history.yarn.YarnHistoryService._
-
-import scala.util.control.NonFatal
 
 private[spark] object YarnTimelineUtils extends Logging {
 
@@ -125,8 +124,8 @@ private[spark] object YarnTimelineUtils extends Logging {
     }
   }
 
-  val E_NO_EVENTINFO= "No \"eventinfo\" entry";
-  val E_EMPTY_EVENTINFO = "Empty \"eventinfo\" entry";
+  val E_NO_EVENTINFO= "No \"eventinfo\" entry"
+  val E_EMPTY_EVENTINFO = "Empty \"eventinfo\" entry"
 
 
   def toTimelineEvent(event: HandleSparkEvent): TimelineEvent = {
@@ -233,7 +232,7 @@ private[spark] object YarnTimelineUtils extends Logging {
    * @param conf configuration
    * @return the URI to the timeline service.
    */
-  def rootTimelineUri(conf: Configuration): URI = {
+  def getTimelineEndpoint(conf: Configuration): URI = {
     val isHttps = YarnConfiguration.useHttps(conf)
     val address = if (isHttps) {
       conf.get(YarnConfiguration.TIMELINE_SERVICE_WEBAPP_HTTPS_ADDRESS,
@@ -266,10 +265,19 @@ private[spark] object YarnTimelineUtils extends Logging {
    * @return a URI
    */
   def timelineWebappUri(conf: Configuration, subpath: String): URI = {
-    val base = rootTimelineUri(conf)
+    val base = getTimelineEndpoint(conf)
     new URL(base.toURL, subpath).toURI
   }
 
+  /**
+   * Check the service configuration to see if the timeline service is enabled
+   * @return true if `YarnConfiguration.TIMELINE_SERVICE_ENABLED`
+   *         is set.
+   */
+  def timelineServiceEnabled(conf: Configuration): Boolean = {
+    conf.getBoolean(YarnConfiguration.TIMELINE_SERVICE_ENABLED,
+                    YarnConfiguration.DEFAULT_TIMELINE_SERVICE_ENABLED)
+  }
 
   /**
    * Get the URI to an application under the timeline
@@ -322,7 +330,7 @@ private[spark] object YarnTimelineUtils extends Logging {
    * @return text for diagnostics
    */
   def describePutResponse(response: TimelinePutResponse) : String = {
-    val responseErrs = response.getErrors;
+    val responseErrs = response.getErrors
     if (responseErrs!=null) {
       val errors: List[String] = List(s"TimelinePutResponse with ${responseErrs.size()} errors")
       for (err <- responseErrs) {
@@ -375,7 +383,7 @@ private[spark] object YarnTimelineUtils extends Logging {
    *                            could not be converted to the desired type
    */
   def toApplicationHistoryInfo(en: TimelineEntity) : ApplicationHistoryInfo = {
-    var endTime: Long = 0L
+    var endTime = 0L
     try {
       endTime = numberField(en, FIELD_END_TIME).longValue
     } catch {
