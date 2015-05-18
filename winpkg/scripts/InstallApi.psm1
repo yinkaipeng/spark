@@ -147,12 +147,23 @@ function Install(
 
             Write-Log "Creating service config ${sparkInstallToBin}\$service.xml"
 
-			### Master and slave's reference to master URL must be identical (i.e. if master is setup with IP, slave must reference master as IP address)			
+            ###
+            ### Get FQDN informations for Sparm master HA setup
+            ###
+
+            $netproperties = Get-WmiObject -Class Win32_NetworkAdapterConfiguration -Filter IPEnabled=TRUE -ComputerName .
+            $suffix = $netproperties.DNSDomain
+            $hostname = [System.Net.Dns]::GetHostName()
+
+            ### Master and slave's reference to master URL must be identical (i.e. if master is setup with IP, slave must reference master as IP address)
             if($service -eq "sparkmaster"){
-				## set to spark master default port 7077
-                $parameters = "org.apache.spark.deploy.master.Master --ip headnodehost --port 7077"
+                ## set to spark master default port 7077
+                $fqdn = $hostname + "." + $suffix
+                $parameters = "org.apache.spark.deploy.master.Master --ip " + $fqdn + " --port 7077"
             } elseif( $service -eq "sparkslave") {
-                $parameters = "org.apache.spark.deploy.worker.Worker spark://headnodehost:7077"
+                $headnode0address = "headnode0." + $suffix + ":7077"
+                $headnode1address = "headnode1." + $suffix + ":7077"
+                $parameters = 'org.apache.spark.deploy.worker.Worker "spark://' + $headnode0address + "^," + $headnode1address + '"'
 			} elseif ($service -eq "sparkhiveserver2") {
 				$parameters = "org.apache.spark.deploy.SparkSubmit --class org.apache.spark.sql.hive.thriftserver.HiveThriftServer2 spark-internal"	
             } else {
