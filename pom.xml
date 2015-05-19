@@ -1637,19 +1637,6 @@
       </properties>
     </profile>
 
-    <!-- Hadoop 2.6 dependencies -->
-    <profile>
-      <id>hadoop-2.6</id>
-      <properties>
-        <hadoop.version>2.6.0</hadoop.version>
-        <protobuf.version>2.5.0</protobuf.version>
-        <jets3t.version>0.9.3</jets3t.version>
-        <hbase.version>0.98.7-hadoop2</hbase.version>
-        <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
-        <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-      </properties>
-    </profile>
-
     <profile>
       <id>hadoop-2.6</id>
       <properties>
@@ -1658,6 +1645,10 @@
         <commons.math3.version>3.1.1</commons.math3.version>
         <zookeeper.version>3.4.6</zookeeper.version>
         <curator.version>2.6.0</curator.version>
+        <protobuf.version>2.5.0</protobuf.version>
+        <hbase.version>0.98.7-hadoop2</hbase.version>
+        <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
+        <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
       </properties>
     </profile>
 
