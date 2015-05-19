@@ -151,6 +151,29 @@
     <!-- The history server uses the Hadoop 2.6+ REST API -->
     <profile>
       <id>hadoop-2.6</id>
+      <dependencies>
+        <dependency>
+          <groupId>com.sun.jersey</groupId>
+          <artifactId>jersey-core</artifactId>
+          <version>${jersey.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>com.sun.jersey</groupId>
+          <artifactId>jersey-json</artifactId>
+          <version>${jersey.version}</version>
+          <exclusions>
+            <exclusion>
+              <groupId>stax</groupId>
+              <artifactId>stax-api</artifactId>
+            </exclusion>
+          </exclusions>
+        </dependency>
+        <dependency>
+          <groupId>com.sun.jersey</groupId>
+          <artifactId>jersey-server</artifactId>
+          <version>${jersey.version}</version>
+        </dependency>
+      </dependencies>
       <build>
         <plugins>
           <plugin>
