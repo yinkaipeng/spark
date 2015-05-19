@@ -12,12 +12,38 @@
 ### WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ### See the License for the specific language governing permissions and
 ### limitations under the License.
+param(
+    [String]
+    [Parameter( ParameterSetName='UsernamePassword', Position=0, Mandatory=$true )]
+    [Parameter( ParameterSetName='UsernamePasswordBase64', Position=0, Mandatory=$true )]
+    $username,
+    [String]
+    [Parameter( ParameterSetName='UsernamePassword', Position=1, Mandatory=$true )]
+    $password,
+    [String]
+    [Parameter( ParameterSetName='UsernamePasswordBase64', Position=1, Mandatory=$true )]
+    $passwordBase64,
+    [Parameter( ParameterSetName='CredentialFilePath', Mandatory=$true )]
+    $credentialFilePath
+    )
 
 function Main( $scriptDir )
 {
-    Write-Log "Installing Apache Spark @final.name@ to $sparkInstallPath"
-    $FinalName = "@final.name@"
-    Install "Spark" $ENV:HADOOP_NODE_INSTALL_ROOT
+    Write-Log "Installing Apache Spark spark-1.3.1.2.3.0.0-2032 to $sparkInstallPath"
+    $FinalName = "spark-1.3.1.2.3.0.0-2032"
+   
+    ###
+    ### Create the Credential object from the given username and password or the provided credentials file
+    ###
+    $serviceCredential = Get-HadoopUserCredentials -credentialsHash @{"username" = $username; "password" = $password; `
+        "passwordBase64" = $passwordBase64; "credentialFilePath" = $credentialFilePath}
+    $username = $serviceCredential.UserName
+    Write-Log "Username: $username"
+    Write-Log "CredentialFilePath: $credentialFilePath"
+
+	
+    $roles = "sparkmaster sparkslave sparkhiveserver2 yarnsparkhiveserver2"
+    Install "Spark" $ENV:HADOOP_NODE_INSTALL_ROOT $serviceCredential $roles
         
 	$version = $FinalName.Substring($FinalName.Length - 12,12)
 	

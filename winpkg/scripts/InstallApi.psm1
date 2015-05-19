@@ -134,7 +134,7 @@ function Install(
 		Write-Log "Node spark Role Services: $roles"
 
 		### Verify that roles are in the supported set
-		CheckRole $roles @("sparkmaster", "sparkslave", "sparkhiveserver2")
+		CheckRole $roles @("sparkmaster", "sparkslave", "sparkhiveserver2", "yarnsparkhiveserver2")
 		Write-Log "Role : $roles"
 		foreach( $service in empty-null ($roles -Split('\s+')))
 		{
@@ -153,8 +153,10 @@ function Install(
                 $parameters = "org.apache.spark.deploy.master.Master --ip headnodehost --port 7077"
             } elseif( $service -eq "sparkslave") {
                 $parameters = "org.apache.spark.deploy.worker.Worker spark://headnodehost:7077"
-			} elseif ($service -eq "sparkhiveserver2") {
-				$parameters = "org.apache.spark.deploy.SparkSubmit --class org.apache.spark.sql.hive.thriftserver.HiveThriftServer2 spark-internal"
+            } elseif ($service -eq "sparkhiveserver2") {
+                $parameters = "org.apache.spark.deploy.SparkSubmit --class org.apache.spark.sql.hive.thriftserver.HiveThriftServer2 spark-internal"
+            } elseif($service -eq "yarnsparkhiveserver2") {
+                $parameters = 'org.apache.spark.deploy.SparkSubmit --class org.apache.spark.sql.hive.thriftserver.HiveThriftServer2  --master yarn-client spark-internal --hiveconf "hive.server2.thrift.port=10001"'
             } else {
                 throw "Install: $service is not supported"
             }
@@ -207,7 +209,7 @@ function Uninstall(
 
         ### Stop and delete services
         ###
-        foreach( $service in ("sparkmaster", "sparkslave", "sparkhiveserver2"))
+        foreach( $service in ("sparkmaster", "sparkslave", "sparkhiveserver2", "yarnsparkhiveserver2"))
         {
             StopAndDeleteHadoopService $service
         }
