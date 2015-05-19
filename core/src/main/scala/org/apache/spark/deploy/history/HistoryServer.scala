@@ -180,6 +180,7 @@ object HistoryServer extends Logging {
 
     val providerName = conf.getOption("spark.history.provider")
       .getOrElse(classOf[FsHistoryProvider].getName())
+    logInfo(s"History provider class: $providerName")
     val provider = Class.forName(providerName)
       .getConstructor(classOf[SparkConf])
       .newInstance(conf)

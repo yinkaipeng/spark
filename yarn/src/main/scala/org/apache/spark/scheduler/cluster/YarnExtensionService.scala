@@ -20,11 +20,7 @@ package org.apache.spark.scheduler.cluster
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
 
-import scala.collection.mutable.LinkedList
-import scala.ref.WeakReference
-
 import org.apache.hadoop.service.AbstractService
-import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.yarn.api.records.ApplicationId
 
 import org.apache.spark.{Logging, SparkContext}
@@ -88,7 +84,7 @@ private[spark] class YarnExtensionServices extends AbstractService("YarnExtensio
     val sNames = sparkContext.getConf.getOption(YarnExtensionServices.SPARK_YARN_SERVICES)
     sNames match {
       case Some(names) =>
-        val serviceList = new LinkedList[YarnExtensionService]
+        logInfo(s"Spark YARN services: $names")
         val sClasses = names.split(",")
         services = sClasses.flatMap {
           sClass => {
@@ -113,6 +109,7 @@ private[spark] class YarnExtensionServices extends AbstractService("YarnExtensio
           }
         }.toList
       case _ =>
+        logDebug("No Spark YARN services declared")
     }
   }
 
