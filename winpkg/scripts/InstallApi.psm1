@@ -378,8 +378,7 @@ function Configure(
 ### by user provided values
 function GetDefaultConfig()
 {
-    return @{"spark.master" = "spark://headnodehost:7077";
-        "spark.eventLog.enabled" = "true" };
+    return @{};
 }
 
 ### Helper routine that write the given fileName with the given
