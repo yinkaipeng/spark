@@ -46,7 +46,7 @@ ROW                           COLUMN+CELL
 4 row(s) in 0.0240 seconds
 """
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
+    if len(sys.argv) < 3:
         print >> sys.stderr, """
         Usage: hbase_inputformat <host> <table>
 
@@ -62,6 +62,10 @@ if __name__ == "__main__":
     sc = SparkContext(appName="HBaseInputFormat")
 
     conf = {"hbase.zookeeper.quorum": host, "hbase.mapreduce.inputtable": table}
+    if len(sys.argv) > 3:
+        conf = {"hbase.zookeeper.quorum": host, "zookeeper.znode.parent": sys.argv[3],
+                "hbase.mapreduce.inputtable": table}
+
     keyConv = "org.apache.spark.examples.pythonconverters.ImmutableBytesWritableToStringConverter"
     valueConv = "org.apache.spark.examples.pythonconverters.HBaseResultToStringConverter"
 
