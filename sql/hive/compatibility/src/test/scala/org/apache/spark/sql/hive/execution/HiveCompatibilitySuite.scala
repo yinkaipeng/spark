@@ -236,7 +236,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // timestamp in array, the output format of Hive contains double quotes, while
     // Spark SQL doesn't
-    "udf_sort_array"
+    "udf_sort_array",
+
+    // Disable flaky test
+    "udf_java_method"
   ) ++ HiveShim.compatibilityBlackList
 
   /**
@@ -860,7 +863,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_int",
     "udf_isnotnull",
     "udf_isnull",
-    "udf_java_method",
     "udf_lcase",
     "udf_length",
     "udf_lessthan",
