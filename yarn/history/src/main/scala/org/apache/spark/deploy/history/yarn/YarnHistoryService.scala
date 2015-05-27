@@ -428,7 +428,6 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
         entity.addOtherInfo(YarnHistoryService.FIELD_APP_NAME, appName)
         entity.addOtherInfo(YarnHistoryService.FIELD_APP_USER, userName)
       }
-      entity.setStartTime(startTime)
       curEntity = Some(entity)
       logDebug(s"Demand creation of new entity ${describeEntity(entity)}")
       entity
@@ -602,11 +601,6 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
         case _ =>
           logDebug(s"Handling event: $event")
           val currentEntity: TimelineEntity = getCurrentEntity
-          if (currentEntity.getStartTime == null) {
-            logInfo(s"Adding event $event to a timeline entity with no start time;" +
-                s" using current time as start time")
-            currentEntity.setStartTime(now())
-          }
 
       }
 
