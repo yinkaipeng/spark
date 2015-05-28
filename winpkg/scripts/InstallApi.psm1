@@ -156,7 +156,7 @@ function Install(
             } elseif ($service -eq "sparkhiveserver2") {
                 $parameters = "org.apache.spark.deploy.SparkSubmit --class org.apache.spark.sql.hive.thriftserver.HiveThriftServer2 spark-internal"
             } elseif($service -eq "yarnsparkhiveserver2") {
-                $parameters = 'org.apache.spark.deploy.SparkSubmit --class org.apache.spark.sql.hive.thriftserver.HiveThriftServer2  --master yarn-client spark-internal --hiveconf "hive.server2.thrift.port=10001"'
+                $parameters = 'org.apache.spark.deploy.SparkSubmit --class org.apache.spark.sql.hive.thriftserver.HiveThriftServer2  --master yarn-client spark-internal --hiveconf "hive.server2.thrift.port=10002"'
             } else {
                 throw "Install: $service is not supported"
             }
