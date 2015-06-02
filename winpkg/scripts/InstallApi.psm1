@@ -365,7 +365,11 @@ function Configure(
             $active_config[$c.Key] = $c.Value
         }
         WriteSparkConfigFile $sparkDefaults_file $active_config
-
+        
+        #Updating hive-site.xml for Spark
+        Write-Log "Updating hive-site.xml for Spark"
+        UpdateXmlConfig "$ENV:SPARK_HOME\conf\hive-site.xml" @{"hive.metastore.uris" = "thrift://${ENV:HIVE_SERVER_HOST}:9083"}
+      
         Write-Log "Configuration of spark is finished"
     }
     else
@@ -497,6 +501,49 @@ function StopAndDeleteHadoopService(
         $cmd = "sc.exe delete $service"
         Invoke-Cmd $cmd
     }
+}
+
+### Helper routine that updates the given fileName XML file with the given
+### key/value configuration values. The XML file is expected to be in the
+### Hadoop format. For example:
+### <configuration>
+###   <property>
+###     <name.../><value.../>
+###   </property>
+### </configuration>
+function UpdateXmlConfig(
+    [string]
+    [parameter( Position=0, Mandatory=$true )]
+    $fileName,
+    [hashtable]
+    [parameter( Position=1 )]
+    $config = @{} )
+{
+    $xml = [xml] (Get-Content $fileName)
+
+    foreach( $key in empty-null $config.Keys )
+    {
+        $value = $config[$key]
+        $found = $False
+        $xml.SelectNodes('/configuration/property') | ? { $_.name -eq $key } | % { $_.value = $value; $found = $True }
+        if ( -not $found )
+        {
+            $xml["configuration"].AppendChild($xml.CreateWhitespace("`r`n  ")) | Out-Null
+            $newItem = $xml.CreateElement("property")
+            $newItem.AppendChild($xml.CreateWhitespace("`r`n    ")) | Out-Null
+            $newItem.AppendChild($xml.CreateElement("name")) | Out-Null
+            $newItem.AppendChild($xml.CreateWhitespace("`r`n    ")) | Out-Null
+            $newItem.AppendChild($xml.CreateElement("value")) | Out-Null
+            $newItem.AppendChild($xml.CreateWhitespace("`r`n  ")) | Out-Null
+            $newItem.name = $key
+            $newItem.value = $value
+            $xml["configuration"].AppendChild($newItem) | Out-Null
+            $xml["configuration"].AppendChild($xml.CreateWhitespace("`r`n")) | Out-Null
+        }
+    }
+
+    $xml.Save($fileName)
+    $xml.ReleasePath
 }
 
 ###
