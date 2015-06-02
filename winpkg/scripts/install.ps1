@@ -42,7 +42,7 @@ function Main( $scriptDir )
     Write-Log "CredentialFilePath: $credentialFilePath"
 
 	
-    $roles = "sparkmaster sparkslave sparkhiveserver2 yarnsparkhiveserver2"
+    $roles = "sparkmaster sparkslave sparkhiveserver2 yarnsparkhiveserver2 sparkhistoryserver"
     Install "Spark" $ENV:HADOOP_NODE_INSTALL_ROOT $serviceCredential $roles
         
 	$version = $FinalName.Substring($FinalName.Length - 12,12)
@@ -52,7 +52,7 @@ function Main( $scriptDir )
 	"spark.history.ui.port" = "18080"
 	"spark.yarn.preserve.staging.files" = "False"
 	"spark.yarn.submit.file.replication" = "3"
-	"spark.yarn.historyServer.address" = "$ENV:RESOURCEMANAGER_HOST:18080"
+	"spark.yarn.historyServer.address" = "${ENV:RESOURCEMANAGER_HOST}:18080"
 	"spark.yarn.driver.memoryOverhead" = "384"
 	"spark.yarn.queue" = "default"
 	"spark.yarn.containerLauncherMaxThreads" = "25"
