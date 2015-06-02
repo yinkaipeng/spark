@@ -565,6 +565,8 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
           val en = getCurrentEntity
           en.addPrimaryFilter(YarnHistoryService.FILTER_APP_START,
             YarnHistoryService.FILTER_APP_START_VALUE)
+          en.addOtherInfo(YarnHistoryService.FIELD_START_TIME,
+                           startTime)
           push = true
           appStartEventProcessed = true
           appEndEventProcessed = false
@@ -599,9 +601,7 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
             push = true
           }
         case _ =>
-          logDebug(s"Handling event: $event")
           val currentEntity: TimelineEntity = getCurrentEntity
-
       }
 
       val tlEvent = YarnTimelineUtils.toTimelineEvent(event)
