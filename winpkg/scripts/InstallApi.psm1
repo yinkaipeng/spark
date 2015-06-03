@@ -139,7 +139,11 @@ function Install(
 		foreach( $service in empty-null ($roles -Split('\s+')))
 		{
 			CreateAndConfigureHadoopService $service $HDP_RESOURCES_DIR $sparkInstallToBin $serviceCredential
-            $cmd="$ENV:WINDIR\system32\sc.exe config $service start= demand"
+            $cmd="$ENV:WINDIR\system32\sc.exe config $service start= disabled"
+            if ($service -eq "yarnsparkhiveserver2")
+            {
+                $cmd="$ENV:WINDIR\system32\sc.exe config $service start= demand"	
+            }
             Invoke-CmdChk $cmd
 			###
             ### Setup Spark service config
