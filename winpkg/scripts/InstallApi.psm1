@@ -168,6 +168,8 @@ function Install(
 		}
 
 	     ### end of roles loop
+        Write-Log "Add SPARK_HOME\bin to PATH"
+        [Environment]::SetEnvironmentVariable("PATH", "$env:PATH;$sparkInstallToBin", [EnvironmentVariableTarget]::Machine)
         }
 	    Write-Log "Finished installing Apache Spark"
     }
@@ -225,6 +227,9 @@ function Uninstall(
         ### Removing SPARK_HOME environment variable
         Write-Log "Removing the SPARK_HOME environment variable"
         [Environment]::SetEnvironmentVariable( "SPARK_HOME", $null, [EnvironmentVariableTarget]::Machine )
+        Write-Log "Remove SPARK_HOME\bin from PATH"
+        $newPath = ([Environment]::GetEnvironmentVariable("PATH","Machine")).replace(";$sparkInstallPath\bin",$NULL)
+        [Environment]::SetEnvironmentVariable("PATH", "$newPath", [EnvironmentVariableTarget]::Machine)
 
         Write-Log "Successfully uninstalled spark"
 
