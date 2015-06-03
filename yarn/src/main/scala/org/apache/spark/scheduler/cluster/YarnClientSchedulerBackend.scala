@@ -57,7 +57,7 @@ private[spark] class YarnClientSchedulerBackend(
     totalExpectedExecutors = args.numExecutors
     client = new Client(args, conf)
     appId = client.submitApplication()
-    services.start(sc, appId)
+    services.start(sc, appId, true, ApplicationMaster.SHUTDOWN_HOOK_PRIORITY)
     waitForApplication()
     asyncMonitorApplication()
   }

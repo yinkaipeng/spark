@@ -17,7 +17,7 @@
  */
 package org.apache.spark.deploy.history.yarn.integration
 
-import java.net.URL
+import java.net.{Socket, URL}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.service.{Service, ServiceOperations}
@@ -192,7 +192,8 @@ abstract class AbstractTestsWithHistoryServices
    * @param probe probe to run
    */
   def webUITest(probe: (URL, YarnHistoryProvider) => Unit) {
-    val (port, server, webUI, provider) = createHistoryServer()
+    val s = new Socket()
+    val (port, server, webUI, provider) = createHistoryServer(18081)
     try {
       server.bind()
       probe(webUI, provider)
@@ -239,13 +240,16 @@ abstract class AbstractTestsWithHistoryServices
 
   /**
    * Create a [[HistoryServer]] instance with a coupled history provider.
+   * @param defaultPort a port to use if the property `spark.history.ui.port` isn't
+   *          set in the spark context. (default: 18080)
    * @return (port, server, web UI URL, history provider)
    */
-  protected def createHistoryServer(): (Int, HistoryServer, URL, YarnHistoryProvider) = {
+  protected def createHistoryServer(defaultPort: Int = 18080):
+  (Int, HistoryServer, URL, YarnHistoryProvider) = {
     val conf = sparkCtx.getConf
     val securityManager = new SecurityManager(conf)
     val args: List[String] = Nil
-    val port = conf.getInt("spark.history.ui.port", 18080)
+    val port = conf.getInt("spark.history.ui.port", defaultPort)
     val provider = createHistoryProvider(sparkCtx.getConf)
     val server = new HistoryServer(conf, provider, securityManager, port)
     val webUI = new URL("http", "localhost", port, "/")

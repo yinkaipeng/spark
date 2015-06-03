@@ -31,7 +31,6 @@ import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.hadoop.yarn.api.records.timeline.{TimelineDomain, TimelineEntity, TimelinePutResponse}
 import org.apache.hadoop.yarn.client.api.TimelineClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.exceptions.YarnException
 
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.scheduler._
@@ -109,7 +108,7 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
    * @return the timeline client
    */
   private [yarn] def createTimelineClient(): TimelineClient = {
-    require(timelineClient == None, "timeline client already set")
+    require(timelineClient.isEmpty, "timeline client already set")
     YarnHistoryService.createTimelineClient(sparkContext)
   }
 
@@ -211,8 +210,7 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
     try {
       getTimelineClient.putDomain(timelineDomain)
     } catch {
-      // TODO IOException
-      case e: YarnException => {
+      case e: Exception => {
         logError("cannot create the domain")
         // fallback to default
         tmpId = null
@@ -251,8 +249,8 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
   /**
    * Service start.
    *
-   * If the timeline client is enabled:
-   * Create the timeline client, the timeline domain, and the vent handling thread.
+   * If the timeline client is enabled,
+   * Create the timeline client, the timeline domain, and the event handling thread.
    *
    * Irrespective of the timeline enabled flag, the service will attempt to register
    * as a listener for events. They will merely be discarded.
@@ -316,7 +314,7 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
    * @return true if the service has a timeline client
    */
   def bondedToATS: Boolean = {
-    timelineClient != None
+    timelineClient.isDefined
   }
 
   /**
@@ -380,7 +378,7 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
 
       if (!appEndEventProcessed) {
         // push out an application stop event if none has been received
-        logDebug("Generating a SparkListenerApplicationEnd during  service stop()")
+        logDebug("Generating a SparkListenerApplicationEnd during service stop()")
         val current = now()
         innerEnqueue(new HandleSparkEvent(SparkListenerApplicationEnd(current), current))
       }
