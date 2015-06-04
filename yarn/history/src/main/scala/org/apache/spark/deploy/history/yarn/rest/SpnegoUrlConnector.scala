@@ -106,8 +106,17 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
       }
     val conn = callerUGI.doAs(new PrivilegedFunction(
         (() => {
-          new DelegationTokenAuthenticatedURL(authenticator, connConfigurator)
-              .openConnection(url, token, doAsUser)
+          try {
+            new DelegationTokenAuthenticatedURL(authenticator, connConfigurator)
+                .openConnection(url, token, doAsUser)
+          } catch {
+            case ex: AuthenticationException =>
+              // auth failure
+              throw new IOException(s"Authentication failure as $callerUGI against $url: $ex", ex)
+            case other =>
+              // anything else is rethrown
+              throw other
+          }
         })))
     conn.setUseCaches(false)
     conn.setInstanceFollowRedirects(true)
