@@ -21,6 +21,7 @@ package org.apache.spark.deploy.history.yarn
 import java.io.IOException
 import java.net.{URI, URL}
 import java.util
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.{ArrayList => JArrayList, Collection => JCollection, Date, HashMap => JHashMap, Map => JMap}
 
 import scala.collection.JavaConversions._
@@ -42,6 +43,7 @@ import org.apache.spark.scheduler.SparkListenerEvent
 import org.apache.spark.util.{JsonProtocol, Utils}
 
 private[spark] object YarnTimelineUtils extends Logging {
+  val uid = new AtomicInteger(0)
 
   /**
    * Converts a Java object to its equivalent json4s representation.
@@ -130,7 +132,9 @@ private[spark] object YarnTimelineUtils extends Logging {
 
   def toTimelineEvent(event: HandleSparkEvent): TimelineEvent = {
     val tlEvent = new TimelineEvent()
-    tlEvent.setEventType(Utils.getFormattedClassName(event.sparkEvent).toString)
+    tlEvent.setEventType(Utils.getFormattedClassName(event.sparkEvent).toString
+        +"-"
+        + Integer.toString(YarnTimelineUtils.uid.incrementAndGet))
     tlEvent.setTimestamp(event.time)
     val kvMap = new JHashMap[String, Object]()
     val json = JsonProtocol.sparkEventToJson(event.sparkEvent)
