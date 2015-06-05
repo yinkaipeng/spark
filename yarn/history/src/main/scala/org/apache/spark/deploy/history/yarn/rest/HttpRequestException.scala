@@ -22,22 +22,17 @@ import java.io.IOException
 /**
  * Specific HTTP error request exception which includes the error code
  * and other information.
- * @param _status HTTP status code
- * @param _verb verb
- * @param _url URL of request
- * @param _message non-null error message
- * @param _body optional body.
+ * @param status HTTP status code
+ * @param verb verb
+ * @param url URL of request
+ * @param message non-null error message
+ * @param body optional body.
  */
-private [spark] class HttpRequestException(_status: Int,
-    _verb: String,
-    _url: String,
-    _message: String,
-    _body:String = "")
-    extends IOException(_message) {
-
-  def status: Int = _status
-  def verb: String = _verb
-  def url: String = _url
-  def body: String = _body
+private [spark] class HttpRequestException(val status: Int,
+    val verb: String,
+    val url: String,
+    val message: String,
+    val body: String = "")
+    extends IOException(message) {
 
 }

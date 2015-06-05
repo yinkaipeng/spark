@@ -41,7 +41,7 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
   }
 
   test("WebUI hooked up") {
-    webUITest(probeEmptyWebUI)
+    webUITest("WebUI hooked up", probeEmptyWebUI)
   }
 
 /* // disabled while failing on branch 1.3.x
@@ -142,7 +142,7 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/executors"), null, "")
     }
 
-    webUITest(submitAndCheck)
+    webUITest("submit and check", submitAndCheck)
   }
 
 }

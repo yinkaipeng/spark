@@ -48,7 +48,7 @@ class WebsiteDiagnosticsSuite extends AbstractTestsWithHistoryServices {
 
     val client = new TimelineQueryClient(timelineRootEndpoint(),
                              yarnConf, JerseyBinding.createClientConfig())
-    new FailingYarnHistoryProvider(client,false, client.getTimelineURI())
+    new FailingYarnHistoryProvider(client, false, client.getTimelineURI())
   }
 
   def timelineRootEndpoint(): URI = {
@@ -56,6 +56,7 @@ class WebsiteDiagnosticsSuite extends AbstractTestsWithHistoryServices {
     new URL(realTimelineEndpoint, "/").toURI
   }
 
+/*
   test("Instantiate HistoryProvider") {
     val conf = sparkCtx.hadoopConfiguration
     new TimelineQueryClient(timelineRootEndpoint(),
@@ -63,6 +64,7 @@ class WebsiteDiagnosticsSuite extends AbstractTestsWithHistoryServices {
 
     createHistoryProvider(sparkCtx.getConf)
   }
+*/
 
   /**
    * Issue a GET request against the Web UI and expect it to fail
@@ -72,21 +74,28 @@ class WebsiteDiagnosticsSuite extends AbstractTestsWithHistoryServices {
    */
   def expectGetToFailInHealthCheck(webUI: URL, provider: YarnHistoryProvider): Unit = {
     val connector = createUrlConnector()
-    val ex = intercept[HttpRequestException] {
-      connector.execHttpOperation("GET", webUI, null, "")
+    try {
+      val body = getHtmlPage(webUI, Nil)
+      fail(s"Expected a failure from GET $webUI -but got\n$body")
+    } catch {
+      case ex: HttpRequestException =>
+        assertContains(ex.toString, TimelineQueryClient.MESSAGE_CHECK_URL)
     }
-    assertContains(ex.toString, "Check the URL")
   }
 
   test("Probe UI with Health check") {
-    webUITest(expectGetToFailInHealthCheck)
+    def probeUIWithFailureCaught(webUI: URL, provider: YarnHistoryProvider): Unit = {
+      val body = getHtmlPage(webUI,
+          YarnHistoryProvider.TEXT_NEVER_UPDATED :: Nil)
+    }
+    webUITest("Probe UI with Health check", probeUIWithFailureCaught)
   }
 
-  test("Probe App UI with Health check") {
+  test("Probe App ID with Health check") {
     def expectAppIdToFail(webUI: URL, provider: YarnHistoryProvider): Unit = {
-      expectGetToFailInHealthCheck(new URL(webUI, "/appId"), provider)
+      expectGetToFailInHealthCheck(new URL(webUI, "/history/app-0001"), provider)
     }
-    webUITest(expectGetToFailInHealthCheck)
+    webUITest("Probe App ID with Health check", expectAppIdToFail)
   }
 
   /**
@@ -101,7 +110,7 @@ class WebsiteDiagnosticsSuite extends AbstractTestsWithHistoryServices {
       val body = getHtmlPage(webUI,
           YarnHistoryProvider.TEXT_SERVICE_DISABLED :: Nil)
     }
-    webUITest(probeDisabledUI)
+    webUITest("Probe Disabled UI", probeDisabledUI)
   }
 
 

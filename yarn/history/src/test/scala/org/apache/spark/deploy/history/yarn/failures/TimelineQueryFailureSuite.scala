@@ -65,28 +65,6 @@ class TimelineQueryFailureSuite extends AbstractTestsWithHistoryServices {
     }
   }
 
-  test("getListing to fail") {
-    val provider = createHistoryProvider(new SparkConf())
-    // not using intercept[] for better diagnostics on failure (i.e. rethrow the unwanted
-    // exception
-    val queryClient = provider.getTimelineQueryClient().asInstanceOf[FailingTimelineQueryClient]
-
-    try { {
-      logDebug("Asking for a listing")
-      val listing = provider.getListing()
-      fail(s"Expected failure, got a listing $listing")
-    }
-    } catch {
-      case ioe: NoRouteToHostException =>
-        logInfo(s"expected exception caught: $ioe")
-      case ex: TestFailedException =>
-        throw ex
-      case ex: Exception =>
-        logError("Wrong exception: ", ex)
-        throw ex
-    }
-  }
-
   test("getTimelineEntity to fail") {
     describe("getTimelineEntity to fail")
     val provider = createHistoryProvider(new SparkConf()).asInstanceOf[FailingYarnHistoryProvider]
@@ -118,7 +96,7 @@ class TimelineQueryFailureSuite extends AbstractTestsWithHistoryServices {
     assertResult(None) {
       provider.getAppUI("app1")
     }
-    val lastException = provider.getLastException()
+    val lastException = provider.getLastFailure()
     assertNotNull(lastException, "null last exception")
     lastException match {
       case Some((ex, date)) =>
@@ -128,6 +106,13 @@ class TimelineQueryFailureSuite extends AbstractTestsWithHistoryServices {
       case None =>
         fail("No logged exception")
     }
+    // and getting the config returns it
+    val config = provider.getConfig()
+
+    assertMapValueContains(config,
+      YarnHistoryProvider.KEY_LAST_FAILURE,
+      FailingTimelineQueryClient.ERROR_TEXT)
+
   }
 
 }

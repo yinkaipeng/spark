@@ -20,9 +20,10 @@ package org.apache.spark.deploy.history.yarn
 
 import java.io.IOException
 import java.net.{URI, URL}
+import java.text.DateFormat
 import java.util
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.{ArrayList => JArrayList, Collection => JCollection, Date, HashMap => JHashMap, Map => JMap}
+import java.util.{ArrayList => JArrayList, Collection => JCollection, HashMap => JHashMap, Map => JMap, Date}
 
 import scala.collection.JavaConversions._
 import scala.util.control.NonFatal
@@ -400,5 +401,15 @@ private[spark] object YarnTimelineUtils extends Logging {
       endTime,
       field(en, FIELD_APP_USER).asInstanceOf[String],
       endTime > 0)
+  }
+
+  def humanDateCurrentTZ(timestamp: Long, unset: String) : String = {
+    if (timestamp == 0) {
+      unset
+    } else {
+      val dateFormatter = DateFormat.getDateTimeInstance(DateFormat.DEFAULT,
+                                                          DateFormat.LONG)
+      dateFormatter.format(timestamp)
+    }
   }
 }

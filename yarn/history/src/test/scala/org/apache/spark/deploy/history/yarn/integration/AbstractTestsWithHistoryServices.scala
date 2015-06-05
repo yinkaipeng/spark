@@ -191,11 +191,12 @@ abstract class AbstractTestsWithHistoryServices
    * is stopped.
    * @param probe probe to run
    */
-  def webUITest(probe: (URL, YarnHistoryProvider) => Unit) {
+  def webUITest(name: String, probe: (URL, YarnHistoryProvider) => Unit) {
     val s = new Socket()
-    val (port, server, webUI, provider) = createHistoryServer(18081)
+    val (port, server, webUI, provider) = createHistoryServer(findPort())
     try {
       server.bind()
+      describe(name)
       probe(webUI, provider)
     } finally {
       server.stop()
@@ -209,7 +210,7 @@ abstract class AbstractTestsWithHistoryServices
    * @param webUI web UI
    * @param provider provider
    */
-  def probeEmptyWebUI(webUI: URL, provider: YarnHistoryProvider): Unit = {
+  def probeEmptyWebUI(webUI: URL, provider: YarnHistoryProvider): String = {
     val body: String = getHtmlPage(webUI,
        "<title>History Server</title>"
         :: no_completed_applications
@@ -217,6 +218,7 @@ abstract class AbstractTestsWithHistoryServices
         :: YarnHistoryProvider.KEY_PROVIDER_DETAILS
         :: Nil)
     logInfo(s"$body")
+    body
   }
 
   /**
@@ -228,14 +230,32 @@ abstract class AbstractTestsWithHistoryServices
   protected def getHtmlPage(page: URL, checks: List[String]): String = {
     val connector = createUrlConnector()
     val outcome = connector.execHttpOperation("GET", page, null, "")
-    logInfo(s"$page => $outcome")
+    logDebug(s"$page => $outcome")
     assert(outcome.contentType.startsWith("text/html"),
             s"content type of $outcome")
     val body = outcome.responseBody
-    checks foreach { text =>
-      assertContains(body, text)
-    }
+    assertStringsInBody(body, checks)
     body
+  }
+
+  /**
+   * Assert that a list of checks are in the HTML body
+   * @param body body of HTML (or other string)
+   * @param checks list of strings to assert are present
+   */
+  def assertStringsInBody(body: String, checks: List[String]): Unit = {
+    var missing: List[String] = Nil
+    var text = "[ "
+    checks foreach { check =>
+        if (!body.contains(check)) {
+          missing = check :: missing
+          text = text +"\"" + check +"\" "
+        }
+    }
+    text = text +"]"
+    if (missing.nonEmpty) {
+      fail(s"Did not find $text in\n$body")
+    }
   }
 
   /**

@@ -125,8 +125,9 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
    */
   def exec[T](verb: String, uri: URI, action: (() => T)): T = {
     logDebug(s"$verb $uri")
-    try {
+    try { {
       innerExecAction(action)
+    }
     } catch {
       case e: Exception =>
         logWarning(s"$verb $uri failed", e)
@@ -192,23 +193,19 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
     val endpoint = aboutURI.toString
     val status = clientResponse.getClientResponseStatus.getStatusCode
     val body = clientResponse.getEntity(classOf[String])
+
+    // validate the content type is JSON; if not its usually the wrong URL
     val contentType = clientResponse.getType
     if (MediaType.APPLICATION_JSON_TYPE != contentType) {
-      // wrong media type
-      val m = s"Wrong content type: expected application/json but got $contentType." +
-          s" Check the URL of the timeline service: $aboutURI"
-      val text = if (contentType.isCompatible(MediaType.valueOf("text/*"))) {
-        m + "\n" + body
-      } else {
-        m
-      }
       throw new HttpRequestException(status, "GET", endpoint ,
-          text,
-          body)
+        s"Wrong content type: expected application/json but got $contentType. " +
+            TimelineQueryClient.MESSAGE_CHECK_URL + s": $aboutURI",
+        body)
     }
+    // an empty body is a sign of other problems
     if (body.isEmpty) {
       throw new HttpRequestException(status, "GET", endpoint,
-              s"No data in the response")
+            TimelineQueryClient.MESSAGE_EMPTY_RESPONSE + s": $aboutURI")
     }
     // finally, issue an about() operation again to force the JSON parse
     about()
@@ -327,4 +324,9 @@ private [spark] class AboutResponse {
     other += (key -> value)
   }
 
+}
+
+private[spark] object TimelineQueryClient {
+  val MESSAGE_CHECK_URL = "Check the URL of the timeline service:"
+  val MESSAGE_EMPTY_RESPONSE = s"No data in the response"
 }

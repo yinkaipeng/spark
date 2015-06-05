@@ -128,14 +128,14 @@ private[spark] class YarnExtensionServices extends AbstractService("YarnExtensio
                     .asInstanceOf[YarnExtensionService]
                 // bind this service
                 instance.start(sparkContext, appId)
-                logInfo("Service " + sClass + " started")
+                logInfo(s"Service $clazz started")
                 Some(instance)
               } else {
                 None
               }
             } catch {
               case e: Exception =>
-                logWarning(s"Cannot start service ${clazz} ", e)
+                logError(s"Cannot start service ${clazz} ", e)
                 None
             }
           }

@@ -55,7 +55,7 @@ class YarnHistoryProviderSuite extends AbstractTestsWithHistoryServices {
     assertResult(None) {
       getAppUI("")
     }
-    val Some((ex, _)) = provider.getLastException()
+    val Some((ex, _)) = provider.getLastFailure()
     if (!ex.isInstanceOf[IllegalArgumentException]) {
       throw ex
     }

@@ -35,9 +35,11 @@ import org.apache.spark.deploy.history.yarn.rest.{JerseyBinding, TimelineQueryCl
  *                             is true
  * @param endpoint URI of the service.
  */
-class FailingYarnHistoryProvider(queryClient: TimelineQueryClient,
+class FailingYarnHistoryProvider(
+    queryClient: TimelineQueryClient,
     healthAlreadyChecked: Boolean,
-    endpoint: URI) extends YarnHistoryProvider(new SparkConf()) {
+    endpoint: URI,
+    sparkConf: SparkConf = new SparkConf()) extends YarnHistoryProvider(sparkConf) {
 
   private var _enabled: Boolean = true
 
@@ -77,7 +79,7 @@ class FailingYarnHistoryProvider(queryClient: TimelineQueryClient,
   /**
    * @return the `queryClient` field.
    */
-  override protected def createTimelineQueryClient: TimelineQueryClient = {
+  override protected def createTimelineQueryClient(): TimelineQueryClient = {
     queryClient
   }
 
