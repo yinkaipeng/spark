@@ -29,8 +29,8 @@ param(
 
 function Main( $scriptDir )
 {
-    Write-Log "Installing Apache Spark spark-1.3.1.2.3.0.0-2032 to $sparkInstallPath"
-    $FinalName = "spark-1.3.1.2.3.0.0-2032"
+    Write-Log "Installing Apache Spark @final.name@ to $sparkInstallPath"
+    $FinalName = "@final.name@"
    
     ###
     ### Create the Credential object from the given username and password or the provided credentials file
