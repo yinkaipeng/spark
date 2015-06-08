@@ -55,10 +55,17 @@ class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
 
   test("Publish Events and GET the web UI") {
     def submitAndCheck(webUI: URL, provider: YarnHistoryProvider): Unit = {
-
+      val connector = createUrlConnector()
+      def listIncompleteApps: String = {
+        connector.execHttpOperation("GET",
+                                     new URL(webUI, "/?" + incomplete_flag), null, "").responseBody
+      }
       historyService = startHistoryService(sparkCtx)
       val timeline = historyService.getTimelineServiceAddress()
       val listener = new YarnEventListener(sparkCtx, historyService)
+      // initial view has no incomplete applications
+      assertContains(listIncompleteApps, no_incomplete_applications)
+
       val startTime = now()
 
       val started = appStartEvent(startTime,
@@ -73,15 +80,10 @@ class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
       // listing
       val incompleteListing = awaitListingSize(provider, 1, TEST_STARTUP_DELAY)
 
-      val connector = createUrlConnector()
       val queryClient = createTimelineQueryClient()
 
-     // check for work in progress
-      val incomplete = connector.execHttpOperation("GET",
-        new URL(webUI, "/?" + incomplete_flag), null, "")
-      val body = incomplete.responseBody
-      logInfo(s"$body")
-      assertDoesNotContain(body, no_incomplete_applications)
+      // check for work in progress
+      assertDoesNotContain(listIncompleteApps, no_incomplete_applications)
 
       //now stop the app
       historyService.stop()
@@ -137,6 +139,9 @@ class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
         case None => fail(s"Did not get a UI for $yarnAppId")
       }
 
+
+      // final view has no incomplete applications
+      assertContains(listIncompleteApps, no_incomplete_applications)
 
     }
 
