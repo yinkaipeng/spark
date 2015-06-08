@@ -30,37 +30,7 @@ import org.apache.spark.deploy.history.yarn.YarnTestUtils._
 class MockBatchingTimelinePostSuite
     extends AbstractMockHistorySuite
     with TimelineSingleEntryBatchSize {
-/*
-  test("multiple Spark listener event batches") {
-    describe("verify batching")
-    val (events, eventsPosted) = postEvents(sparkCtx)
 
-    val captor = ArgumentCaptor.forClass(classOf[TimelineEntity])
-    verify(timelineClient, times(events.getEventsProcessed)).putEntities(captor.capture())
-
-    val values = captor.getAllValues()
-    assert(!values.isEmpty, "empty captor.getAllValues()")
-    val update1 = values.get(0)
-    val uploadedEnvUpdate = convertToSparkEvent(update1)
-    uploadedEnvUpdate should be (environmentUpdate)
-
-    val update2 = captor.getAllValues().get(1)
-    val uploadedAppStart = convertToSparkEvent(update2)
-    uploadedAppStart should be (applicationStart)
-  // TODO: set up the filters so this section works
-//    val appnameFilter = update2.getPrimaryFilters().get("appName")
-//    assert(appnameFilter != null, "filter 'appName'")
-//    appnameFilter.toSeq should be (Seq(applicationStart.appName))
-//    val sparkUserFilter = update2.getPrimaryFilters().get("sparkUser")
-//    assert(sparkUserFilter != null, "filter 'sparkUser'")
-//    sparkUserFilter.toSeq should be (Seq(applicationStart.sparkUser))
-//    update2.getStartTime() should be (applicationStart.time)
-
-    val update3 = captor.getAllValues().get(2)
-    val uploadedAppEnd = convertToSparkEvent(update3)
-    uploadedAppEnd should be (applicationEnd)
-  }
-*/
   test("retry upload on failure") {
     describe("mock failures, verify retry count incremented")
     // timeline client to throw an RTE on the first put
