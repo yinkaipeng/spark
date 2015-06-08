@@ -199,7 +199,9 @@ abstract class AbstractTestsWithHistoryServices
       describe(name)
       probe(webUI, provider)
     } finally {
+      describe("stopping history service")
       server.stop()
+      provider.stop()
     }
   }
 

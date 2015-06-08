@@ -136,6 +136,17 @@ trait ExtraAssertions extends Logging with Assertions {
   }
 
   /**
+   * Assert that a source string does contains the `contained` substring.
+   * @param source source string
+   * @param contained string to look for
+   */
+  def assertDoesNotContain(source: String, contained: String): Unit = {
+    assertNotNull(source, "null source")
+    assert(!source.contains(contained),
+          s"Found '${contained}' in '${source}'")
+  }
+
+  /**
    * Assert that a [String, String] map contains a key:value mapping,
    * and that the value contains the specified text.
    * @param map map to query

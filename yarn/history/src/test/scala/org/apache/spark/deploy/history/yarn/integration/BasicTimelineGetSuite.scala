@@ -99,8 +99,6 @@ class BasicTimelineGetSuite extends AbstractTestsWithHistoryServices {
     }
   }
 
-
-
 }
 
 

@@ -21,6 +21,9 @@ import org.apache.spark.deploy.history.yarn.YarnHistoryProvider
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
 import org.apache.spark.ui.SparkUI
 
+/**
+ * Basic lifecycle/method calls on the history provider
+ */
 class YarnHistoryProviderSuite extends AbstractTestsWithHistoryServices {
 
   var provider: YarnHistoryProvider = _

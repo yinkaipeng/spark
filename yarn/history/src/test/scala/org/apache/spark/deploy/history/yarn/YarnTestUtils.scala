@@ -26,6 +26,8 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.timeline.MemoryTimelineStore
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.history.ApplicationHistoryInfo
+import org.apache.spark.deploy.history.yarn.rest.SpnegoUrlConnector
 import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerEnvironmentUpdate, SparkListenerEvent}
 import org.apache.spark.util.Utils
 
@@ -48,9 +50,10 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    */
   def cancelIfOffline(): Unit = {
 
-    try {
+    try { {
       val hostname = Utils.localHostName()
       log.debug(s"local hostname is $hostname")
+    }
     }
     catch {
       case ex: IOException => {
@@ -124,6 +127,8 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
          YarnConfiguration.TIMELINE_SERVICE_STORE -> classOf[MemoryTimelineStore].getName,
          YarnConfiguration.TIMELINE_SERVICE_CLIENT_MAX_RETRIES -> "1",
          YarnConfiguration.TIMELINE_SERVICE_CLIENT_RETRY_INTERVAL_MS -> "200"))
+    // check for updates every second
+    sparkConf.set(YarnHistoryProvider.OPTION_UPDATE_INTERVAL, "1")
   }
 
   /**
@@ -297,9 +302,10 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    */
   def awaitURL(url: URL, timeout: Long): Unit = {
     def probe(): Outcome = {
-      try {
+      try { {
         url.openStream().close()
         Success()
+      }
       } catch {
         case ioe: IOException => Retry()
       }
@@ -358,12 +364,119 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
   def awaitServiceThreadStopped(historyService: YarnHistoryService, timeout: Long): Unit = {
     assertNotNull(historyService, "null historyService")
     spinForState("awaitServiceThreadStopped",
-                  interval = 50,
-                  timeout = timeout,
-                  probe = (() => outcomeFromBool(!historyService.isPostThreadActive)),
-                  failure = ((_,
-                      _) => fail(s"history service post thread did not finish : $historyService")))
+      interval = 50,
+      timeout = timeout,
+      probe = (() => outcomeFromBool(!historyService.isPostThreadActive)),
+      failure = ((_, _) => fail(s"history service post thread did not finish : $historyService")))
   }
+
+  /**
+   * Wait for the listing size to match that desired
+   * @param provider provider
+   * @param size size to require
+   * @param timeout timeout
+   * @return the successful listing
+   */
+  def awaitListingSize(provider: YarnHistoryProvider, size: Long, timeout: Long):
+      Seq[ApplicationHistoryInfo] = {
+    def listingProbe(): Outcome = {
+      outcomeFromBool(provider.getListing().size == size)
+    }
+    def failure(i: Int, b: Boolean): Unit = {
+      fail(s"after $i attempts, provider listing size !=${size}1:  ${provider.getListing() }\n" +
+          s"${provider}")
+    }
+    spinForState("await listing size",
+      100,
+      timeout,
+      listingProbe,
+      failure)
+    provider.getListing()
+  }
+
+  /**
+   * Wait for the listing size to match that desired
+   * @param provider provider
+   * @param size size to require
+   * @param timeout timeout
+   * @return the successful listing
+   */
+  def awaitRefreshExecuted(provider: YarnHistoryProvider, timeout: Long): Unit = {
+    def listingProbe(): Outcome = {
+      outcomeFromBool(provider.getRefreshCount() > 0)
+    }
+    def failure(i: Int, b: Boolean): Unit = {
+      fail(s"after $i attempts, refresh count is 0: $provider")
+    }
+    require(provider.isRefreshThreadRunning(),
+     s"refresh thread is not running in $provider")
+    spinForState("await refresh count",
+      100,
+      timeout,
+      listingProbe,
+      failure)
+  }
+
+  /**
+   * Spin awaiting a URL to not contain some text
+   * @param connector connector to use
+   * @param url URL to probe
+   *  @param text text which must not be present
+   * @param timeout timeout in mils
+   */
+  def awaitURLDoesNotContainText(connector: SpnegoUrlConnector,
+      url: URL, text: String, timeout: Long): String = {
+    def get: String = {
+      connector.execHttpOperation("GET", url, null, "").responseBody
+    }
+    def probe(): Outcome = {
+      outcomeFromBool(!get.contains(text))
+    }
+
+    /*
+     failure action is simply to attempt the connection without
+     catching the exception raised
+     */
+    def failure(iterations: Int, timeout: Boolean): Unit = {
+      assertDoesNotContain(get, text)
+    }
+
+    spinForState(s"Awaiting a response from URL $url",
+                  interval = 50, timeout = timeout, probe = probe, failure = failure)
+
+    get
+  }
+
+  /**
+   * Spin awaiting a URL to contain some text
+   * @param connector connector to use
+   * @param url URL to probe
+   * @param text text which must be present
+   * @param timeout timeout in mils
+   */
+  def awaitURLContainsText(connector: SpnegoUrlConnector,
+      url: URL, text: String, timeout: Long): String = {
+    def get: String = {
+      connector.execHttpOperation("GET", url, null, "").responseBody
+    }
+    def probe(): Outcome = {
+      outcomeFromBool(get.contains(text))
+    }
+
+    /*
+     failure action is simply to attempt the connection without
+     catching the exception raised
+     */
+    def failure(iterations: Int, timeout: Boolean): Unit = {
+      assertContains(get, text)
+    }
+
+    spinForState(s"Awaiting a response from URL $url",
+                  interval = 50, timeout = timeout, probe = probe, failure = failure)
+
+    get
+  }
+
 
 }
 

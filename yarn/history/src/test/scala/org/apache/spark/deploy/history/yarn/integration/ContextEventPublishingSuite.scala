@@ -51,7 +51,6 @@ class ContextEventPublishingSuite
     sparkCtx.addFile(tempFile.toURI.toString)
     tempFile.delete()
 
-
     // closing context generates an application stop
     val endtime = now()
     logDebug("stopping context")
@@ -65,8 +64,6 @@ class ContextEventPublishingSuite
     // seeing intermittent failure
     awaitFlushCount(historyService, 2, 5000)
     flushHistoryServiceToSuccess()
-
   }
-
 
 }

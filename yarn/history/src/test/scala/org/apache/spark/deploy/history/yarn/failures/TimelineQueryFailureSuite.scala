@@ -44,7 +44,7 @@ class TimelineQueryFailureSuite extends AbstractTestsWithHistoryServices {
    * @return the instance
    */
   override protected def createHistoryProvider(conf: SparkConf): YarnHistoryProvider = {
-     FailingYarnHistoryProvider.createFailingProvider(false)
+     FailingYarnHistoryProvider.createFailingProvider(conf, false)
   }
 
   /**
@@ -83,6 +83,8 @@ class TimelineQueryFailureSuite extends AbstractTestsWithHistoryServices {
       case ex: Exception =>
         logError("Wrong exception: ", ex)
         throw ex
+    } finally {
+      provider.stop()
     }
   }
 
@@ -93,25 +95,29 @@ class TimelineQueryFailureSuite extends AbstractTestsWithHistoryServices {
     // skip that initial health check
     provider.setHealthChecked(true)
 
-    assertResult(None) {
-      provider.getAppUI("app1")
-    }
-    val lastException = provider.getLastFailure()
-    assertNotNull(lastException, "null last exception")
-    lastException match {
-      case Some((ex, date)) =>
-        if (!ex.isInstanceOf[NoRouteToHostException]) {
-          throw ex
-        }
-      case None =>
-        fail("No logged exception")
-    }
-    // and getting the config returns it
-    val config = provider.getConfig()
+    try {
+      assertResult(None) {
+        provider.getAppUI("app1")
+      }
+      val lastException = provider.getLastFailure()
+      assertNotNull(lastException, "null last exception")
+      lastException match {
+        case Some((ex, date)) =>
+          if (!ex.isInstanceOf[NoRouteToHostException]) {
+            throw ex
+          }
+        case None =>
+          fail("No logged exception")
+      }
+      // and getting the config returns it
+      val config = provider.getConfig()
 
-    assertMapValueContains(config,
-      YarnHistoryProvider.KEY_LAST_FAILURE,
-      FailingTimelineQueryClient.ERROR_TEXT)
+      assertMapValueContains(config,
+                              YarnHistoryProvider.KEY_LAST_FAILURE,
+                              FailingTimelineQueryClient.ERROR_TEXT)
+    } finally {
+      provider.stop()
+    }
 
   }
 

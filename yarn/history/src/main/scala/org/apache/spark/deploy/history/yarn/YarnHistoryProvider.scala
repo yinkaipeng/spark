@@ -20,7 +20,7 @@ package org.apache.spark.deploy.history.yarn
 import java.io.FileNotFoundException
 import java.net.URI
 import java.util.Date
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicLong, AtomicBoolean}
 
 import scala.collection.JavaConversions._
 
@@ -84,7 +84,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   private val NOT_STARTED = "<Not Started>"
 
   // Interval between each check for event log updates
-  private val UPDATE_INTERVAL_MS = 1000* sparkConf.getInt(YarnHistoryProvider.OPTION_UPDATE,
+  private val refreshInterval = sparkConf.getInt(YarnHistoryProvider.OPTION_UPDATE_INTERVAL,
     YarnHistoryProvider.DEFAULT_UPDATE_INTERVAL_SECONDS)
 
   /**
@@ -145,6 +145,9 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    */
   protected var lastFailureCause: Option[(Throwable, Date)] = None
 
+  private val refreshCount = new AtomicLong(0)
+  private val refreshFailedCount = new AtomicLong(0)
+
   /**
    * Health marker
    */
@@ -154,11 +157,6 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * Enabled flag
    */
   private val _enabled = timelineServiceEnabled(yarnConf)
-
-  /**
-   * Interval in milliseconds between refresh attempts.
-   */
-  private var listingRefreshIntervalMillis: Long = 0
 
   /**
    * Atomic boolean used to signal to the refresh thread that it
@@ -185,8 +183,14 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       logError(YarnHistoryProvider.TEXT_SERVICE_DISABLED)
     } else {
       logInfo(YarnHistoryProvider.TEXT_SERVICE_ENABLED)
-      logInfo(YarnHistoryProvider.KEY_SERVICE_URL
-          + ": " + timelineEndpoint)
+      logInfo(YarnHistoryProvider.KEY_SERVICE_URL + ": " + timelineEndpoint)
+      // get the thread time
+      logInfo(s"refresh interval $refreshInterval seconds")
+      if (refreshInterval <= 0) {
+        throw new Exception(YarnHistoryProvider.TEXT_INVALID_UPDATE_INTERVAL +
+            s": $refreshInterval")
+      }
+      startRefreshThread(1000 * refreshInterval)
     }
   }
 
@@ -197,7 +201,10 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   override def stop(): Unit = {
     logDebug(s"Stopping $this")
     jersey.destroy()
+
+    // attempt to stop the refresh thread
     if (!stopRefreshThread()) {
+      // and otherwise, stop the query client
       timelineQueryClient.close()
     }
   }
@@ -316,9 +323,10 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   def startRefreshThread(interval: Long): Unit = {
     require(interval > 0,
       s"Interval must be greater than zero, not $interval")
-    refreshThread = Some(new Thread("YarnHistoryProvider Refresh") {
+    logInfo(s"Starting timeline refresh thread with interval $interval millis")
+    val thread = new Thread("YarnHistoryProvider Refresh") {
       override def run(): Unit = {
-        while(!stopRefresh.get()) {
+        while (!stopRefresh.get()) {
           try {
             listAndCacheApplications()
             if (!stopRefresh.get()) {
@@ -336,7 +344,10 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
           }
         }
       }
-    })
+    }
+    refreshThread = Some(thread)
+    thread.setDaemon(true)
+    thread.start()
   }
 
   /**
@@ -352,7 +363,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
         refresher.interrupt()
         true
       case None =>
-          //nothing
+        // nothing to stop
         false
     }
   }
@@ -366,10 +377,13 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       case Some(refresher) =>
         refresher.isAlive()
       case None =>
-        //nothing
+        // no thread created
         false
     }
   }
+
+  def getRefreshCount(): Long = { refreshCount.get() }
+  def getRefreshFailedCount(): Long = { refreshFailedCount.get() }
 
   /**
    * List applications.
@@ -420,19 +434,20 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @return List of all known applications.
    */
   def listAndCacheApplications(): ApplicationListingResults = {
+    refreshCount.incrementAndGet()
     val results = listApplications()
     this.synchronized {
       if (results.succeeded) {
         // on a success, the applications are updated
         setApplications(results)
       } else {
+        refreshFailedCount.incrementAndGet()
         // on a failure, the failure cause is update
         setLastFailure(results.failureCause.get, results.timestamp)
       }
     }
     results
   }
-
 
   /**
    * List applications. This currently finds completed applications only.
@@ -441,11 +456,8 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @return List of all known applications.
    */
   override def getListing(): Seq[ApplicationHistoryInfo] = {
-    val results = listAndCacheApplications()
-    results.applications
+    applications.applications
   }
-
-
 
   /**
    * Return the current time
@@ -563,8 +575,11 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   }
 
 
-  override def toString: String = {
-    s"YarnHistoryProvider bound to history server at $timelineEndpoint"
+  override def toString(): String = {
+    s"YarnHistoryProvider bound to history server at $timelineEndpoint, " +
+      s"enabled = $enabled" +
+      s" refresh thread active = ${isRefreshThreadRunning()} with interval ${refreshInterval}" +
+      s" refresh count = ${getRefreshCount()}; failed count = ${getRefreshFailedCount()} "
   }
 
   /**
@@ -649,13 +664,16 @@ object YarnHistoryProvider {
     "Timeline service is disabled: application history cannot be retrieved"
 
   val TEXT_NEVER_UPDATED = "Never"
-  val KEY_LISTING_REFRESH_INTERVAL = ""
+  val TEXT_INVALID_UPDATE_INTERVAL = s"Invalid update interval defined in $OPTION_UPDATE_INTERVAL"
+  
+  
+  val KEY_LISTING_REFRESH_INTERVAL = "Update Interval"
 
   /**
    * Option for the interval for listing timeline refreshes. Bigger: less chatty.
    * Smaller: history more responsive.
    */
-  val OPTION_UPDATE = "spark.history.yarn.updateInterval"
+  val OPTION_UPDATE_INTERVAL = "spark.history.yarn.updateInterval"
   val DEFAULT_UPDATE_INTERVAL_SECONDS = 10
 
 }

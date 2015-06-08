@@ -21,14 +21,14 @@ import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.history.yarn.YarnHistoryProvider
 import org.apache.spark.deploy.history.yarn.rest.{JerseyBinding, TimelineQueryClient}
 
 /**
  * This is a YARN history provider that can be given
  * a (possibly failing) query client, and can be configured
- * as to whether to start with a health check
+ * as to whether to start with a health check.
  * @param queryClient query client
  * @param healthAlreadyChecked should the initial health
  *                             check be skipped? It will if this
@@ -39,9 +39,7 @@ class FailingYarnHistoryProvider(
     queryClient: TimelineQueryClient,
     healthAlreadyChecked: Boolean,
     endpoint: URI,
-    sparkConf: SparkConf = new SparkConf()) extends YarnHistoryProvider(sparkConf) {
-
-  private var _enabled: Boolean = true
+    sparkConf: SparkConf) extends YarnHistoryProvider(sparkConf) with Logging {
 
   init()
 
@@ -50,22 +48,6 @@ class FailingYarnHistoryProvider(
    */
   private def init(): Unit = {
     getHealthFlag().set(healthAlreadyChecked)
-  }
-
-
-  /**
-   * the current enabled flag value, which can be dynamically changed
-   */
-  override def enabled: Boolean = {
-    _enabled
-  }
-
-  /**
-   * Update the enabled flag
-   * @param b new value
-   */
-  def setEnabled(b: Boolean): Unit = {
-    _enabled = b
   }
 
   /**
@@ -101,9 +83,34 @@ class FailingYarnHistoryProvider(
 }
 
 /**
+ * A failing yarn history provider that returns enabled=false, always
+ * @param queryClient query client
+ * @param healthAlreadyChecked should the initial health
+ *                             check be skipped? It will if this
+ *                             is true
+ * @param endpoint URI of the service.
+ * @param sparkConf
+ */
+class DisabledFailingYarnHistoryProvider(queryClient: TimelineQueryClient,
+    healthAlreadyChecked: Boolean,
+    endpoint: URI,
+    sparkConf: SparkConf) extends FailingYarnHistoryProvider(
+    queryClient, healthAlreadyChecked,
+    endpoint,
+    sparkConf) {
+
+  /**
+   * false
+   */
+  override def enabled: Boolean = {
+    false
+  }
+}
+
+/**
  * Some operations to help the failure tests
  */
-object FailingYarnHistoryProvider {
+object FailingYarnHistoryProvider extends Logging {
 
   def createQueryClient(): FailingTimelineQueryClient = {
     new FailingTimelineQueryClient(new URI("http://localhost:80/"),
@@ -116,10 +123,11 @@ object FailingYarnHistoryProvider {
    * This inner provider calls most of its internal methods.
    * @return
    */
-  def createFailingProvider(healthAlreadyChecked: Boolean = false): YarnHistoryProvider = {
+  def createFailingProvider(sparkConf: SparkConf, healthAlreadyChecked: Boolean = false): YarnHistoryProvider = {
     val failingClient = createQueryClient()
     new FailingYarnHistoryProvider(failingClient,
-                                    healthAlreadyChecked,
-                                    new URI("http://localhost:80/"))
+      healthAlreadyChecked,
+      new URI("http://localhost:80/"),
+      sparkConf)
   }
 }

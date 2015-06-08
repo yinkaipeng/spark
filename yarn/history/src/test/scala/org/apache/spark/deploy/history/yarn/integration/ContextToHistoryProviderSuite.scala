@@ -100,10 +100,7 @@ class ContextToHistoryProviderSuite
 
       // now read it in via history provider
       val provider = new YarnHistoryProvider(sparkCtx.conf)
-      val history = provider.getListing()
-      assertResult(1, "size of history") {
-        history.size
-      }
+      val history = awaitListingSize(provider, 1, 5000)
       val info = history.head
       assert(info.completed, s"application not flagged as completed")
       provider.getAppUI(info.id)

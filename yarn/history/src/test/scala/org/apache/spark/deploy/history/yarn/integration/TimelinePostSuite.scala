@@ -27,9 +27,8 @@ class TimelinePostSuite extends AbstractTestsWithHistoryServices {
     val sparkEvt = appStopEvent()
     val outcome = postEvent(sparkEvt, 100)
     historyService.stop()
-    awaitEmptyQueue(historyService,1000)
+    awaitEmptyQueue(historyService, 1000)
   }
-
 
   test("App Start Via Event Listener") {
     historyService = startHistoryService(sparkCtx)
@@ -37,6 +36,5 @@ class TimelinePostSuite extends AbstractTestsWithHistoryServices {
     val sparkEvt = appStartEvent()
     listener.onApplicationStart(sparkEvt)
   }
-
 
 }

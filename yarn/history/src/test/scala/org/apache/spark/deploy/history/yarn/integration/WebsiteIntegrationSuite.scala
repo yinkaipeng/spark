@@ -26,6 +26,9 @@ import org.apache.spark.deploy.history.yarn.{YarnEventListener, YarnHistoryProvi
 import org.apache.spark.scheduler.cluster.YarnExtensionServices
 import org.apache.spark.util.Utils
 
+/**
+ * This is the complete integration test
+ */
 class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
 
 
@@ -37,11 +40,16 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
   }
 
   test("Instantiate HistoryProvider") {
-    createHistoryProvider(sparkCtx.getConf)
+    val provider = createHistoryProvider(sparkCtx.getConf)
+    provider.stop()
+
   }
 
   test("WebUI hooked up") {
-    webUITest("WebUI hooked up", probeEmptyWebUI)
+    def probeEmptyWebUIVoid(webUI: URL, provider: YarnHistoryProvider): Unit = {
+      probeEmptyWebUI(webUI, provider)
+    }
+    webUITest("WebUI hooked up", probeEmptyWebUIVoid)
   }
 
 /* // disabled while failing on branch 1.3.x
@@ -107,24 +115,13 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
       // at this point the REST UI is happy. Check the provider level
 
       // listing
-      val listing = provider.getListing()
-      assertResult(1, "empty listing of completed applications") {
-        listing.size
-      }
+      val history = awaitListingSize(provider, 1, 5000)
 
-      // resolve to entry
-      provider.getAppUI(yarnAppId) match {
-        case Some(yarnAppUI) =>
-          // success
-        case None => fail(s"Did not get a UI for $yarnAppId")
-      }
+      //and look for the complete app
 
-
-      //and look for the complete
       val complete = connector.execHttpOperation("GET", webUI, null, "")
-      val completeBody = complete.responseBody
+      val completeBody = awaitURLDoesNotContainText(connector, webUI, no_completed_applications, 5000)
       logInfo(s"GET /\n$completeBody")
-      assert(!completeBody.contains(no_completed_applications))
       // look for the link
       assertContains(completeBody,s"${yarnAppId}</a>")
 
@@ -140,6 +137,17 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/storage"), null, "")
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/environment"), null, "")
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/executors"), null, "")
+
+
+      // resolve to entry
+      val appUIwrapper = provider.getAppUI(yarnAppId)
+      appUIwrapper match {
+        case Some(yarnAppUI) =>
+        // success
+        case None => fail(s"Did not get a UI for $yarnAppId")
+      }
+
+
     }
 
     webUITest("submit and check", submitAndCheck)
