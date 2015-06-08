@@ -43,6 +43,15 @@ class FailingYarnHistoryProvider(
 
   init()
 
+
+  /**
+   * Is the timeline service (and therefore this provider) enabled.
+   * @return true : always
+   */
+  override def enabled: Boolean = {
+    true
+  }
+
   /**
    * Any initialization logic
    */

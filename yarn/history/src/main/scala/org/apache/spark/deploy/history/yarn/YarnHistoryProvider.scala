@@ -211,7 +211,11 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
 
   /**
    * Is the timeline service (and therefore this provider) enabled.
-   * (override point for tests)
+   * (override point for tests).
+   *
+   * Important: this is called during construction, so test-time subclasses
+   * will be invoked before their own construction has taken place.
+   * Code appropriately.
    * @return true if the provider/YARN configuration enables the timeline
    *         service.
    */
