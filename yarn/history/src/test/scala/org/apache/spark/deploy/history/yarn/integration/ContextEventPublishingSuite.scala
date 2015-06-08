@@ -44,7 +44,7 @@ class ContextEventPublishingSuite
     logDebug("posting app start")
     postEvent(appStartEvent(), now())
     flushes += 1
-    awaitEmptyQueue(historyService, 5000)
+    awaitEmptyQueue(historyService, TEST_STARTUP_DELAY)
 
     // add a local file
     val tempFile: File = File.createTempFile("test",".txt")
@@ -56,13 +56,13 @@ class ContextEventPublishingSuite
     logDebug("stopping context")
 
     sparkCtx.stop()
-    awaitEmptyQueue(historyService, 5000)
+    awaitEmptyQueue(historyService, TEST_STARTUP_DELAY)
 
     flushes += 1
     logDebug(s"status: $historyService")
 
     // seeing intermittent failure
-    awaitFlushCount(historyService, 2, 5000)
+    awaitFlushCount(historyService, 2, TEST_STARTUP_DELAY)
     flushHistoryServiceToSuccess()
   }
 

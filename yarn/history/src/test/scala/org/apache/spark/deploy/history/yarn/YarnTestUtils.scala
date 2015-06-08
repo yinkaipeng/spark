@@ -45,6 +45,11 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
   val applicationEnd = SparkListenerApplicationEnd(84L)
 
   /**
+   * Time to wait for anything to start/state to be reached
+   */
+  val TEST_STARTUP_DELAY = 5000
+
+  /**
    * Cancel a test if the network isn't there.
    * If called during setup, this will abort the test
    */

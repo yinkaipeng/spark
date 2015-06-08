@@ -59,7 +59,7 @@ class ContextToHistoryProviderSuite
                                  Utils.getCurrentUserName())
       historyService.enqueue(new HandleSparkEvent(event, startTime))
       flushes += 1
-      awaitEmptyQueue(historyService, 5000)
+      awaitEmptyQueue(historyService, TEST_STARTUP_DELAY)
 
       // add a local file to generate an update event
       /*
@@ -100,7 +100,7 @@ class ContextToHistoryProviderSuite
 
       // now read it in via history provider
       val provider = new YarnHistoryProvider(sparkCtx.conf)
-      val history = awaitListingSize(provider, 1, 5000)
+      val history = awaitListingSize(provider, 1, TEST_STARTUP_DELAY)
       val info = history.head
       assert(info.completed, s"application not flagged as completed")
       provider.getAppUI(info.id)

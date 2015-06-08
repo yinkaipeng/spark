@@ -42,10 +42,10 @@ class TimelineListenerSuite extends AbstractTestsWithHistoryServices {
                                sparkCtx.applicationId,
                                Utils.getCurrentUserName())
     listener.onApplicationStart(started)
-    awaitEventsProcessed(historyService, 1, 2000)
+    awaitEventsProcessed(historyService, 1, TEST_STARTUP_DELAY)
     flushHistoryServiceToSuccess()
     historyService.stop()
-    awaitEmptyQueue(historyService, 5000)
+    awaitEmptyQueue(historyService, TEST_STARTUP_DELAY)
     describe("reading events back")
 
 
@@ -74,7 +74,7 @@ class TimelineListenerSuite extends AbstractTestsWithHistoryServices {
 
     // here the events should be in the system
     val provider = new YarnHistoryProvider(sparkCtx.conf)
-    val history = awaitListingSize(provider, 1, 5000)
+    val history = awaitListingSize(provider, 1, TEST_STARTUP_DELAY)
     val info = history.head
     logInfo(s"App history = $info")
     // validate received data matches that saved

@@ -96,7 +96,7 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
 
       //now stop the app
       historyService.stop()
-      awaitEmptyQueue(historyService, 5000)
+      awaitEmptyQueue(historyService, TEST_STARTUP_DELAY)
       val yarnAppId = applicationId.toString()
       // validate ATS has it
       val timelineEntities =
@@ -115,12 +115,13 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
       // at this point the REST UI is happy. Check the provider level
 
       // listing
-      val history = awaitListingSize(provider, 1, 5000)
+      val history = awaitListingSize(provider, 1, TEST_STARTUP_DELAY)
 
       //and look for the complete app
 
       val complete = connector.execHttpOperation("GET", webUI, null, "")
-      val completeBody = awaitURLDoesNotContainText(connector, webUI, no_completed_applications, 5000)
+      val completeBody = awaitURLDoesNotContainText(connector, webUI,
+           no_completed_applications, TEST_STARTUP_DELAY)
       logInfo(s"GET /\n$completeBody")
       // look for the link
       assertContains(completeBody,s"${yarnAppId}</a>")

@@ -71,16 +71,16 @@ abstract class AbstractTestsWithHistoryServices
    * <code>historyService</code>
    */
   override def teardown(): Unit = {
-    logInfo("Teardown of history server, timeline client and history service")
+    describe("Teardown of history server, timeline client and history service")
     if (historyService != null && !historyService.isInState(Service.STATE.STARTED)) {
       flushHistoryServiceToSuccess()
       spinForState("post thread halting in teardown",
                     interval = 50,
-                    timeout = 5000,
+                    timeout = TEST_STARTUP_DELAY,
                     probe = (() => outcomeFromBool(!historyService.isPostThreadActive)),
                     failure = (_, _) => ())
       ServiceOperations.stopQuietly(historyService)
-      awaitServiceThreadStopped(historyService, 5000)
+      awaitServiceThreadStopped(historyService, TEST_STARTUP_DELAY)
     }
     ServiceOperations.stopQuietly(_applicationHistoryServer)
     ServiceOperations.stopQuietly(_timelineClient)
@@ -110,7 +110,7 @@ abstract class AbstractTestsWithHistoryServices
     _applicationHistoryServer.start()
     // Wait for AHS to come up
     val endpoint = YarnTimelineUtils.timelineWebappUri(conf, "")
-    awaitURL(endpoint.toURL, 5000)
+    awaitURL(endpoint.toURL, TEST_STARTUP_DELAY)
   }
 
 
@@ -158,7 +158,7 @@ abstract class AbstractTestsWithHistoryServices
   protected def flushHistoryServiceToSuccess(): Unit = {
     assertNotNull(historyService, "null history queue")
     historyService.asyncFlush()
-    awaitEmptyQueue(historyService, 5000)
+    awaitEmptyQueue(historyService, TEST_STARTUP_DELAY)
     assertResult(0, s"-Post failure count: $historyService") {
       historyService.getEventPostFailures
     }
