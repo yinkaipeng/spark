@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils
 /**
  * This is the complete integration test
  */
-class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
+class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
 
 
   override def setupConfiguration(sparkConf: SparkConf): SparkConf = {
@@ -39,16 +39,18 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
     sparkConf.set(SPARK_HISTORY_UI_PORT, findPort().toString)
   }
 
-  test("Instantiate HistoryProvider") {
-    val provider = createHistoryProvider(sparkCtx.getConf)
-    provider.stop()
-  }
 
-  test("WebUI hooked up") {
-    def probeEmptyWebUIVoid(webUI: URL, provider: YarnHistoryProvider): Unit = {
-      probeEmptyWebUI(webUI, provider)
+  test("WebUI incomplete view") {
+    def checkEmptyIncomplete(webUI: URL, provider: YarnHistoryProvider): Unit = {
+      val connector = createUrlConnector()
+      val url = new URL(webUI, "/?" + page1_incomplete_flag)
+      val incompleted = connector.execHttpOperation("GET", url, null, "")
+      val body = incompleted.responseBody
+      logInfo(s"$url => $body")
+      assertContains(body, no_incomplete_applications)
     }
-    webUITest("WebUI hooked up", probeEmptyWebUIVoid)
+
+    webUITest("incomplete view",checkEmptyIncomplete)
   }
 
   test("Publish Events and GET the web UI") {
@@ -66,8 +68,20 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
       awaitEventsProcessed(historyService, 1, 2000)
       flushHistoryServiceToSuccess()
 
+      // await for a  refresh
+
+      // listing
+      val incompleteListing = awaitListingSize(provider, 1, TEST_STARTUP_DELAY)
+
       val connector = createUrlConnector()
       val queryClient = createTimelineQueryClient()
+
+     // check for work in progress
+      val incomplete = connector.execHttpOperation("GET",
+        new URL(webUI, "/?" + incomplete_flag), null, "")
+      val body = incomplete.responseBody
+      logInfo(s"$body")
+      assertDoesNotContain(body, no_incomplete_applications)
 
       //now stop the app
       historyService.stop()

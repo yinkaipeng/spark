@@ -47,7 +47,11 @@ abstract class AbstractTestsWithHistoryServices
   protected var _timelineClient: TimelineClient = _
   protected var historyService: YarnHistoryService = _
 
-  protected val incomplete_flag = "showIncomplete=true"
+  protected val incomplete_flag = "&showIncomplete=true"
+  protected val page1_flag = "&page=1"
+  protected val page1_incomplete_flag = "&page=1&showIncomplete=true"
+
+
 
   protected val no_completed_applications = "No completed applications found!"
   protected val no_incomplete_applications = "No incomplete applications found!"
@@ -200,8 +204,12 @@ abstract class AbstractTestsWithHistoryServices
       probe(webUI, provider)
     } finally {
       describe("stopping history service")
-      server.stop()
-      provider.stop()
+      try {
+        server.stop()
+      } catch {
+        case e: Exception =>
+          logInfo(s"In History Server teardown: $e", e)
+      }
     }
   }
 

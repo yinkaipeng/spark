@@ -125,9 +125,8 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
    */
   def exec[T](verb: String, uri: URI, action: (() => T)): T = {
     logDebug(s"$verb $uri")
-    try { {
+    try {
       innerExecAction(action)
-    }
     } catch {
       case e: Exception =>
         logWarning(s"$verb $uri failed", e)

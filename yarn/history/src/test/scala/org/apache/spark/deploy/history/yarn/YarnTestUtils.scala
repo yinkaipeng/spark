@@ -376,7 +376,7 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
   }
 
   /**
-   * Wait for the listing size to match that desired
+   * Wait for the listing size to match that desired.
    * @param provider provider
    * @param size size to require
    * @param timeout timeout

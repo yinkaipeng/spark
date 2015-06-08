@@ -113,7 +113,7 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
             case ex: AuthenticationException =>
               // auth failure
               throw new IOException(s"Authentication failure as $callerUGI against $url: $ex", ex)
-            case other =>
+            case other: Throwable =>
               // anything else is rethrown
               throw other
           }

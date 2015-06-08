@@ -200,13 +200,15 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    */
   override def stop(): Unit = {
     logDebug(s"Stopping $this")
-    jersey.destroy()
 
     // attempt to stop the refresh thread
     if (!stopRefreshThread()) {
       // and otherwise, stop the query client
+      logDebug("Stopping Jersey client")
       timelineQueryClient.close()
     }
+    logDebug("Destroying Jersey client")
+    jersey.destroy()
   }
 
   /**
@@ -328,7 +330,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
     require(interval > 0,
       s"Interval must be greater than zero, not $interval")
     logInfo(s"Starting timeline refresh thread with interval $interval millis")
-    val thread = new Thread("YarnHistoryProvider Refresh") {
+    val thread = new Thread(s"YarnHistoryProvider Refresh Thread") {
       override def run(): Unit = {
         while (!stopRefresh.get()) {
           try {
@@ -342,7 +344,12 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
               // interrupted; if the `stopRefreshThread` flag is set, this will trigger an exit
               logInfo(s"Refresh thread interrupted")
             case e: Exception =>
-              logWarning(s"In refresh: $e", e)
+              if (!stopRefresh.get()) {
+                // if the stop process has started, don't bother
+                // complaining as it will only confuse people looking
+                // at logs (especially test logs)
+                logWarning(s"In refresh: $e", e)
+              }
           } finally {
             timelineQueryClient.close()
           }
@@ -363,6 +370,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   def stopRefreshThread(): Boolean = {
     refreshThread match {
       case Some(refresher) =>
+        logDebug("Trigger Async Refresh Thread stop")
         stopRefresh.set(true)
         refresher.interrupt()
         true
