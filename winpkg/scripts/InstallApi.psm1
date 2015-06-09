@@ -140,6 +140,10 @@ function Install(
 		{
 			CreateAndConfigureHadoopService $service $HDP_RESOURCES_DIR $sparkInstallToBin $serviceCredential
             $cmd="$ENV:WINDIR\system32\sc.exe config $service start= disabled"
+            if ($service -eq "sparkhistoryserver")
+            {
+                $cmd="$ENV:WINDIR\system32\sc.exe config $service start= demand"
+            }
             Invoke-CmdChk $cmd
 			###
             ### Setup Spark service config
