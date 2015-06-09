@@ -412,4 +412,23 @@ private[spark] object YarnTimelineUtils extends Logging {
       dateFormatter.format(timestamp)
     }
   }
+  
+  def timeShort(timestamp: Long, unset: String) : String = {
+    if (timestamp == 0) {
+      unset
+    } else {
+      val dateFormatter = DateFormat.getTimeInstance(DateFormat.SHORT)
+      dateFormatter.format(timestamp)
+    }
+  }
+  
+  def describeApplicationHistoryInfo(info: ApplicationHistoryInfo) : String = {
+    val core = s"ApplicationHistoryInfo [${info.id }] ${info.name }"
+    val never = "-"
+    s"$core : started ${timeShort(info.startTime, never)}," +
+        s" ended ${ timeShort(info.endTime, never) }" +
+        s" updated ${ timeShort(info.lastUpdated, never) }" +
+        s" completed = ${info.completed}"
+  }
+
 }

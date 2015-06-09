@@ -420,6 +420,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       val listing = timelineEntities.flatMap { en =>
         try {
           val historyInfo = toApplicationHistoryInfo(en)
+          logDebug(s"${YarnTimelineUtils.describeApplicationHistoryInfo(historyInfo)}")
           Some(historyInfo)
         } catch {
           case e: Exception =>

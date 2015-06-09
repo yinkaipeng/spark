@@ -72,6 +72,8 @@ class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
                                    sparkCtx.applicationId,
                                    Utils.getCurrentUserName())
       listener.onApplicationStart(started)
+      val jobId = 2
+      listener.onJobStart(jobStartEvent(startTime + 1, jobId))
       awaitEventsProcessed(historyService, 1, 2000)
       flushHistoryServiceToSuccess()
 
@@ -85,7 +87,10 @@ class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
       // check for work in progress
       assertDoesNotContain(listIncompleteApps, no_incomplete_applications)
 
-      //now stop the app
+      logInfo("Ending job and application")
+      //job completion event
+      listener.onJobEnd(jobSuccessEvent(startTime + 1, jobId))
+      //stop the app
       historyService.stop()
       awaitEmptyQueue(historyService, TEST_STARTUP_DELAY)
       val yarnAppId = applicationId.toString()
@@ -113,17 +118,18 @@ class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
       val complete = connector.execHttpOperation("GET", webUI, null, "")
       val completeBody = awaitURLDoesNotContainText(connector, webUI,
            no_completed_applications, TEST_STARTUP_DELAY)
-      logInfo(s"GET /\n$completeBody")
       // look for the link
-      assertContains(completeBody,s"${yarnAppId}</a>")
+      assertContains(completeBody, s"${yarnAppId}</a>")
 
-      val appPath = s"/history/${yarnAppId }"
+      val appPath = s"/history/${yarnAppId}"
       // GET the app
       val appURL = new URL(webUI, appPath)
       val appUI = connector.execHttpOperation("GET", appURL, null, "")
       val appUIBody = appUI.responseBody
       logInfo(s"Application\n$appUIBody")
       assertContains(appUIBody, APP_NAME)
+      // look for the completed job
+      assertContains(appUIBody, completedJobsMarker)
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/jobs"), null, "")
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/stages"), null, "")
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/storage"), null, "")

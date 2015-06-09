@@ -28,7 +28,7 @@ import org.apache.hadoop.yarn.server.timeline.MemoryTimelineStore
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.ApplicationHistoryInfo
 import org.apache.spark.deploy.history.yarn.rest.SpnegoUrlConnector
-import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerEnvironmentUpdate, SparkListenerEvent}
+import org.apache.spark.scheduler.{JobFailed, JobSucceeded, SparkListenerJobEnd, SparkListenerJobStart, SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerEnvironmentUpdate, SparkListenerEvent}
 import org.apache.spark.util.Utils
 
 object YarnTestUtils extends ExtraAssertions with FreePortFinder {
@@ -55,10 +55,9 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    */
   def cancelIfOffline(): Unit = {
 
-    try { {
+    try {
       val hostname = Utils.localHostName()
       log.debug(s"local hostname is $hostname")
-    }
     }
     catch {
       case ex: IOException => {
@@ -172,6 +171,9 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    */
   val SPARK_HISTORY_UI_PORT = "spark.history.ui.port"
 
+  val completedJobsMarker = "Completed Jobs (1)"
+  val activeJobsMarker = "Active Jobs (1)"
+
   /**
    * Create an app start event, using the fixed [[APP_NAME]] and [[APP_USER]] values
    * for appname and user
@@ -187,6 +189,18 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
 
   def appStopEvent(time: Long = 1): SparkListenerApplicationEnd = {
     new SparkListenerApplicationEnd(time)
+  }
+
+  def jobStartEvent(time: Long, id: Int) : SparkListenerJobStart = {
+    new SparkListenerJobStart(id, time, Nil, null)
+  }
+
+  def jobSuccessEvent(time: Long, id: Int) : SparkListenerJobEnd = {
+    new SparkListenerJobEnd(id, time, JobSucceeded)
+  }
+
+  def jobFailureEvent(time: Long, id: Int, ex: Exception) : SparkListenerJobEnd = {
+    new SparkListenerJobEnd(id, time, JobFailed(ex))
   }
 
   def newEntity(time: Long): TimelineEntity = {
@@ -307,10 +321,9 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    */
   def awaitURL(url: URL, timeout: Long): Unit = {
     def probe(): Outcome = {
-      try { {
+      try {
         url.openStream().close()
         Success()
-      }
       } catch {
         case ioe: IOException => Retry()
       }
@@ -325,8 +338,7 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
     }
 
     spinForState(s"Awaiting a response from URL $url",
-                  interval = 50, timeout = timeout, probe = probe, failure = failure)
-
+    interval = 50, timeout = timeout, probe = probe, failure = failure)
   }
 
 
@@ -338,12 +350,12 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
   def awaitEmptyQueue(historyService: YarnHistoryService, timeout: Long): Unit = {
 
     spinForState("awaiting empty queue",
-                  interval = 50,
-                  timeout = timeout,
-                  probe = (() => outcomeFromBool(historyService.getQueueSize == 0)),
-                  failure = ((_, _) => fail(s"queue never cleared: ${
-                    historyService.getQueueSize
-                  }")))
+      interval = 50,
+      timeout = timeout,
+      probe = (() => outcomeFromBool(historyService.getQueueSize == 0)),
+      failure = ((_, _) => fail(s"queue never cleared: ${
+        historyService.getQueueSize
+      }")))
   }
 
   /**
@@ -354,10 +366,10 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    */
   def awaitFlushCount(historyService: YarnHistoryService, count: Int, timeout: Long): Unit = {
     spinForState(s"awaiting flush count of $count",
-                  interval = 50,
-                  timeout = timeout,
-                  probe = (() => outcomeFromBool(historyService.getFlushCount() == count)),
-                  failure = ((_, _) => fail(s"flush count not $count in $historyService")))
+      interval = 50,
+      timeout = timeout,
+      probe = (() => outcomeFromBool(historyService.getFlushCount() == count)),
+      failure = ((_, _) => fail(s"flush count not $count in $historyService")))
   }
 
 
@@ -388,10 +400,10 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
       outcomeFromBool(provider.getListing().size == size)
     }
     def failure(i: Int, b: Boolean): Unit = {
-      fail(s"after $i attempts, provider listing size !=${size}1:  ${provider.getListing() }\n" +
+      fail(s"after $i attempts, provider listing size !=${size}:  ${provider.getListing()}\n" +
           s"${provider}")
     }
-    spinForState("await listing size",
+    spinForState(s"await listing size=${size}",
       100,
       timeout,
       listingProbe,
@@ -400,18 +412,18 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
   }
 
   /**
-   * Wait for the listing size to match that desired
+   * Wait for the refresh count to increment by at least one iteration
    * @param provider provider
-   * @param size size to require
    * @param timeout timeout
    * @return the successful listing
    */
   def awaitRefreshExecuted(provider: YarnHistoryProvider, timeout: Long): Unit = {
+    val initialCount = provider.getRefreshCount();
     def listingProbe(): Outcome = {
-      outcomeFromBool(provider.getRefreshCount() > 0)
+      outcomeFromBool(provider.getRefreshCount() > initialCount)
     }
     def failure(i: Int, b: Boolean): Unit = {
-      fail(s"after $i attempts, refresh count is 0: $provider")
+      fail(s"After $i attempts, refresh count is initialCount: $provider")
     }
     require(provider.isRefreshThreadRunning(),
      s"refresh thread is not running in $provider")
@@ -481,7 +493,6 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
 
     get
   }
-
 
 }
 
