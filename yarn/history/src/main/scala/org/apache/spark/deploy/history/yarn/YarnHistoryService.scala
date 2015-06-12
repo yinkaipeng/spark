@@ -220,7 +220,7 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
   }
 
   /**
-   * start the service, calling the [[Service]] init and start events in the
+   * start the service, calling the Service init and start events in the
    * correct order
    * @param context spark context
    * @param id YARN application ID
@@ -369,7 +369,7 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
    * Stop the service; this triggers flushing the queue and, if not already processed,
    * a pushing out of an application end event.
    *
-   * This operation will block for up to [[maxTimeToWaitOnShutdown]] milliseconds
+   * This operation will block for up to `maxTimeToWaitOnShutdown` milliseconds
    * to await the asynchronous action queue completing.
    */
   override protected def serviceStop {

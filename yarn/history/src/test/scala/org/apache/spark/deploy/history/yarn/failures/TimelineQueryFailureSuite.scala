@@ -25,6 +25,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
 import org.apache.spark.deploy.history.yarn.integration.AbstractTestsWithHistoryServices
+import org.apache.spark.deploy.history.yarn.rest.{UnauthorizedRequestException, JerseyBinding}
 import org.apache.spark.deploy.history.yarn.{YarnHistoryProvider, YarnHistoryService}
 
 class TimelineQueryFailureSuite extends AbstractTestsWithHistoryServices {
@@ -61,6 +62,18 @@ class TimelineQueryFailureSuite extends AbstractTestsWithHistoryServices {
   test("ClientListFails") {
     val failingClient = FailingYarnHistoryProvider.createQueryClient()
     intercept[NoRouteToHostException] {
+      failingClient.listEntities(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
+    }
+  }
+
+  test("UnauthedClientListFails") {
+    val failingClient = new ClientResponseTimelineQueryClient(
+      401, "401",
+      new URI("http://localhost:80/"),
+      new Configuration(),
+      JerseyBinding.createClientConfig())
+
+    intercept[UnauthorizedRequestException] {
       failingClient.listEntities(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
     }
   }

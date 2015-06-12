@@ -93,13 +93,6 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   protected val timelineEndpoint = createTimelineEndpoint()
 
   /**
-   * The Jersey client used for HTTP operations
-   */
-  protected val jersey = {
-    JerseyBinding.createJerseyClient(yarnConf, JerseyBinding.createClientConfig())
-  }
-
-  /**
    * The timeline query client which uses the `jersey`
    * Jersey instance to talk to a timeline service running
    * at [[timelineEndpoint]], and creates a timeline (write) client instance
@@ -204,11 +197,10 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
     // attempt to stop the refresh thread
     if (!stopRefreshThread()) {
       // and otherwise, stop the query client
-      logDebug("Stopping Jersey client")
+      logDebug("Stopping Timeline client")
       timelineQueryClient.close()
     }
-    logDebug("Destroying Jersey client")
-    jersey.destroy()
+
   }
 
   /**
@@ -249,6 +241,15 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   private def setLastFailure(ex: Throwable, timestamp: Long): Unit = {
     this.synchronized {
       lastFailureCause = Some(ex, new Date(timestamp))
+    }
+  }
+
+  /**
+   * Reset the failure info
+   */
+  private def resetLastFailure(): Unit = {
+    this.synchronized {
+      lastFailureCause = None
     }
   }
 
@@ -453,6 +454,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       if (results.succeeded) {
         // on a success, the applications are updated
         setApplications(results)
+        resetLastFailure()
       } else {
         refreshFailedCount.incrementAndGet()
         // on a failure, the failure cause is update
@@ -552,7 +554,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
 
   /**
    * Get configuration information for the Web UI
-   * @return A map with the configuration data. Data is show in the order returned by the map.
+   * @return A map with the configuration data. Data is shown in the order returned by the map.
    */
   override def getConfig(): Map[String, String] = {
     val timelineURI = getEndpointURI()
@@ -664,7 +666,7 @@ object YarnHistoryProvider {
   val KEY_PROVIDER_NAME = "History Provider"
 
   val KEY_LAST_UPDATED = "Last Updated"
-  val KEY_LAST_FAILURE = "Last Operation Failure cause"
+  val KEY_LAST_FAILURE = "Last Operation Failure"
   val KEY_LAST_FAILURE_TIME = "Last Operation Failed"
 
   /**

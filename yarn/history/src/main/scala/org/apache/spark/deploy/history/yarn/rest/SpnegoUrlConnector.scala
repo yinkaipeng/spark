@@ -20,14 +20,15 @@ package org.apache.spark.deploy.history.yarn.rest
 import java.io.{FileNotFoundException, IOException}
 import java.net.{HttpURLConnection, URL, URLConnection}
 import javax.net.ssl.HttpsURLConnection
+import javax.servlet.http.HttpServletResponse
 
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.PathPermissionException
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.security.authentication.client.{AuthenticatedURL, AuthenticationException, Authenticator, ConnectionConfigurator, KerberosAuthenticator, PseudoAuthenticator}
 import org.apache.hadoop.security.ssl.SSLFactory
-import org.apache.hadoop.security.token.delegation.web.{DelegationTokenAuthenticatedURL, DelegationTokenAuthenticator, KerberosDelegationTokenAuthenticator, PseudoDelegationTokenAuthenticator}
+import org.apache.hadoop.security.token.delegation.web.DelegationTokenAuthenticatedURL.Token
+import org.apache.hadoop.security.token.delegation.web.{DelegationTokenAuthenticatedURL, DelegationTokenAuthenticator, PseudoDelegationTokenAuthenticator}
 
 import org.apache.spark.Logging
 
@@ -39,9 +40,12 @@ import org.apache.spark.Logging
 private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator,
   token: DelegationTokenAuthenticatedURL.Token) extends Logging {
 
-  private val secure = UserGroupInformation.isSecurityEnabled
-  private val authenticator: DelegationTokenAuthenticator = if (secure)  {
-      new KerberosDelegationTokenAuthenticator()
+  val secure = UserGroupInformation.isSecurityEnabled
+
+  // choose an authenticator based on security settings
+  val authenticator: DelegationTokenAuthenticator =
+    if (secure)  {
+      new LoggingKerberosDelegationTokenAuthenticator()
     } else {
       new PseudoDelegationTokenAuthenticator
     }
@@ -49,28 +53,25 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
   authenticator.setConnectionConfigurator(connConfigurator)
 
   /**
-   * Opens a url 
+   * Opens a URL
    *
-   * @param url
-   * URL to open
-   * @param isSpnego
-   * whether the url should be authenticated via SPNEGO
+   * @param url URL to open
+   * @param isSpnego whether the url should be authenticated via SPNEGO
    * @return URLConnection
-   * @throws IOException
-   * @throws AuthenticationException
+   * @throws IOException IO problems
+   * @throws AuthenticationException authenticaion failure
    */
 
   def openConnection(url: URL, isSpnego: Boolean): URLConnection = {
     require(connConfigurator != null)
     require(url.getPort != 0, "no port")
     if (isSpnego) {
-      logDebug("open AuthenticatedURL connection" + url)
+      logDebug(s"open AuthenticatedURL connection $url")
       UserGroupInformation.getCurrentUser.checkTGTAndReloginFromKeytab
       val authToken: AuthenticatedURL.Token = new AuthenticatedURL.Token
       new AuthenticatedURL(KerberosUgiAuthenticator, connConfigurator).openConnection(url, authToken)
-    }
-    else {
-      logDebug("open URL connection")
+    } else {
+      logDebug("open URL connection $url")
       val connection: URLConnection = url.openConnection
       connection match {
         case connection1: HttpURLConnection =>
@@ -82,12 +83,13 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
   }
 
   /**
-   * Opens a url with cache disabled, redirect handled in
+   * Opens a URL with cache disabled; redirect handled in
    * (JDK) implementation.
    *
-   * @param url to open
+   *
+   * @param url URL to open
    * @return URLConnection
-   * @throws IOException
+   * @throws IOException problems.
    */
 
   def getHttpURLConnection(url: URL): HttpURLConnection = {
@@ -108,11 +110,12 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
         (() => {
           try {
             new DelegationTokenAuthenticatedURL(authenticator, connConfigurator)
-                .openConnection(url, token, doAsUser)
+                .openConnection(url, getToken, doAsUser)
           } catch {
             case ex: AuthenticationException =>
               // auth failure
-              throw new IOException(s"Authentication failure as $callerUGI against $url: $ex", ex)
+              throw new UnauthorizedRequestException(url.toString,
+                s"Authentication failure as $callerUGI against $url: $ex", ex)
             case other: Throwable =>
               // anything else is rethrown
               throw other
@@ -124,40 +127,33 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
   }
 
   /**
-   * Uprate error codes 400 and up into exceptions, which are then thrown
-   * <p>
-   * 404 is converted to a {@link NotFoundException},
-   * 401 to {@link ForbiddenException}
-   * all others above 400: <code>IOException</code>
-   * Any error code under 400 is not considered a failure; this function will return normally.
-   * @param verb HTTP Verb used
-   * @param url URL as string
-   * @param resultCode response from the request
-   * @param body optional body of the request. If set (and bodyAsString) unset, the body is
-   *             converted to a string and used in the response
-   * @throws IOException if the result code was 400 or higher
+   * Get the current token
+   * @return
    */
-  @throws(classOf[IOException])
-  def uprateFaults(verb: String, url: String, resultCode: Int, body: Array[Byte]): Unit = {
-    if (resultCode >= 400) {
-      val msg = s"$verb $url"
-      if (resultCode == 404) {
-        throw new FileNotFoundException(msg)
-      } else if (resultCode == 401) {
-        throw new PathPermissionException(msg)
-      }
-      val bodyText = if (body != null && body.length > 0) {
-          new String(body)
-        } else {
-          ""
-        }
-      val message = s"$msg failed with exit code $resultCode, body length" +
-          s" ${bodyText.length}\n${bodyText}"
-      logError(message)
-      throw new HttpRequestException(resultCode, verb, url, message, bodyText)
+  def getToken(): Token = {
+    this.synchronized {
+      token
     }
   }
 
+  /**
+   * Reset the inner token
+   */
+  def resetDelegationToken(): Unit = {
+    logDebug("Resetting the delegation token")
+    this.synchronized {
+      token.setDelegationToken(null)
+    }
+  }
+
+  /**
+   * Execute an HTTP operation
+   * @param verb request method
+   * @param url URL
+   * @param payload payload, can be null
+   * @param payloadContentType content type. Required if payload!=null
+   * @return the response
+   */
   def execHttpOperation(verb: String,
     url: URL,
     payload: Array[Byte],
@@ -181,10 +177,15 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
       if (hasData) {
         // submit any data
         val output = conn.getOutputStream
-        IOUtils.write(payload, output)
-        output.close()
+        try {
+          IOUtils.write(payload, output)
+        } finally {
+          output.close()
+        }
       }
       resultCode = conn.getResponseCode
+      outcome.responseCode = resultCode
+      outcome.responseMessage = conn.getResponseMessage
       outcome.lastModified = conn.getLastModified
       outcome.contentType = conn.getContentType
 
@@ -193,50 +194,28 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
         stream = conn.getInputStream
       }
       if (stream != null) {
-        body = IOUtils.toByteArray(stream)
-      }
-      else {
+        outcome.data = IOUtils.toByteArray(stream)
+      } else {
         log.debug("No body in response")
       }
+      // now check to see if the response indicated that the delegation token had expired.
     } finally {
       if (conn != null) {
         conn.disconnect
       }
     }
-    uprateFaults(verb, url.toString, resultCode, body)
-    outcome.responseCode = resultCode
-    outcome.data = body
+    if (SpnegoUrlConnector.delegationTokensExpired(outcome)) {
+      logInfo(s"Delegation token may have expired")
+      resetDelegationToken()
+      throw new UnauthorizedRequestException(url.toString,
+        s"Authentication failure: ${outcome.responseLine}")
+    }
+    SpnegoUrlConnector.uprateFaults(verb, url.toString, outcome)
     outcome
   }
+
 }
 
-/**
- * A response for use as a return value from operations
- */
-private[spark] class HttpOperationResponse {
-  var responseCode: Int = 0
-  var lastModified: Long = 0L
-  var contentType: String = ""
-  var data: Array[Byte] = new Array(0)
-
-
-  override def toString: String = {
-    s"status $responseCode; last modified $lastModified," +
-        s" contentType $contentType" +
-        s" data size=${if (data == null) -1 else data.length}}"
-  }
-
-  /**
-   * Convert the response data into a string and return it.
-   * <p>
-   * There must be some response data for this to work
-   * @return the body as a string.
-   */
-  def responseBody: String = {
-    require( data != null, "no response body in $this")
-    new String(data)
-  }
-}
 
 /**
  * Use UserGroupInformation as a fallback authenticator
@@ -255,7 +234,7 @@ private object KerberosUgiAuthenticator extends KerberosAuthenticator {
       }
     }
   }
-  
+
   protected override def getFallBackAuthenticator: Authenticator = {
     UgiAuthenticator
   }
@@ -298,13 +277,13 @@ private[spark] object SpnegoUrlConnector extends Logging {
    * @return a new instance
    */
   def newInstance(conf: Configuration,
-      token: DelegationTokenAuthenticatedURL.Token = new DelegationTokenAuthenticatedURL.Token): SpnegoUrlConnector = {
+      token: DelegationTokenAuthenticatedURL.Token): SpnegoUrlConnector = {
     var conn: ConnectionConfigurator = null
     try {
       conn = newSslConnConfigurator(DEFAULT_SOCKET_TIMEOUT, conf)
     } catch {
       case e: Exception => {
-        logDebug("Cannot load customized ssl related configuration." +
+        logInfo("Cannot load customized SSL related configuration." +
             " Fallback to system-generic settings.",
                   e)
         conn = DefaultConnectionConfigurator
@@ -336,4 +315,75 @@ private[spark] object SpnegoUrlConnector extends Logging {
       }
     }
   }
+
+
+  /**
+   * Uprate error codes 400 and up into exceptions, which are then thrown
+   * <p>
+   * 404 is converted to a `FileNotFoundException`
+   * 401 & 404 to `UnauthorizedRequestException`
+   * all others above 400: `IOException`
+   * Any error code under 400 is not considered a failure; this function will return normally.
+   * @param verb HTTP Verb used
+   * @param url URL as string
+   * @param response response from the request
+   * @throws IOException if the result code was 400 or higher
+   */
+  @throws(classOf[IOException])
+  def uprateFaults(verb: String, url: String,
+      response: HttpOperationResponse): Unit = {
+    val resultCode: Int = response.responseCode
+    val body: Array[Byte] = response.data;
+    val errorText = s"$verb $url"
+    resultCode match {
+
+        // 401 & 403
+      case HttpServletResponse.SC_UNAUTHORIZED
+        | HttpServletResponse.SC_FORBIDDEN =>
+        throw new UnauthorizedRequestException(url, errorText)
+
+      case 404 =>
+        throw new FileNotFoundException(errorText)
+
+
+      case resultCode: Int if resultCode >= 400 =>
+        val bodyText = if (body != null && body.length > 0) {
+          new String(body)
+        } else {
+          ""
+        }
+        val message = s"$errorText failed with exit code $resultCode, body length" +
+            s" ${bodyText.length }\n${bodyText }"
+        logError(message)
+        throw new HttpRequestException(resultCode, verb, url, message, bodyText)
+
+      case _ =>
+        //success
+    }
+  }
+
+  val ANONYMOUS_REQUESTS_DISALLOWED = "Anonymous requests are disallowed"
+  val INVALID_SIGNATURE = "Invalid signature"
+
+  /**
+   * Look for specific error codes or messages as a cue for
+   * raising a RetryRequestException
+   * @param response response to analyse
+   * @return true if this is a 40x exception that may be addressed by renewing
+   *         the delegation tokens
+   */
+  def delegationTokensExpired(response: HttpOperationResponse): Boolean = {
+    val message = response.responseMessage
+    response.responseCode match {
+      case HttpURLConnection.HTTP_UNAUTHORIZED =>
+        true
+      case HttpURLConnection.HTTP_FORBIDDEN
+        if message == ANONYMOUS_REQUESTS_DISALLOWED ||
+            message.contains(INVALID_SIGNATURE) =>
+        true
+      case _ =>
+        false
+    }
+  }
+
 }

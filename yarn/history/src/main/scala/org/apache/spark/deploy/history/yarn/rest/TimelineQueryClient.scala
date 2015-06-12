@@ -28,6 +28,7 @@ import scala.collection.JavaConverters._
 import com.sun.jersey.api.client.config.ClientConfig
 import com.sun.jersey.api.client.{Client, ClientResponse, WebResource}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.security.token.delegation.web.DelegationTokenAuthenticatedURL
 import org.apache.hadoop.yarn.api.records.timeline.{TimelineEntities, TimelineEntity}
 import org.codehaus.jackson.annotate.{JsonAnySetter, JsonIgnoreProperties}
@@ -59,16 +60,27 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
   var token: DelegationTokenAuthenticatedURL.Token = new DelegationTokenAuthenticatedURL.Token
 
   /**
+   * Jersey binding -this exposes the method to reset the token
+   */
+  val jerseyBinding = new JerseyBinding(conf, token)
+
+  /**
    * Jersey Client using config from constructor
    */
-  val jerseyClient: Client = {
-    JerseyBinding.createJerseyClient(conf, jerseyClientConfig, token)
-  }
+  val jerseyClient: Client = jerseyBinding.createClient(conf, jerseyClientConfig)
 
   /**
    * Base resource of ATS
    */
   private val timelineResource = jerseyClient.resource(timelineURI)
+
+  init()
+
+  private def init(): Unit = {
+    logDebug("logging in ")
+    UserGroupInformation.getCurrentUser.checkTGTAndReloginFromKeytab
+
+  }
 
   /**
    * When this instance is closed, the jersey client is stopped
@@ -120,17 +132,29 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
    * into more specific exceptions.
    * @param uri URI (used when generating text reporting exceptions)
    * @param action action to perform
+   * @param retries  number of retries on any failed operation
    * @tparam T type of response
    * @return the result of the action
    */
-  def exec[T](verb: String, uri: URI, action: (() => T)): T = {
+  def exec[T](verb: String, uri: URI, action: (() => T), retries: Int = 1): T = {
     logDebug(s"$verb $uri")
     try {
       innerExecAction(action)
     } catch {
       case e: Exception =>
-        logWarning(s"$verb $uri failed", e)
-        throw JerseyBinding.translateException(verb, uri, e)
+        val exception = JerseyBinding.translateException(verb, uri, e)
+        logWarning(s"$verb $uri failed: $exception", exception)
+        if (exception.isInstanceOf[UnauthorizedRequestException]) {
+          // possible expiry
+          logInfo("Attempting to renew delegation token")
+          jerseyBinding.resetDelegationToken()
+        }
+        if (retries > 0) {
+          logInfo("retrying")
+          exec(verb, uri, action, retries-1)
+        } else {
+          throw exception
+        }
     }
   }
 

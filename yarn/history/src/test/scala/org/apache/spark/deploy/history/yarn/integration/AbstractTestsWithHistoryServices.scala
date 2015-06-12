@@ -20,6 +20,7 @@ package org.apache.spark.deploy.history.yarn.integration
 import java.net.{Socket, URL}
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.security.token.delegation.web.DelegationTokenAuthenticatedURL
 import org.apache.hadoop.service.{Service, ServiceOperations}
 import org.apache.hadoop.yarn.api.records.timeline.{TimelineEntity, TimelineEvent, TimelinePutResponse}
 import org.apache.hadoop.yarn.client.api.TimelineClient
@@ -96,7 +97,8 @@ abstract class AbstractTestsWithHistoryServices
    * @return a URL connector for issuing HTTP requests
    */
   protected def createUrlConnector(): SpnegoUrlConnector = {
-    SpnegoUrlConnector.newInstance(sparkCtx.hadoopConfiguration)
+    SpnegoUrlConnector.newInstance(sparkCtx.hadoopConfiguration,
+      new DelegationTokenAuthenticatedURL.Token)
   }
 
   /**
