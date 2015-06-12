@@ -138,20 +138,21 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
    */
   def exec[T](verb: String, uri: URI, action: (() => T), retries: Int = 1): T = {
     logDebug(s"$verb $uri")
-    try {
+    try { {
       innerExecAction(action)
+    }
     } catch {
       case e: Exception =>
         val exception = JerseyBinding.translateException(verb, uri, e)
         logWarning(s"$verb $uri failed: $exception", exception)
         if (exception.isInstanceOf[UnauthorizedRequestException]) {
           // possible expiry
-          logInfo("Attempting to renew delegation token")
+          logInfo("Resetting delegation token")
           jerseyBinding.resetDelegationToken()
         }
         if (retries > 0) {
-          logInfo("retrying")
-          exec(verb, uri, action, retries-1)
+          logInfo(s"Retrying -remaining attempts: $retries")
+          exec(verb, uri, action, retries - 1)
         } else {
           throw exception
         }

@@ -37,7 +37,8 @@ private[spark] class LoggingKerberosDelegationTokenAuthenticator
     super.authenticate(url, token)
     val updated = tokenToString(token)
     if (updated != orig) {
-      logInfo(s"Token updated against $url to $updated")
+      logInfo(s"Token updated against $url")
+      logDebug(s"New Token: $updated")
     }
   }
 
@@ -63,7 +64,8 @@ private[spark] class LoggingKerberosDelegationTokenAuthenticator
     val result = super.renewDelegationToken(url, token, dToken, doAsUser)
     val updated = dToken.toString
     if (updated != orig) {
-      logInfo(s"Delegation Token updated against $url to $updated")
+      logInfo(s"Delegation Token updated against $url")
+      logDebug(s"New Token: $updated")
     }
     result
   }
