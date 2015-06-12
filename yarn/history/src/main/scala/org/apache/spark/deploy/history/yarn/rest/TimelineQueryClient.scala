@@ -78,7 +78,7 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
 
   private def init(): Unit = {
     logDebug("logging in ")
-    UserGroupInformation.getCurrentUser.checkTGTAndReloginFromKeytab
+    UserGroupInformation.getCurrentUser.checkTGTAndReloginFromKeytab()
 
   }
 
@@ -147,8 +147,7 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
         logWarning(s"$verb $uri failed: $exception", exception)
         if (exception.isInstanceOf[UnauthorizedRequestException]) {
           // possible expiry
-          logInfo("Resetting delegation token")
-          jerseyBinding.resetDelegationToken()
+          resetDelegationToken()
         }
         if (retries > 0) {
           logInfo(s"Retrying -remaining attempts: $retries")
@@ -157,6 +156,16 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
           throw exception
         }
     }
+  }
+
+  /**
+   * Reset the delegation token. Also triggers a TGT login,
+   * just for completeness
+   */
+  def resetDelegationToken(): Unit = {
+    logInfo("Resetting delegation token")
+    jerseyBinding.resetDelegationToken()
+    UserGroupInformation.getCurrentUser.checkTGTAndReloginFromKeytab()
   }
 
   /**
