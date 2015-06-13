@@ -67,6 +67,10 @@ for %%d in ("%HADOOP_HOME%\share\hadoop\common\hadoop-common-*.jar") do (
     set CLASSPATH=%CLASSPATH%;%%d
 )
 
+for %%d in ("%HADOOP_HOME%\share\hadoop\common\hadoop-lzo-*.jar") do (
+    set CLASSPATH=%CLASSPATH%;%%d
+)
+
 for %%d in ("%HADOOP_HOME%\share\hadoop\common\hadoop-azure-*.jar") do (
     set CLASSPATH=%CLASSPATH%;%%d
 )
