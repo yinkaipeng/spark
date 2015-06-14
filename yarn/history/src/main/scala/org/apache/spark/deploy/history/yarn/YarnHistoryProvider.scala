@@ -87,6 +87,8 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   private val refreshInterval = sparkConf.getInt(YarnHistoryProvider.OPTION_UPDATE_INTERVAL,
     YarnHistoryProvider.DEFAULT_UPDATE_INTERVAL_SECONDS)
 
+  val serviceStartTime = System.currentTimeMillis()
+
   /**
    * Timeline endpoint URI
    */
@@ -564,6 +566,8 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       val failure = getLastFailure()
       var state = Map(
         YarnHistoryProvider.KEY_PROVIDER_NAME -> "Apache Hadoop YARN Timeline Service",
+        YarnHistoryProvider.KEY_START_TIME ->
+            humanDateCurrentTZ(serviceStartTime, "(not started)"),
         YarnHistoryProvider.KEY_SERVICE_URL -> s"$timelineURI",
         YarnHistoryProvider.KEY_ENABLED ->
            (if (enabled) YarnHistoryProvider.TEXT_SERVICE_ENABLED
@@ -665,6 +669,7 @@ object YarnHistoryProvider {
    */
   val KEY_PROVIDER_NAME = "History Provider"
 
+  val KEY_START_TIME = "Service Started"
   val KEY_LAST_UPDATED = "Last Updated"
   val KEY_LAST_FAILURE = "Last Operation Failure"
   val KEY_LAST_FAILURE_TIME = "Last Operation Failed"

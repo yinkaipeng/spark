@@ -93,6 +93,7 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
    */
 
   def getHttpURLConnection(url: URL): HttpURLConnection = {
+    UserGroupInformation.getCurrentUser.checkTGTAndReloginFromKeytab
     val isProxyAccess =
       UserGroupInformation.getCurrentUser.getAuthenticationMethod ==
           UserGroupInformation.AuthenticationMethod.PROXY
