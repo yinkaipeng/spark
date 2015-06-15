@@ -179,6 +179,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
     } else {
       logInfo(YarnHistoryProvider.TEXT_SERVICE_ENABLED)
       logInfo(YarnHistoryProvider.KEY_SERVICE_URL + ": " + timelineEndpoint)
+      logDebug(sparkConf.toDebugString)
       // get the thread time
       logInfo(s"refresh interval $refreshInterval seconds")
       if (refreshInterval <= 0) {
