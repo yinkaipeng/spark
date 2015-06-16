@@ -50,10 +50,10 @@ private[spark] class JerseyBinding(conf: Configuration, token: DelegationTokenAu
   }
   
   /**
-  * reset the delegation token
+  * reset the token
    */
-  def resetDelegationToken(): Unit = {
-    connector.resetDelegationToken()
+  def resetToken(): Unit = {
+    connector.resetToken()
   }
 
   /**

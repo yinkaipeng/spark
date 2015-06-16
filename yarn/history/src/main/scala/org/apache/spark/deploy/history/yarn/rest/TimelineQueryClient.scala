@@ -53,6 +53,8 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
    */
   private val closed = new AtomicBoolean(false)
   private val timelineURL = timelineURI.toURL
+  private val retryLimit = 3
+  private val retry_interval = 100
 
   /**
    * the delegation token used
@@ -139,7 +141,7 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
    * @tparam T type of response
    * @return the result of the action
    */
-  def exec[T](verb: String, uri: URI, action: (() => T), retries: Int = 1): T = {
+  def exec[T](verb: String, uri: URI, action: (() => T), retries: Int = retryLimit): T = {
     logDebug(s"$verb $uri")
     try {
       innerExecAction(action)
@@ -153,6 +155,7 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
         }
         if (retries > 0) {
           logInfo(s"Retrying -remaining attempts: $retries")
+          Thread.sleep(retry_interval)
           exec(verb, uri, action, retries - 1)
         } else {
           throw exception
@@ -167,6 +170,7 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
   def resetConnection(): Unit = {
     logInfo("Resetting connection")
     UserGroupInformation.getCurrentUser.checkTGTAndReloginFromKeytab()
+    jerseyBinding.resetToken()
   }
 
   /**

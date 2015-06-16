@@ -38,10 +38,10 @@ import org.apache.spark.Logging
  * <code>org.apache.hadoop.hdfs.web.URLConnectionFactory</code>
  */
 private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator,
-  token: DelegationTokenAuthenticatedURL.Token) extends Logging {
+  delegationToken: DelegationTokenAuthenticatedURL.Token) extends Logging {
 
   val secure = UserGroupInformation.isSecurityEnabled
-  val authToken: AuthenticatedURL.Token = new AuthenticatedURL.Token
+  var authToken = new AuthenticatedURL.Token
 
   // choose an authenticator based on security settings
   val delegationAuthenticator: DelegationTokenAuthenticator =
@@ -170,19 +170,26 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
    * Get the current token
    * @return
    */
-  def getToken(): Token = {
+  def getDelegationToken(): Token = {
     this.synchronized {
-      token
+      delegationToken
+    }
+  }
+
+  def getAuthToken(): AuthenticatedURL.Token = {
+    this.synchronized {
+      authToken
     }
   }
 
   /**
    * Reset the inner token
    */
-  def resetDelegationToken(): Unit = {
-    logDebug("Resetting the delegation token")
+  def resetToken(): Unit = {
+    logInfo("Resetting the auth tokens")
     this.synchronized {
-      token.setDelegationToken(null)
+      authToken = new AuthenticatedURL.Token
+      delegationToken.setDelegationToken(null)
     }
   }
 
@@ -246,7 +253,7 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
     }
     if (SpnegoUrlConnector.delegationTokensExpired(outcome)) {
       logInfo(s"Delegation token may have expired")
-      resetDelegationToken()
+      resetToken()
       throw new UnauthorizedRequestException(url.toString,
         s"Authentication failure: ${outcome.responseLine}")
     }
