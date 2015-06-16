@@ -41,16 +41,23 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
   token: DelegationTokenAuthenticatedURL.Token) extends Logging {
 
   val secure = UserGroupInformation.isSecurityEnabled
+  val authToken: AuthenticatedURL.Token = new AuthenticatedURL.Token
 
   // choose an authenticator based on security settings
-  val authenticator: DelegationTokenAuthenticator =
+  val delegationAuthenticator: DelegationTokenAuthenticator =
     if (secure)  {
       new LoggingKerberosDelegationTokenAuthenticator()
     } else {
       new PseudoDelegationTokenAuthenticator
     }
 
-  authenticator.setConnectionConfigurator(connConfigurator)
+  init()
+
+  private def init(): Unit = {
+    logDebug(s"using $delegationAuthenticator for authentication")
+    delegationAuthenticator.setConnectionConfigurator(connConfigurator)
+  }
+
 
   /**
    * Opens a URL
@@ -91,37 +98,69 @@ private[spark] class SpnegoUrlConnector(connConfigurator: ConnectionConfigurator
    * @return URLConnection
    * @throws IOException problems.
    */
-
   def getHttpURLConnection(url: URL): HttpURLConnection = {
+    getHttpURLConnectionDirect(url)
+  }
+  /**
+   * Opens a URL with cache disabled; redirect handled in
+   * (JDK) implementation.
+   *
+   *
+   * @param url URL to open
+   * @return URLConnection
+   * @throws IOException problems.
+   */
+
+  def getHttpURLConnectionDirect(url: URL): HttpURLConnection = {
+    val callerUGI = UserGroupInformation.getCurrentUser
+    callerUGI.checkTGTAndReloginFromKeytab
+    openConnection(url, callerUGI, null)
+  }
+
+  /**
+   * Opens a URL with proxy mechanisms
+   *
+   *
+   * @param url URL to open
+   * @return URLConnection
+   * @throws IOException problems.
+   */
+
+  def getHttpURLConnectionProxied(url: URL): HttpURLConnection = {
     UserGroupInformation.getCurrentUser.checkTGTAndReloginFromKeytab
     val isProxyAccess =
       UserGroupInformation.getCurrentUser.getAuthenticationMethod ==
           UserGroupInformation.AuthenticationMethod.PROXY
     val callerUGI = if (isProxyAccess) {
-        UserGroupInformation.getCurrentUser.getRealUser
-      } else {
-        UserGroupInformation.getCurrentUser
-      }
+      UserGroupInformation.getCurrentUser.getRealUser
+    } else {
+      UserGroupInformation.getCurrentUser
+    }
     val doAsUser = if (isProxyAccess) {
-        UserGroupInformation.getCurrentUser.getShortUserName
-      } else {
-        null
-      }
+      UserGroupInformation.getCurrentUser.getShortUserName
+    } else {
+      null
+    }
+    openConnection(url, callerUGI, doAsUser)
+  }
+
+  def openConnection(url: URL, callerUGI: UserGroupInformation,
+      doAsUser: String): HttpURLConnection = {
     val conn = callerUGI.doAs(new PrivilegedFunction(
-        (() => {
-          try {
-            new DelegationTokenAuthenticatedURL(authenticator, connConfigurator)
-                .openConnection(url, getToken, doAsUser)
-          } catch {
-            case ex: AuthenticationException =>
-              // auth failure
-              throw new UnauthorizedRequestException(url.toString,
-                s"Authentication failure as $callerUGI against $url: $ex", ex)
-            case other: Throwable =>
-              // anything else is rethrown
-              throw other
-          }
-        })))
+      (() => {
+        try {
+          new AuthenticatedURL(KerberosUgiAuthenticator,
+            connConfigurator).openConnection(url, authToken)
+        } catch {
+          case ex: AuthenticationException =>
+            // auth failure
+            throw new UnauthorizedRequestException(url.toString,
+              s"Authentication failure as $callerUGI against $url: $ex", ex)
+          case other: Throwable =>
+            // anything else is rethrown
+            throw other
+        }
+      })))
     conn.setUseCaches(false)
     conn.setInstanceFollowRedirects(true)
     conn
@@ -300,21 +339,31 @@ private[spark] object SpnegoUrlConnector extends Logging {
   def newSslConnConfigurator(timeout: Int, conf: Configuration): ConnectionConfigurator = {
     val factory: SSLFactory = new SSLFactory(SSLFactory.Mode.CLIENT, conf)
     factory.init
+    new SSLConnConfigurator(timeout, factory )
+  }
+
+  /**
+   * The SSL connection configurator
+   * @param timeout connection timeout
+   * @param factory socket factory
+   */
+  private[rest] class SSLConnConfigurator(timeout: Int, factory: SSLFactory)
+      extends ConnectionConfigurator {
     val sf = factory.createSSLSocketFactory
     val hv = factory.getHostnameVerifier
-    new ConnectionConfigurator {
-      @throws(classOf[IOException])
-      def configure(conn: HttpURLConnection): HttpURLConnection = {
-        conn match {
-          case c: HttpsURLConnection =>
-            c.setSSLSocketFactory(sf)
-            c.setHostnameVerifier(hv)
-          case _ =>
-        }
-        setTimeouts(conn, timeout)
-        conn
+
+    @throws(classOf[IOException])
+    def configure(conn: HttpURLConnection): HttpURLConnection = {
+      conn match {
+        case c: HttpsURLConnection =>
+          c.setSSLSocketFactory(sf)
+          c.setHostnameVerifier(hv)
+        case _ =>
       }
+      setTimeouts(conn, timeout)
+      conn
     }
+
   }
 
 
