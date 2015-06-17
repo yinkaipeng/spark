@@ -394,9 +394,16 @@ private[spark] object YarnTimelineUtils extends Logging {
     } catch {
       case NonFatal(e) => endTime = 0L
     }
+    val startTime = try {
+      numberField(en, FIELD_START_TIME).longValue
+    } catch {
+      case NonFatal(e) => 0L
+    }
+    var lastUpdated = Math.max(startTime, endTime)
+
     ApplicationHistoryInfo(en.getEntityId(),
       field(en, FIELD_APP_NAME).asInstanceOf[String],
-      numberField(en, FIELD_START_TIME).longValue,
+      startTime,
       endTime,
       endTime,
       field(en, FIELD_APP_USER).asInstanceOf[String],

@@ -81,13 +81,21 @@ class TimelineListenerSuite extends AbstractTestsWithHistoryServices {
     assertResult(started.sparkUser, s"username in $info") {
       info.sparkUser
     }
-    assertResult(started.time, s"time in $info") {
+    assertResult(startTime, s"started.time != startTime") {
+      started.time
+    }
+    assertResult(started.time, s"info.startTime != started.time in $info") {
       info.startTime
     }
-    assertResult(yarnAppId, s"app ID in $info") {
+    assertResult(yarnAppId, s"info.id != yarnAppId in $info") {
       info.id
     }
-    assertResult(started.appName, s"application name in $info") {
+    assert(info.endTime> 0, s"end time is 0 in $info")
+    // on a completed app, lastUpdated is the end time
+    assertResult(info.endTime, s"info.lastUpdated != info.endTime time in $info") {
+      info.lastUpdated
+    }
+    assertResult(started.appName, s"info.name != started.appName in $info") {
       info.name
     }
     val appUI = provider.getAppUI(info.id)
