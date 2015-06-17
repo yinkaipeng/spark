@@ -381,6 +381,11 @@ function Configure(
         Write-Log "Updating hive-site.xml for Spark"
         UpdateXmlConfig "$ENV:SPARK_HOME\conf\hive-site.xml" @{"hive.metastore.uris" = "thrift://${ENV:HIVE_SERVER_HOST}:9083"}
       
+        #Updating log4j.properties for Spark
+        Write-Log "Updating log4j.properties for Spark"
+        (gc "$ENV:SPARK_HOME\conf\log4j.properties") -replace 'log4jspark.log.dir=.',"log4jspark.log.dir=$ENV:SPARK_HOME\conf\"|sc "$ENV:SPARK_HOME\conf\log4j.properties"
+   
+      
         Write-Log "Configuration of spark is finished"
     }
     else
