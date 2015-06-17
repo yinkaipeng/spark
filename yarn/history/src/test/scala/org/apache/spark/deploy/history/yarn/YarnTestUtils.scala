@@ -447,7 +447,14 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
       connector.execHttpOperation("GET", url, null, "").responseBody
     }
     def probe(): Outcome = {
-      outcomeFromBool(!get.contains(text))
+      try {
+        outcomeFromBool(!get.contains(text))
+      } catch {
+        case ioe: IOException =>
+          Retry()
+        case ex: Exception =>
+          throw ex;
+      }
     }
 
     /*
@@ -477,7 +484,14 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
       connector.execHttpOperation("GET", url, null, "").responseBody
     }
     def probe(): Outcome = {
-      outcomeFromBool(get.contains(text))
+      try {
+        outcomeFromBool(get.contains(text))
+      } catch {
+        case ioe: IOException =>
+          Retry()
+        case ex: Exception =>
+          throw ex;
+      }
     }
 
     /*

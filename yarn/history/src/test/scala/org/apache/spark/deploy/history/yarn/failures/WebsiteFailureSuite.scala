@@ -45,7 +45,9 @@ class WebsiteFailureSuite extends AbstractTestsWithHistoryServices {
     val connector = createUrlConnector()
 
     awaitRefreshExecuted(provider, TEST_STARTUP_DELAY)
-    awaitURLContainsText(connector, webUI, FailingTimelineQueryClient.ERROR_TEXT, TEST_STARTUP_DELAY)
+    awaitURL(webUI, TEST_STARTUP_DELAY)
+    awaitURLContainsText(connector, webUI,
+      FailingTimelineQueryClient.ERROR_TEXT, TEST_STARTUP_DELAY)
 
     // get that last exception
     provider.getLastFailure() match {

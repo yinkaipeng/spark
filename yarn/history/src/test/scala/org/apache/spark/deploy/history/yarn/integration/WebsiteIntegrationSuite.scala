@@ -94,7 +94,7 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
 
       //and look for the complete app
 
-      val complete = connector.execHttpOperation("GET", webUI, null, "")
+      awaitURL(webUI, TEST_STARTUP_DELAY)
       val completeBody = awaitURLDoesNotContainText(connector, webUI,
            no_completed_applications, TEST_STARTUP_DELAY)
       logInfo(s"GET /\n$completeBody")

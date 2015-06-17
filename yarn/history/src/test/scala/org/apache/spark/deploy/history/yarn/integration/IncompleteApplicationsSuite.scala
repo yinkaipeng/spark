@@ -56,9 +56,12 @@ class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
   test("Publish Events and GET the web UI") {
     def submitAndCheck(webUI: URL, provider: YarnHistoryProvider): Unit = {
       val connector = createUrlConnector()
+      val incompleteURL = new URL(webUI, "/?" + incomplete_flag)
+      awaitURL(incompleteURL, TEST_STARTUP_DELAY)
+
       def listIncompleteApps: String = {
         connector.execHttpOperation("GET",
-                                     new URL(webUI, "/?" + incomplete_flag), null, "").responseBody
+                                     incompleteURL, null, "").responseBody
       }
       historyService = startHistoryService(sparkCtx)
       val timeline = historyService.getTimelineServiceAddress()
@@ -115,7 +118,7 @@ class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
 
       //and look for the complete app
 
-      val complete = connector.execHttpOperation("GET", webUI, null, "")
+      awaitURL(webUI, TEST_STARTUP_DELAY)
       val completeBody = awaitURLDoesNotContainText(connector, webUI,
            no_completed_applications, TEST_STARTUP_DELAY)
       // look for the link
