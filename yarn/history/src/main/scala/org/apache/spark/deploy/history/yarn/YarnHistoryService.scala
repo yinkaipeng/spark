@@ -35,6 +35,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.YarnExtensionService
+import org.apache.spark.util.Utils
 import org.apache.spark.{Logging, SparkContext}
 
 /**
@@ -58,7 +59,7 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
   private var timelineClient: Option[TimelineClient] = None
   private var listener: YarnEventListener = _
   private var appName: String = null
-  private var userName: String = null
+  private var userName: String = Utils.getCurrentUserName()
   private var startTime: Long = _
 
 
@@ -449,11 +450,13 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
       val count = flushCount.incrementAndGet()
       logDebug(s"flushEntity #$count: list size ${entityList.size}")
       var client = getTimelineClient
+      val lastUpdated = now()
       entityList = entityList.filter {
         en => {
           if (en == null) {
             false
           } else {
+            en.addOtherInfo(YarnHistoryService.FIELD_LAST_UPDATED, lastUpdated)
             if (domainId != null) {
               en.setDomainId(domainId)
             }
@@ -559,15 +562,17 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
           }
           // flush old entity
           resetCurrentEntity()
+          appStartEventProcessed = true
+          appEndEventProcessed = false
           // force create the new one
           val en = getCurrentEntity
           en.addPrimaryFilter(YarnHistoryService.FILTER_APP_START,
             YarnHistoryService.FILTER_APP_START_VALUE)
           en.addOtherInfo(YarnHistoryService.FIELD_START_TIME,
                            startTime)
+          en.addOtherInfo(YarnHistoryService.FIELD_LAST_UPDATED, startTime)
           push = true
-          appStartEventProcessed = true
-          appEndEventProcessed = false
+
 
         case end: SparkListenerApplicationEnd =>
           if (!appEndEventProcessed) {
@@ -593,7 +598,8 @@ private[spark] class YarnHistoryService  extends AbstractService("History Servic
                                  YarnHistoryService.FILTER_APP_END_VALUE)
             en.addOtherInfo(YarnHistoryService.FIELD_START_TIME,
                              startTime)
-            en.addOtherInfo(YarnHistoryService.FIELD_END_TIME, end.time)
+            en.addOtherInfo(YarnHistoryService.FIELD_LAST_UPDATED, endtime)
+            en.addOtherInfo(YarnHistoryService.FIELD_END_TIME, endtime)
             appEndEventProcessed = true
             appStartEventProcessed = false
             push = true
@@ -799,6 +805,7 @@ private[spark] object YarnHistoryService {
   val PRIMARY_KEY = "spark_application_entity"
 
   val FIELD_START_TIME = "startTime"
+  val FIELD_LAST_UPDATED = "lastUpdated"
   val FIELD_END_TIME = "endTime"
   val FIELD_APP_NAME = "appName"
   val FIELD_APP_USER = "appUser"

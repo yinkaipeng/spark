@@ -21,7 +21,7 @@ package org.apache.spark.deploy.history.yarn
 import java.io.IOException
 import java.net.{URI, URL}
 import java.text.DateFormat
-import java.util
+import java.{lang, util}
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.{ArrayList => JArrayList, Collection => JCollection, HashMap => JHashMap, Map => JMap, Date}
 
@@ -172,16 +172,28 @@ private[spark] object YarnTimelineUtils extends Logging {
 
   def describeEntity(entity: TimelineEntity): String = {
     val events: util.List[TimelineEvent] = entity.getEvents
-    val eventDetails = if (events != null) {
+    val eventSummary = if (events != null) {
       s"contains ${events.size()} event(s)"
     } else {
       "contains no events"
     }
 
-    s"Timeline Entity ${entity.getEntityType}/${entity.getEntityId}@${entity.getDomainId}} " +
-        (if (entity.getStartTime() != null)
-           s"${new Date(entity.getStartTime())} " else "no start time ") +
-        eventDetails
+    val header = s"${entity.getEntityType }/${entity.getEntityId }@${entity.getDomainId }}"
+    val otherInfo = entity.getOtherInfo().foldLeft("\n") (
+      (acc,kv) => acc + s"${kv._1} = ${kv._2}"
+    )
+    s"Timeline Entity " + header +
+        " " + otherInfo +
+        " " + timeFieldToString(entity.getStartTime(), "start") +
+        " " + eventSummary
+  }
+
+  def timeFieldToString(time: lang.Long, field: String): String = {
+    if (time != null) {
+      s"${new Date(time) } "
+    } else {
+       ("no " + field + " time ")
+     }
   }
 
   /**
@@ -363,17 +375,21 @@ private[spark] object YarnTimelineUtils extends Logging {
   }
 
   /**
-   * Lookup a required numeric field in the `otherInfo` section of a [[TimelineEntity]]
+   * Lookup a required numeric field in the `otherInfo` section of a [[TimelineEntity]],
+   * fall back to `defval` if the field is absent or cannot be parsed
    * @param en entity
    * @param name field name
+   * @param defval default value
    * @return the value
-   * @throws Exception if the field is not found or it is not a number
    */
-  private def numberField(en: TimelineEntity, name: String) : Number = {
-    val contents = field(en, name)
-    contents match {
-      case n: Number => n
-      case _ => 0L
+  private def numberField(en: TimelineEntity, name: String, defval:Long = 0L) : Number = {
+    try {
+      field(en, name) match {
+        case n: Number => n
+        case _ => defval
+      }
+    } catch {
+      case NonFatal(e) => defval
     }
   }
 
@@ -381,31 +397,27 @@ private[spark] object YarnTimelineUtils extends Logging {
    * Build an [[ApplicationHistoryInfo]] instance from
    * a [[TimelineEntity]]
    * @param en the entity
-   * @return an history info structure. The completed bit is strue if the entity has an
+   * @return an history info structure. The completed bit is true if the entity has an
    *         end time.
    * @throws Exception if the entity lacked an entry of that key
    * @throws ClassCastException if the the key contained value, but it
    *                            could not be converted to the desired type
    */
   def toApplicationHistoryInfo(en: TimelineEntity) : ApplicationHistoryInfo = {
-    var endTime = 0L
-    try {
-      endTime = numberField(en, FIELD_END_TIME).longValue
-    } catch {
-      case NonFatal(e) => endTime = 0L
+    val endTime = numberField(en, FIELD_END_TIME).longValue
+    val startTime = numberField(en, FIELD_START_TIME).longValue
+    val lastTimestamp = Math.max(startTime, endTime)
+    var lastUpdated = numberField(en, FIELD_LAST_UPDATED).longValue
+    if (lastUpdated < lastTimestamp) {
+      logDebug(s"Updated time $lastUpdated < latest event $lastTimestamp, overwriting")
+      lastUpdated = lastTimestamp
     }
-    val startTime = try {
-      numberField(en, FIELD_START_TIME).longValue
-    } catch {
-      case NonFatal(e) => 0L
-    }
-    var lastUpdated = Math.max(startTime, endTime)
 
     ApplicationHistoryInfo(en.getEntityId(),
       field(en, FIELD_APP_NAME).asInstanceOf[String],
       startTime,
       endTime,
-      endTime,
+      lastUpdated,
       field(en, FIELD_APP_USER).asInstanceOf[String],
       endTime > 0)
   }
