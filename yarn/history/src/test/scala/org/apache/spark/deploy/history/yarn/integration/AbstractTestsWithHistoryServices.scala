@@ -83,7 +83,7 @@ abstract class AbstractTestsWithHistoryServices
                     interval = 50,
                     timeout = TEST_STARTUP_DELAY,
                     probe = (() => outcomeFromBool(!historyService.isPostThreadActive)),
-                    failure = (_, _) => ())
+                    failure = (_, _, _) => ())
       ServiceOperations.stopQuietly(historyService)
       awaitServiceThreadStopped(historyService, TEST_STARTUP_DELAY)
     }

@@ -21,9 +21,9 @@ import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.history.yarn.YarnHistoryProvider
 import org.apache.spark.deploy.history.yarn.rest.{JerseyBinding, TimelineQueryClient}
+import org.apache.spark.{Logging, SparkConf}
 
 /**
  * This is a YARN history provider that can be given
@@ -39,7 +39,8 @@ class FailingYarnHistoryProvider(
     queryClient: TimelineQueryClient,
     healthAlreadyChecked: Boolean,
     endpoint: URI,
-    sparkConf: SparkConf) extends YarnHistoryProvider(sparkConf) with Logging {
+    sparkConf: SparkConf,
+    refreshEnabled: Boolean = false) extends YarnHistoryProvider(sparkConf) with Logging {
 
   init()
 
@@ -89,6 +90,26 @@ class FailingYarnHistoryProvider(
     getHealthFlag().set(b)
   }
 
+
+  /**
+   * export the health chck for testing
+   */
+  override def maybeCheckHealth(): Boolean = {
+    super.maybeCheckHealth()
+  }
+
+  /**
+   * Start the refresh thread with the given interval.
+   *
+   * When this thread exits, it will close the `timelineQueryClient`
+   * instance
+   * @param interval sleep interval, must be greater than zero
+   */
+  override def startRefreshThread(interval: Long): Unit = {
+    if (refreshEnabled) {
+      super.startRefreshThread(interval)
+    }
+  }
 }
 
 /**
@@ -132,11 +153,14 @@ object FailingYarnHistoryProvider extends Logging {
    * This inner provider calls most of its internal methods.
    * @return
    */
-  def createFailingProvider(sparkConf: SparkConf, healthAlreadyChecked: Boolean = false): YarnHistoryProvider = {
+  def createFailingProvider(sparkConf: SparkConf,
+      healthAlreadyChecked: Boolean = false,
+      refreshEnabled: Boolean = false): YarnHistoryProvider = {
     val failingClient = createQueryClient()
     new FailingYarnHistoryProvider(failingClient,
       healthAlreadyChecked,
       new URI("http://localhost:80/"),
-      sparkConf)
+      sparkConf,
+      refreshEnabled)
   }
 }

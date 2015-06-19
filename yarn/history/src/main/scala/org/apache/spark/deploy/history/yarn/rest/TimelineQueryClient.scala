@@ -17,7 +17,7 @@
  */
 package org.apache.spark.deploy.history.yarn.rest
 
-import java.io.Closeable
+import java.io.{FileNotFoundException, Closeable}
 import java.net.{URI, URL}
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.servlet.http.HttpServletResponse
@@ -36,6 +36,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.Logging
+import org.apache.spark.deploy.history.yarn.rest.UnauthorizedRequestException
 
 /**
  * A class to make queries of the Timeline sever through a Jersey client.
@@ -148,10 +149,18 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
     } catch {
       case e: Exception =>
         val exception = JerseyBinding.translateException(verb, uri, e)
-        logWarning(s"$verb $uri failed: $exception", exception)
-        if (exception.isInstanceOf[UnauthorizedRequestException]) {
-          // possible expiry
-          resetConnection()
+        logDebug(s"$verb $uri failed: $exception", exception)
+        exception match {
+          case ure: FileNotFoundException =>
+            logInfo(s"Not found: $uri")
+
+          case ure: UnauthorizedRequestException =>
+            // possible expiry
+            logInfo(s"Renewing Auth token due to $exception")
+            resetConnection()
+
+          case other: Exception =>
+            logWarning(s"$verb $uri failed: $exception", exception)
         }
         if (retries > 0) {
           logInfo(s"Retrying -remaining attempts: $retries")

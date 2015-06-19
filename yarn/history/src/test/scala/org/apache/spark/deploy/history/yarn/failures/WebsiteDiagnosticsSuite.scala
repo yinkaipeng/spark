@@ -27,6 +27,11 @@ import org.apache.spark.deploy.history.yarn.rest.{HttpRequestException, JerseyBi
 import org.apache.spark.deploy.history.yarn.{YarnHistoryProvider, YarnHistoryService}
 import org.apache.spark.scheduler.cluster.YarnExtensionServices
 
+/**
+ * Test reporting of connectivity problems to the caller, specifically how
+ * the `YarnHistoryProvider` handles the initial binding & reporting of problems.
+ *
+ */
 class WebsiteDiagnosticsSuite extends AbstractTestsWithHistoryServices {
 
 
@@ -38,8 +43,11 @@ class WebsiteDiagnosticsSuite extends AbstractTestsWithHistoryServices {
   }
 
 
+  var failingHistoryProvider: FailingYarnHistoryProvider = _
+
   /**
-   * Create a history provider instance.
+   * Create a failing history provider instance, with the flag set to say "the initial
+   * health check" has not been executed.
    * @param conf configuration
    * @return the instance
    */
@@ -48,7 +56,9 @@ class WebsiteDiagnosticsSuite extends AbstractTestsWithHistoryServices {
 
     val client = new TimelineQueryClient(timelineRootEndpoint(),
                              yarnConf, JerseyBinding.createClientConfig())
-    new FailingYarnHistoryProvider(client, false, client.getTimelineURI(), conf)
+    failingHistoryProvider = new
+            FailingYarnHistoryProvider(client, false, client.getTimelineURI(), conf)
+    failingHistoryProvider
   }
 
   def timelineRootEndpoint(): URI = {
@@ -57,16 +67,21 @@ class WebsiteDiagnosticsSuite extends AbstractTestsWithHistoryServices {
   }
 
   /**
-   * Issue a GET request against the Web UI and expect it to fail
+   * Issue a GET request against the Web UI and expect it to fail with an error
+   * message indicating that `text/html` is not a supported type.
    * with error text indicating it was in the health check
    * @param webUI URL to the web UI
    * @param provider the provider
    */
-  def expectGetToFailInHealthCheck(webUI: URL, provider: YarnHistoryProvider): Unit = {
+  def expectApplicationLookupToFailInHealthCheck(webUI: URL, provider: YarnHistoryProvider): Unit = {
     val connector = createUrlConnector()
+    val appURL = new URL(webUI, "/history/app-0001")
+    describe(s"Expecting health checks to fail while retrieving $appURL")
+    awaitURL(webUI, TEST_STARTUP_DELAY)
     try {
-      val body = getHtmlPage(webUI, Nil)
-      fail(s"Expected a failure from GET $webUI -but got\n$body")
+      assert(!failingHistoryProvider.isHealthy())
+      val body = getHtmlPage(appURL, Nil)
+      fail(s"Expected a failure from GET $appURL -but got\n$body")
     } catch {
       case ex: HttpRequestException =>
         assertContains(ex.toString, TimelineQueryClient.MESSAGE_CHECK_URL)
@@ -75,6 +90,8 @@ class WebsiteDiagnosticsSuite extends AbstractTestsWithHistoryServices {
 
   test("Probe UI with Health check") {
     def probeUIWithFailureCaught(webUI: URL, provider: YarnHistoryProvider): Unit = {
+      awaitURL(webUI, TEST_STARTUP_DELAY)
+
       val body = getHtmlPage(webUI,
           YarnHistoryProvider.TEXT_NEVER_UPDATED :: Nil)
     }
@@ -83,7 +100,7 @@ class WebsiteDiagnosticsSuite extends AbstractTestsWithHistoryServices {
 
   test("Probe App ID with Health check") {
     def expectAppIdToFail(webUI: URL, provider: YarnHistoryProvider): Unit = {
-      expectGetToFailInHealthCheck(new URL(webUI, "/history/app-0001"), provider)
+      expectApplicationLookupToFailInHealthCheck(webUI, provider)
     }
     webUITest("Probe App ID with Health check", expectAppIdToFail)
   }

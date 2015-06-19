@@ -302,14 +302,19 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   }
 
   /**
-   * Health check to call before any other operation is attempted
+   * Health check to call before any other operation is attempted.
+   * This is atomic, using the `healthy` flag to check.
+   * If the endpoint is considered unhealthy then the healthy flag
+   * is reset to false and an exception thrown.
+   * @return true if the health check took place
    */
-  private def maybeCheckHealth(): Unit = {
+  protected def maybeCheckHealth(): Boolean = {
     val h = getHealthFlag();
     if (!h.getAndSet(true)) {
       val client = getTimelineQueryClient()
       try {
         client.healthCheck()
+        true
       } catch {
         case e: Exception =>
           // failure
@@ -320,6 +325,8 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
           // propagate the failure
           throw e;
       }
+    } else {
+      false
     }
   }
 

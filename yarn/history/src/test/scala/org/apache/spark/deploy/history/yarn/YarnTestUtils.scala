@@ -227,7 +227,10 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    * @param probe probe to execute
    * @param failure closure invoked on timeout/probe failure
    */
-  def spinForState(description: String, interval: Long, timeout: Long, probe: () => Outcome, failure: (Int, Boolean) => Unit): Unit = {
+  def spinForState(description: String,
+      interval: Long,
+      timeout: Long, probe: () => Outcome,
+      failure: (Outcome, Int, Boolean) => Unit): Unit = {
     logInfo(description)
     val timelimit = now() + timeout
     var result: Outcome = Retry()
@@ -248,8 +251,8 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
       }
     } while (result == Retry())
     result match {
-      case Fail() => failure(iterations, false)
-      case TimedOut() => failure(iterations, true)
+      case Fail() => failure(result, iterations, false)
+      case TimedOut() => failure(result, iterations, true)
       case _ =>
     }
   }
@@ -293,7 +296,7 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
       outcomeFromBool(historyService.getEventsProcessed == expected)
     }
 
-    def eventProcessFailure(iterations: Int, timeout: Boolean): Unit = {
+    def eventProcessFailure(outcome: Outcome, iterations: Int, timeout: Boolean): Unit = {
       val eventsCount = historyService.getEventsProcessed
       val details = s"after $iterations iterations; events processed=$eventsCount"
       logError(s"event process failure $details")
@@ -333,12 +336,12 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
      failure action is simply to attempt the connection without
      catching the exception raised
      */
-    def failure(iterations: Int, timeout: Boolean): Unit = {
+    def failure(outcome: Outcome, iterations: Int, timeout: Boolean): Unit = {
       url.openStream().close()
     }
 
     spinForState(s"Awaiting a response from URL $url",
-    interval = 50, timeout = timeout, probe = probe, failure = failure)
+     interval = 50, timeout = timeout, probe = probe, failure = failure)
   }
 
 
@@ -353,9 +356,8 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
       interval = 50,
       timeout = timeout,
       probe = (() => outcomeFromBool(historyService.getQueueSize == 0)),
-      failure = ((_, _) => fail(s"queue never cleared: ${
-        historyService.getQueueSize
-      }")))
+      failure = ((_, _, _) =>
+        fail(s"queue never cleared: ${ historyService.getQueueSize }")))
   }
 
   /**
@@ -369,7 +371,8 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
       interval = 50,
       timeout = timeout,
       probe = (() => outcomeFromBool(historyService.getFlushCount() == count)),
-      failure = ((_, _) => fail(s"flush count not $count in $historyService")))
+      failure = ((_, _, _) =>
+        fail(s"flush count not $count in $historyService")))
   }
 
 
@@ -384,7 +387,8 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
       interval = 50,
       timeout = timeout,
       probe = (() => outcomeFromBool(!historyService.isPostThreadActive)),
-      failure = ((_, _) => fail(s"history service post thread did not finish : $historyService")))
+      failure = ((_, _, _) =>
+        fail(s"history service post thread did not finish : $historyService")))
   }
 
   /**
@@ -399,7 +403,7 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
     def listingProbe(): Outcome = {
       outcomeFromBool(provider.getListing().size == size)
     }
-    def failure(i: Int, b: Boolean): Unit = {
+    def failure(outcome: Outcome, i: Int, b: Boolean): Unit = {
       fail(s"after $i attempts, provider listing size !=${size}:  ${provider.getListing()}\n" +
           s"${provider}")
     }
@@ -422,7 +426,7 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
     def listingProbe(): Outcome = {
       outcomeFromBool(provider.getRefreshCount() > initialCount)
     }
-    def failure(i: Int, b: Boolean): Unit = {
+    def failure(outcome: Outcome, i: Int, b: Boolean): Unit = {
       fail(s"After $i attempts, refresh count is initialCount: $provider")
     }
     require(provider.isRefreshThreadRunning(),
@@ -461,7 +465,7 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
      failure action is simply to attempt the connection without
      catching the exception raised
      */
-    def failure(iterations: Int, timeout: Boolean): Unit = {
+    def failure(outcome: Outcome, iterations: Int, timeout: Boolean): Unit = {
       assertDoesNotContain(get, text)
     }
 
@@ -498,7 +502,7 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
      failure action is simply to attempt the connection without
      catching the exception raised
      */
-    def failure(iterations: Int, timeout: Boolean): Unit = {
+    def failure(outcome: Outcome, iterations: Int, timeout: Boolean): Unit = {
       assertContains(get, text)
     }
 

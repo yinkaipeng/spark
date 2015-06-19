@@ -33,7 +33,7 @@ class WebsiteFailureSuite extends AbstractTestsWithHistoryServices {
    * @return the instance
    */
   override protected def createHistoryProvider(conf: SparkConf): YarnHistoryProvider = {
-    FailingYarnHistoryProvider.createFailingProvider(conf, true)
+    FailingYarnHistoryProvider.createFailingProvider(conf, true, true)
   }
 
   /**
