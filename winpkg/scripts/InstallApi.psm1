@@ -383,7 +383,9 @@ function Configure(
       
         #Updating log4j.properties for Spark
         Write-Log "Updating log4j.properties for Spark"
-        (gc "$ENV:SPARK_HOME\conf\log4j.properties") -replace 'log4jspark.log.dir=.',"log4jspark.log.dir=$ENV:SPARK_HOME\conf\"|sc "$ENV:SPARK_HOME\conf\log4j.properties"
+        $sparkLogDir = join-path (get-item (get-item $ENV:HADOOP_LOG_DIR).PSParentPath).FullName "spark"
+        New-Item -ItemType "Directory" -Path $sparkLogDir -ErrorAction SilentlyContinue
+        (gc "$ENV:SPARK_HOME\conf\log4j.properties") -replace 'log4jspark.log.dir=.',"log4jspark.log.dir=$sparkLogDir"|sc "$ENV:SPARK_HOME\conf\log4j.properties"
    
       
         Write-Log "Configuration of spark is finished"
