@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.{AtomicLong, AtomicBoolean}
 
 import scala.collection.JavaConversions._
 
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
@@ -81,11 +82,18 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    */
   private val uiAclsEnabled = sparkConf.getBoolean("spark.history.ui.acls.enable", false)
 
+  private val detailedInfo = sparkConf.getBoolean(YarnHistoryProvider.OPTION_DETAILED_INFO, false)
   private val NOT_STARTED = "<Not Started>"
 
   // Interval between each check for event log updates
   private val refreshInterval = sparkConf.getInt(YarnHistoryProvider.OPTION_UPDATE_INTERVAL,
     YarnHistoryProvider.DEFAULT_UPDATE_INTERVAL_SECONDS)
+
+  /**
+   * Window limit in milliseconds
+   */
+  private val windowLimitMs = sparkConf.getLong(YarnHistoryProvider.OPTION_WINDOW_LIMIT,
+    YarnHistoryProvider.DEFAULT_WINDOW_LIMIT) * 1000
 
   val serviceStartTime = System.currentTimeMillis()
 
@@ -196,7 +204,6 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    */
   override def stop(): Unit = {
     logDebug(s"Stopping $this")
-
     // attempt to stop the refresh thread
     if (!stopRefreshThread()) {
       // and otherwise, stop the query client
@@ -415,8 +422,9 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @return  the result of the last successful listing operation,
    *          or the `emptyListing` result if no listing has yet been successful
    */
-   def listApplications(): ApplicationListingResults = {
-    val timestamp = now()
+   def listApplications(limit: Option[Long] = None,
+      windowStart: Option[Long] = None,
+      windowEnd: Option[Long] = None): ApplicationListingResults = {
     if (!enabled) {
       // Timeline is disabled: return the empty listing
       return emptyListing
@@ -425,8 +433,13 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       maybeCheckHealth()
       val client = getTimelineQueryClient()
       logInfo(s"getListing from: $client")
+      // get the timestamp after any health check
+      val timestamp = now()
       val timelineEntities =
-        client.listEntities(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
+        client.listEntities(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE,
+          windowStart = windowStart,
+          windowEnd = windowEnd,
+          limit = limit)
 
       val listing = timelineEntities.flatMap { en =>
         try {
@@ -445,7 +458,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
     } catch {
       case e: Exception =>
         logWarning(s"Failed to list entities from $timelineEndpoint", e)
-        new ApplicationListingResults(timestamp, Nil, Some(e))
+        new ApplicationListingResults(now(), Nil, Some(e))
     }
   }
 
@@ -580,7 +593,15 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
         YarnHistoryProvider.KEY_ENABLED ->
            (if (enabled) YarnHistoryProvider.TEXT_SERVICE_ENABLED
             else YarnHistoryProvider.TEXT_SERVICE_DISABLED),
-        YarnHistoryProvider.KEY_LAST_UPDATED -> applications.updated)
+        YarnHistoryProvider.KEY_LAST_UPDATED -> applications.updated
+      )
+      // in a secure cluster, list the user name
+      if (UserGroupInformation.isSecurityEnabled) {
+        state = state +
+            (YarnHistoryProvider.KEY_USERNAME -> UserGroupInformation.getCurrentUser.getUserName)
+
+      }
+
       // on a failure, add failure specifics to the operations
       failure match {
         case Some((ex , date)) =>
@@ -591,6 +612,19 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
               YarnHistoryProvider.KEY_LAST_FAILURE -> ex.toString)
         case None =>
           // nothing
+      }
+      // add detailed information if enabled
+      if (detailedInfo) {
+        state = state + (YarnHistoryProvider.KEY_TOKEN_RENEWAL ->
+          humanDateCurrentTZ(timelineQueryClient.lastTokenRenewal,
+            YarnHistoryProvider.TEXT_NEVER_UPDATED ))
+        state = state +
+            (YarnHistoryProvider.KEY_TOKEN_RENEWAL_COUNT ->
+                timelineQueryClient.tokenRenewalCount.toString)
+        state = state +
+            (YarnHistoryProvider.KEY_TO_STRING -> s"$this")
+
+
       }
       state
     }
@@ -603,10 +637,12 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
 
 
   override def toString(): String = {
-    s"YarnHistoryProvider bound to history server at $timelineEndpoint, " +
-      s"enabled = $enabled" +
-      s" refresh thread active = ${isRefreshThreadRunning()} with interval ${refreshInterval}" +
-      s" refresh count = ${getRefreshCount()}; failed count = ${getRefreshFailedCount()} "
+    s"YarnHistoryProvider bound to history server at $timelineEndpoint," +
+    s" enabled = $enabled;" +
+    s" refresh thread active = ${isRefreshThreadRunning()} with interval ${refreshInterval};" +
+    s" refresh count = ${getRefreshCount()}; failed count = ${getRefreshFailedCount()};" +
+    s" last update ${applications.updated};" +
+    s" history size ${applications.size};"
   }
 
   /**
@@ -620,38 +656,43 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
     if (i1.endTime != i2.endTime) i1.endTime >= i2.endTime else i1.startTime >= i2.startTime
   }
 
+}
+
+
+/**
+ * (Immutable) results of a list operation
+ * @param timestamp timestamp
+ * @param applications application listing. These must be pre-sorted
+ * @param failureCause exception raised (implies operation was a failure)
+ */
+private[spark] class ApplicationListingResults(
+    val timestamp: Long,
+    val applications: Seq[ApplicationHistoryInfo],
+    val failureCause: Option[Throwable]) {
+
   /**
-   * (Immutable) results of a list operation
-   * @param timestamp timestamp
-   * @param applications application listing. These must be pre-sorted
-   * @param failureCause exception raised (implies operation was a failure)
+   * Predicate which is true if the listing failed; that there
+   * is a failure cause value
+   * @return true if the listing failed
    */
-  class ApplicationListingResults(
-      val timestamp: Long,
-      val applications: Seq[ApplicationHistoryInfo],
-      val failureCause: Option[Throwable]) {
+  def failed: Boolean = { failureCause.isDefined }
 
-    /**
-     * Predicate which is true if the listing failed; that there
-     * is a failure cause value
-     * @return true if the listing failed
-     */
-    def failed: Boolean = { failureCause.isDefined }
+  def succeeded: Boolean = { !failed }
 
-    def succeeded: Boolean = { !failed }
+  /**
+   * Get an updated time for display
+   * @return a date time or "never"
+   */
+  def updated: String = {
+    humanDateCurrentTZ(timestamp, YarnHistoryProvider.TEXT_NEVER_UPDATED)
+  }
 
-    /**
-     * Get an updated time for display
-     * @return a date time or "never"
-     */
-    def updated: String = {
-      humanDateCurrentTZ(timestamp, YarnHistoryProvider.TEXT_NEVER_UPDATED)
-    }
-
+  def size: Int = {
+    applications.size
   }
 }
 
-object YarnHistoryProvider {
+private[spark] object YarnHistoryProvider {
 
   /**
    * Default port
@@ -702,6 +743,20 @@ object YarnHistoryProvider {
    * Smaller: history more responsive.
    */
   val OPTION_UPDATE_INTERVAL = "spark.history.yarn.updateInterval"
-  val DEFAULT_UPDATE_INTERVAL_SECONDS = 10
+  val DEFAULT_UPDATE_INTERVAL_SECONDS = 60
+
+  /**
+   * Maximum timeline of the window when getting updates.
+   * If set to zero, there's no limit
+   */
+  val OPTION_WINDOW_LIMIT = "spark.history.yarn.window.limit"
+  val DEFAULT_WINDOW_LIMIT = 60L * 60 * 24
+
+  val OPTION_DETAILED_INFO = "spark.history.yarn.diagnostics"
+
+  val KEY_TOKEN_RENEWAL = "Token Renewed"
+  val KEY_TOKEN_RENEWAL_COUNT = "Token Renewal Count"
+  val KEY_TO_STRING = "Internal State"
+  val KEY_USERNAME = "User"
 
 }

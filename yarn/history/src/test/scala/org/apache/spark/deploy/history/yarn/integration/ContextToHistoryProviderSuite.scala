@@ -17,17 +17,19 @@
  */
 package org.apache.spark.deploy.history.yarn.integration
 
+import org.apache.hadoop.yarn.api.records.ApplicationId
+
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.rest.JerseyBinding._
 import org.apache.spark.deploy.history.yarn.rest.TimelineQueryClient
-import org.apache.spark.deploy.history.yarn.{HandleSparkEvent, HistoryServiceListeningToSparkContext, TimelineSingleEntryBatchSize, YarnHistoryProvider}
+import org.apache.spark.deploy.history.yarn.{StubApplicationId, YarnHistoryService, HandleSparkEvent, HistoryServiceListeningToSparkContext, TimelineSingleEntryBatchSize, YarnHistoryProvider}
 import org.apache.spark.util.Utils
 
 /**
- * full hookup from spark context to timeline then reread. This is the big one
+ * full hookup from spark context to timeline then reread.
  */
 class ContextToHistoryProviderSuite
     extends AbstractTestsWithHistoryServices

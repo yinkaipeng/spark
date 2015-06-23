@@ -57,8 +57,13 @@ abstract class AbstractTestsWithHistoryServices
   protected val no_completed_applications = "No completed applications found!"
   protected val no_incomplete_applications = "No incomplete applications found!"
 
-  def applicationHistoryServer: ApplicationHistoryServer = _applicationHistoryServer
-  def timelineClient: TimelineClient = _timelineClient
+  def applicationHistoryServer: ApplicationHistoryServer = {
+    _applicationHistoryServer
+  }
+
+  def timelineClient: TimelineClient = {
+    _timelineClient
+  }
 
   /*
    * Setup phase creates a local ATS server and a client of it
@@ -162,11 +167,21 @@ abstract class AbstractTestsWithHistoryServices
    * then assert that there were no failures
    */
   protected def flushHistoryServiceToSuccess(): Unit = {
-    assertNotNull(historyService, "null history queue")
+    flushHistoryServiceToSuccess(historyService)
+  }
+
+  /**
+   * Flush a history service to success
+   * @param history service to flush
+   * @param delay time to wait for an empty queue
+   */
+  def flushHistoryServiceToSuccess(history: YarnHistoryService, delay: Int= TEST_STARTUP_DELAY):
+  Unit = {
+    assertNotNull(history, "null history queue")
     historyService.asyncFlush()
-    awaitEmptyQueue(historyService, TEST_STARTUP_DELAY)
-    assertResult(0, s"-Post failure count: $historyService") {
-      historyService.getEventPostFailures
+    awaitEmptyQueue(history, delay)
+    assertResult(0, s"Post failure count: $history") {
+      history.getEventPostFailures
     }
   }
 

@@ -422,6 +422,12 @@ private[spark] object YarnTimelineUtils extends Logging {
       endTime > 0)
   }
 
+  /**
+   * Build date for display in status messages
+   * @param timestamp time in milliseconds post-Epoch
+   * @param unset string to use if timestamp == 0
+   * @return a string for messages
+   */
   def humanDateCurrentTZ(timestamp: Long, unset: String) : String = {
     if (timestamp == 0) {
       unset
@@ -431,7 +437,13 @@ private[spark] object YarnTimelineUtils extends Logging {
       dateFormatter.format(timestamp)
     }
   }
-  
+
+  /**
+   * Short formatted time
+   * @param timestamp time in milliseconds post-Epoch
+   * @param unset string to use if timestamp == 0
+   * @return a string for messages
+   */
   def timeShort(timestamp: Long, unset: String) : String = {
     if (timestamp == 0) {
       unset
@@ -440,7 +452,13 @@ private[spark] object YarnTimelineUtils extends Logging {
       dateFormatter.format(timestamp)
     }
   }
-  
+
+  /**
+   * Describe the application history, includind timestamps & completed
+   * flag
+   * @param info history info to describe
+   * @return a string description
+   */
   def describeApplicationHistoryInfo(info: ApplicationHistoryInfo) : String = {
     val core = s"ApplicationHistoryInfo [${info.id }] ${info.name }"
     val never = "-"
@@ -450,4 +468,88 @@ private[spark] object YarnTimelineUtils extends Logging {
         s" completed = ${info.completed}"
   }
 
+
+  /**
+   * Build a combined list with the policy of
+   * all original values come first, followed by the later ones.
+   * Unless there is a later entry of the same ID...
+   * In which case, that later entry appears.
+   * @param original original list of entries
+   * @param latest later list of entries
+   * @return a combined list.
+   */
+  def combineResults(original: Seq[ApplicationHistoryInfo],
+      latest: Seq[ApplicationHistoryInfo]): Seq[ApplicationHistoryInfo] = {
+    var map = new scala.collection.mutable.HashMap[String, ApplicationHistoryInfo]
+    val results = new scala.collection.mutable.LinkedList[ApplicationHistoryInfo]
+    latest.map((elt) => map.put(elt.id, elt))
+    // append the original values
+    val filteredOrig = original.filterNot((elt) => map.contains(elt.id))
+    filteredOrig ++ latest
+  }
+
+
+  /**
+   * Sort a list of applications by their start time
+   * @param history history list
+   * @return a new, sorted list
+   */
+  def sortApplicationsByStartTime(history: Seq[ApplicationHistoryInfo]):
+    Seq[ApplicationHistoryInfo] = {
+    history.sortBy(_.startTime)
+  }
+
+  /**
+   * Find the latest application in the list. Scans the list once, so is O(n) even if
+   * the list is already sorted.
+   * @param history history to scan (which can be an empty list
+   * @return the latest element in the list
+   */
+  def findLatestApplication(history: Seq[ApplicationHistoryInfo]): Option[ApplicationHistoryInfo] = {
+    history match {
+      case Nil => None
+      case l => Some(l.reduceLeft((x, y) => if (x.startTime < y.startTime) y else x))
+    }
+  }
+
+  /**
+   * Find the latest application in the list. Scans the list once, so is O(n) even if
+   * the list is already sorted.
+   * @param history history to scan (which can be an empty list
+   * @return the element in the list which started first
+   */
+  def findOldestApplication(history: Seq[ApplicationHistoryInfo]): Option[ApplicationHistoryInfo] = {
+    history match {
+      case Nil => None
+      case l => Some(l.reduceLeft((x, y) => if (x.startTime <= y.startTime) x else y))
+    }
+  }
+
+  /**
+   * Find the application that represents the start of the update window.
+   *
+   * First it locates the oldest incomplete application in the list.
+   * If there are no incomplete entries, then the latest completed entry is picked up
+   * @param history history to scan (which can be an empty list)
+   * @return the latest element in the list, or `None` for no match
+   */
+  def findStartOfWindow(history: Seq[ApplicationHistoryInfo]): Option[ApplicationHistoryInfo] = {
+    findIncompleteApplications(history) match {
+        // no incomplete apps; use latest
+      case Nil => findLatestApplication(history)
+      case incomplete => findOldestApplication(incomplete)
+    }
+  }
+
+  /**
+   * Build the list of all incomplete applications
+   * @param history
+   */
+  def findIncompleteApplications(history: Seq[ApplicationHistoryInfo]): Seq[ApplicationHistoryInfo] = {
+    history.filter(!_.completed)
+  }
+
+  def findAppById(history: Seq[ApplicationHistoryInfo], id: String): Option[ApplicationHistoryInfo] = {
+    history.find(_.id == id)
+  }
 }

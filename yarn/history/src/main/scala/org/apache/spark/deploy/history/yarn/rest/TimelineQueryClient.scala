@@ -19,7 +19,7 @@ package org.apache.spark.deploy.history.yarn.rest
 
 import java.io.{FileNotFoundException, Closeable}
 import java.net.{URI, URL}
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicLong, AtomicBoolean}
 import javax.servlet.http.HttpServletResponse
 import javax.ws.rs.core.MediaType
 
@@ -36,7 +36,6 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.Logging
-import org.apache.spark.deploy.history.yarn.rest.UnauthorizedRequestException
 
 /**
  * A class to make queries of the Timeline sever through a Jersey client.
@@ -58,19 +57,25 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
   private val retry_interval = 100
 
   /**
-   * the delegation token used
+   * the delegation token (unused until delegation support implemented)
    */
-  var token: DelegationTokenAuthenticatedURL.Token = new DelegationTokenAuthenticatedURL.Token
+  private var token: DelegationTokenAuthenticatedURL.Token = new DelegationTokenAuthenticatedURL.Token
+
+  /**
+   * The last time there was a token renewal operation.
+   */
+  private val _lastTokenRenewal = new AtomicLong(0)
+  private val _tokenRenewalCount = new AtomicLong(0)
 
   /**
    * Jersey binding -this exposes the method to reset the token
    */
-  val jerseyBinding = new JerseyBinding(conf, token)
+  private val jerseyBinding = new JerseyBinding(conf, token)
 
   /**
    * Jersey Client using config from constructor
    */
-  val jerseyClient: Client = jerseyBinding.createClient(conf, jerseyClientConfig)
+  private val jerseyClient: Client = jerseyBinding.createClient(conf, jerseyClientConfig)
 
   /**
    * Base resource of ATS
@@ -160,7 +165,8 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
             resetConnection()
 
           case other: Exception =>
-            logWarning(s"$verb $uri failed: $exception", exception)
+            logWarning(s"$verb $uri failed: $exception")
+            logDebug(s"detail", exception)
         }
         if (retries > 0) {
           logInfo(s"Retrying -remaining attempts: $retries")
@@ -180,6 +186,8 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
     logInfo("Resetting connection")
     UserGroupInformation.getCurrentUser.checkTGTAndReloginFromKeytab()
     jerseyBinding.resetToken()
+    _lastTokenRenewal.set(System.currentTimeMillis())
+    _tokenRenewalCount.incrementAndGet()
   }
 
   /**
@@ -352,6 +360,18 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
    */
   override def toString: String = {
     s"Timeline Query Client against $timelineURI"
+  }
+
+  /**
+   * Get the time the token was last renewed
+   * @return a system timestamp of the last renewal; 0 on startup
+   */
+  def lastTokenRenewal: Long = {
+    _lastTokenRenewal.get()
+  }
+
+  def tokenRenewalCount: Long = {
+    _tokenRenewalCount.get()
   }
 }
 

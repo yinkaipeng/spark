@@ -27,7 +27,10 @@ import org.apache.spark.scheduler.cluster.YarnExtensionServices
 import org.apache.spark.util.Utils
 
 /**
- * This is the complete integration test
+ * Test handling/logging of incomplete applications.
+ *
+ * This implicitly tests some of the windowing logic. Specifically, do completed
+ * applications get picked up?
  */
 class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
 
@@ -47,10 +50,10 @@ class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
       val incompleted = connector.execHttpOperation("GET", url, null, "")
       val body = incompleted.responseBody
       logInfo(s"$url => $body")
-      assertContains(body, no_incomplete_applications)
+      assertContains(body, no_incomplete_applications, s"In $url")
     }
 
-    webUITest("incomplete view",checkEmptyIncomplete)
+    webUITest("incomplete view", checkEmptyIncomplete)
   }
 
   test("Publish Events and GET the web UI") {
@@ -59,15 +62,15 @@ class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
       val incompleteURL = new URL(webUI, "/?" + incomplete_flag)
       awaitURL(incompleteURL, TEST_STARTUP_DELAY)
 
-      def listIncompleteApps: String = {
-        connector.execHttpOperation("GET",
-                                     incompleteURL, null, "").responseBody
+      def listIncompleteApps(): String = {
+        connector.execHttpOperation("GET", incompleteURL, null, "").responseBody
       }
       historyService = startHistoryService(sparkCtx)
       val timeline = historyService.getTimelineServiceAddress()
       val listener = new YarnEventListener(sparkCtx, historyService)
       // initial view has no incomplete applications
-      assertContains(listIncompleteApps, no_incomplete_applications)
+      assertContains(listIncompleteApps(), no_incomplete_applications,
+        "initial incomplete page is empty")
 
       val startTime = now()
 
@@ -88,7 +91,8 @@ class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
       val queryClient = createTimelineQueryClient()
 
       // check for work in progress
-      assertDoesNotContain(listIncompleteApps, no_incomplete_applications)
+      assertDoesNotContain(listIncompleteApps(), no_incomplete_applications,
+        "'incomplete application' list empty")
 
       logInfo("Ending job and application")
       //job completion event
