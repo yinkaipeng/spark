@@ -20,6 +20,7 @@ package org.apache.spark.deploy.history.yarn
 import java.io.FileNotFoundException
 import java.net.URI
 import java.util.Date
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.{AtomicLong, AtomicBoolean}
 
 import scala.collection.JavaConversions._
@@ -85,9 +86,9 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   private val detailedInfo = sparkConf.getBoolean(YarnHistoryProvider.OPTION_DETAILED_INFO, false)
   private val NOT_STARTED = "<Not Started>"
 
-  // Interval between each check for event log updates
-  private val refreshInterval = sparkConf.getInt(YarnHistoryProvider.OPTION_UPDATE_INTERVAL,
-    YarnHistoryProvider.DEFAULT_UPDATE_INTERVAL_SECONDS)
+  /* minimum interval between each check for event log updates */
+  private val refreshInterval = sparkConf.getLong(YarnHistoryProvider.OPTION_MIN_REFRESH_INTERVAL,
+    YarnHistoryProvider.DEFAULT_MIN_REFRESH_INTERVAL_SECONDS) * 1000
 
   /**
    * Window limit in milliseconds
@@ -95,6 +96,18 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   private val windowLimitMs = sparkConf.getLong(YarnHistoryProvider.OPTION_WINDOW_LIMIT,
     YarnHistoryProvider.DEFAULT_WINDOW_LIMIT) * 1000
 
+  /**
+   * Number of events to get
+   */
+  private val eventFetchLimit = sparkConf.getLong(YarnHistoryProvider.OPTION_EVENT_FETCH_LIMIT,
+    YarnHistoryProvider.DEFAULT_EVENT_FETCH_LIMIT)
+
+  private val eventFetchOption: Option[Long] = if (eventFetchLimit > 0) Some(eventFetchLimit) else None
+
+  /**
+   * Start time. Doesn't use the `now()` call as tests can subclass that and
+   * it won't be valid until after the subclass has been constructed
+   */
   val serviceStartTime = System.currentTimeMillis()
 
   /**
@@ -168,9 +181,9 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   private val stopRefresh = new AtomicBoolean(false)
 
   /**
-   * refresh thread
+   * refresher
    */
-  private var refreshThread: Option[Thread] = None
+  val refresher = new Refresher()
 
   /**
    * Initialize the provider
@@ -189,12 +202,12 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       logInfo(YarnHistoryProvider.KEY_SERVICE_URL + ": " + timelineEndpoint)
       logDebug(sparkConf.toDebugString)
       // get the thread time
-      logInfo(s"refresh interval $refreshInterval seconds")
-      if (refreshInterval <= 0) {
+      logInfo(s"refresh interval $refreshInterval milliseconds")
+      if (refreshInterval < 0) {
         throw new Exception(YarnHistoryProvider.TEXT_INVALID_UPDATE_INTERVAL +
-            s": $refreshInterval")
+            s": ${refreshInterval/1000}")
       }
-      startRefreshThread(1000 * refreshInterval)
+      startRefreshThread()
     }
   }
 
@@ -206,11 +219,18 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
     logDebug(s"Stopping $this")
     // attempt to stop the refresh thread
     if (!stopRefreshThread()) {
-      // and otherwise, stop the query client
-      logDebug("Stopping Timeline client")
-      timelineQueryClient.close()
+      closeQueryClient()
     }
 
+  }
+
+  /**
+   * Close the query client
+   */
+  def closeQueryClient(): Unit = {
+    // and otherwise, stop the query client
+    logDebug("Stopping Timeline client")
+    timelineQueryClient.close()
   }
 
   /**
@@ -342,41 +362,12 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    *
    * When this thread exits, it will close the `timelineQueryClient`
    * instance
-   * @param interval sleep interval, must be greater than zero
    */
-  def startRefreshThread(interval: Long): Unit = {
-    require(interval > 0,
-      s"Interval must be greater than zero, not $interval")
-    logInfo(s"Starting timeline refresh thread with interval $interval millis")
-    val thread = new Thread(s"YarnHistoryProvider Refresh Thread") {
-      override def run(): Unit = {
-        while (!stopRefresh.get()) {
-          try {
-            listAndCacheApplications()
-            if (!stopRefresh.get()) {
-              // before sleeping, check the current status
-              Thread.sleep(interval)
-            }
-          } catch {
-            case e: InterruptedException =>
-              // interrupted; if the `stopRefreshThread` flag is set, this will trigger an exit
-              logInfo(s"Refresh thread interrupted")
-            case e: Exception =>
-              if (!stopRefresh.get()) {
-                // if the stop process has started, don't bother
-                // complaining as it will only confuse people looking
-                // at logs (especially test logs)
-                logWarning(s"In refresh: $e", e)
-              }
-          } finally {
-            timelineQueryClient.close()
-          }
-        }
-      }
-    }
-    refreshThread = Some(thread)
+  def startRefreshThread(): Unit = {
+    logInfo(s"Starting timeline refresh thread")
+    val thread = new Thread(refresher, s"YarnHistoryProvider Refresher")
     thread.setDaemon(true)
-    thread.start()
+    refresher.start(thread)
   }
 
   /**
@@ -386,16 +377,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @return true if there was a refresh thread to stop
    */
   def stopRefreshThread(): Boolean = {
-    refreshThread match {
-      case Some(refresher) =>
-        logDebug("Trigger Async Refresh Thread stop")
-        stopRefresh.set(true)
-        refresher.interrupt()
-        true
-      case None =>
-        // nothing to stop
-        false
-    }
+    refresher.stopRefresher()
   }
 
   /**
@@ -403,13 +385,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @return true if the refresh thread has been created and is still alive
    */
   def isRefreshThreadRunning(): Boolean = {
-    refreshThread match {
-      case Some(refresher) =>
-        refresher.isAlive()
-      case None =>
-        // no thread created
-        false
-    }
+    refresher.isRunning()
   }
 
   def getRefreshCount(): Long = { refreshCount.get() }
@@ -472,7 +448,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    */
   def listAndCacheApplications(): ApplicationListingResults = {
     refreshCount.incrementAndGet()
-    val results = listApplications()
+    val results = listApplications(limit = eventFetchOption)
     this.synchronized {
       if (results.succeeded) {
         // on a success, the applications are updated
@@ -494,7 +470,18 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @return List of all known applications.
    */
   override def getListing(): Seq[ApplicationHistoryInfo] = {
-    applications.applications
+    // get the current list
+    val listing = getApplications().applications
+    // and queue another refresh
+    triggerRefresh()
+    listing
+  }
+
+  /**
+   * Trigger a refresh
+   */
+  def triggerRefresh(): Unit = {
+    refresher.refresh(now())
   }
 
   /**
@@ -505,6 +492,14 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
     System.currentTimeMillis()
   }
 
+  /**
+   * Get the last refresh attempt (Which may or may not be successful)
+   * @return the last refresh time
+   */
+  def getLastRefreshAttemptTime(): Long = {
+    refresher.lastRefreshAttemptTime
+  }
+  
   /**
    * Look up the timeline entity
    * @param appId application ID
@@ -593,7 +588,8 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
         YarnHistoryProvider.KEY_ENABLED ->
            (if (enabled) YarnHistoryProvider.TEXT_SERVICE_ENABLED
             else YarnHistoryProvider.TEXT_SERVICE_DISABLED),
-        YarnHistoryProvider.KEY_LAST_UPDATED -> applications.updated
+        YarnHistoryProvider.KEY_LAST_UPDATED -> applications.updated,
+        YarnHistoryProvider.KEY_CURRENT_TIME -> humanDateCurrentTZ(now(), "unknown")
       )
       // in a secure cluster, list the user name
       if (UserGroupInformation.isSecurityEnabled) {
@@ -615,16 +611,17 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       }
       // add detailed information if enabled
       if (detailedInfo) {
-        state = state + (YarnHistoryProvider.KEY_TOKEN_RENEWAL ->
-          humanDateCurrentTZ(timelineQueryClient.lastTokenRenewal,
-            YarnHistoryProvider.TEXT_NEVER_UPDATED ))
-        state = state +
-            (YarnHistoryProvider.KEY_TOKEN_RENEWAL_COUNT ->
-                timelineQueryClient.tokenRenewalCount.toString)
-        state = state +
-            (YarnHistoryProvider.KEY_TO_STRING -> s"$this")
-
-
+        state = state ++ Map(
+          YarnHistoryProvider.KEY_TOKEN_RENEWAL ->
+            humanDateCurrentTZ(timelineQueryClient.lastTokenRenewal,
+              YarnHistoryProvider.TEXT_NEVER_UPDATED),
+          YarnHistoryProvider.KEY_TOKEN_RENEWAL_COUNT ->
+            timelineQueryClient.tokenRenewalCount.toString,
+          YarnHistoryProvider.KEY_TO_STRING -> s"$this",
+          YarnHistoryProvider.KEY_MIN_REFRESH_INTERVAL -> refreshInterval.toString,
+          YarnHistoryProvider.KEY_EVENT_FETCH_LIMIT -> eventFetchLimit.toString
+        
+        )
       }
       state
     }
@@ -635,14 +632,13 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
     timelineEndpoint.resolve("/")
   }
 
-
   override def toString(): String = {
     s"YarnHistoryProvider bound to history server at $timelineEndpoint," +
     s" enabled = $enabled;" +
-    s" refresh thread active = ${isRefreshThreadRunning()} with interval ${refreshInterval};" +
     s" refresh count = ${getRefreshCount()}; failed count = ${getRefreshFailedCount()};" +
     s" last update ${applications.updated};" +
-    s" history size ${applications.size};"
+    s" history size ${applications.size};" +
+    s" ${refresher}"
   }
 
   /**
@@ -656,7 +652,179 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
     if (i1.endTime != i2.endTime) i1.endTime >= i2.endTime else i1.startTime >= i2.startTime
   }
 
-}
+
+  /**
+   * This is the implementation of the triggered refresh logic.
+   * It awaits events
+   */
+
+  class Refresher extends Runnable {
+
+    sealed trait RefreshActions;
+    /** start the refresh **/
+    case class Start() extends RefreshActions;
+    /** refresh requested at the given time */
+    case class RefreshRequest(time: Long) extends RefreshActions;
+    /** stop */
+    case class StopExecution() extends RefreshActions;
+
+    private val queue = new LinkedBlockingQueue[RefreshActions]()
+    private val running = new AtomicBoolean(false)
+    private var self: Thread = _
+    private val _lastRefreshAttemptTime = new AtomicLong(0)
+    private val _messagesProcessed = new AtomicLong(0)
+    private val _refreshesExecuted = new AtomicLong(0)
+
+    /**
+     * Bond to the thread then start it
+     * @param t thread
+     */
+    def start(t: Thread) {
+      this.synchronized {
+        self = t;
+        running.set(true)
+        queue.add(Start())
+        t.start()
+      }
+    }
+
+    /**
+     * Request a refresh. If the request queue is empty, a refresh request
+     * is queued.
+     * @param time time request was made
+     */
+    def refresh(time: Long): Unit = {
+      if (queue.isEmpty) {
+        queue.add(RefreshRequest(time))
+      }
+    }
+
+    /**
+     * Stop operation.
+     * @return true if the stop was scheduled
+     */
+    def stopRefresher(): Boolean = {
+      this.synchronized {
+        if (isRunning()) {
+          // yes, more than one stop may get issued. but it will
+          // replace the previous one.
+          queue.clear()
+          queue.add(StopExecution())
+          self.interrupt()
+          true
+        } else {
+          false
+        }
+      }
+    }
+
+    /**
+     * Thread routine
+     */
+    override def run(): Unit = {
+      try {
+        var stopped = false;
+        while (!stopped) {
+          take match {
+            case StopExecution() =>
+              // stop: exit the loop
+              stopped = true
+            case Start() =>
+              // initial read; may be bigger
+              doRefresh()
+            case RefreshRequest(time) =>
+              // requested refresh operation
+              doRefresh()
+          }
+          // it is only after processing the
+          // message that the message process counter
+          // is incremented
+          _messagesProcessed.incrementAndGet()
+
+        }
+      } finally {
+        closeQueryClient();
+        running.set(false)
+      }
+    }
+
+    /**
+     * Do the real refresh.
+     * This contains the decision making as when to refresh, which consists of
+     * 1. the refresh interval == 0 (always)
+     * 2. the last refresh was outside the window.
+     *
+     * There isn't a specia check for "never updated", as this
+     * would only be inside the window in test cases with a small
+     * simulated clock.
+     */
+    private def doRefresh(): Unit = {
+      val current = now()
+      if (refreshInterval == 0
+          || ((now() - _lastRefreshAttemptTime.get()) > refreshInterval )) {
+        logDebug("refresh triggered")
+        listAndCacheApplications()
+        _lastRefreshAttemptTime.set(now())
+        _refreshesExecuted.incrementAndGet()
+      }
+    }
+
+    /**
+     * Get the next action; increment the [[_messagesProcessed]]
+     * counter after
+     * @return the next action
+     */
+    def take(): Refresher.this.RefreshActions = {
+      val action = queue.take()
+      action
+    }
+
+    /**
+     * Flag to indicate the refresher thread is running
+     * @return
+     */
+    def isRunning(): Boolean  = {
+      running.get()
+    }
+
+    /**
+     * Get the last refresh time
+     * @return the last refresh time
+     */
+    def lastRefreshAttemptTime: Long = {
+      _lastRefreshAttemptTime.get()
+    }
+
+    /**
+     * Get count of messages processed.
+     * This will be at least equal to
+     * the number of refreshes executed
+     * @return
+     */
+    def messagesProcessed: Long = {
+      _messagesProcessed.get()
+    }
+
+    /**
+     * The number of actual refreshes triggered
+     * @return a count of refreshes
+     */
+    def refreshesExecuted: Long = {
+      _refreshesExecuted.get()
+    }
+
+    override def toString: String = {
+      s"Refresher running = $isRunning queue size = ${queue.size()};" +
+        s" processed = $messagesProcessed;" +
+        s" window = $refreshInterval mS;" +
+        s" refreshes executed = ${_refreshesExecuted.get()};" +
+        s" last refresh attempt = " + timeShort(lastRefreshAttemptTime, "never") + ";"
+    }
+  } // end class Refresher
+
+
+
+} // end class YarnHistoryProvider
 
 
 /**
@@ -687,17 +855,36 @@ private[spark] class ApplicationListingResults(
     humanDateCurrentTZ(timestamp, YarnHistoryProvider.TEXT_NEVER_UPDATED)
   }
 
+  /**
+   * Size of applications in the list
+   * @return
+   */
   def size: Int = {
     applications.size
   }
 }
 
+/**
+ * Constants to go with the hstory provider.
+ *
+ * 1. Any with the prefix `KEY_` are for configuration (key, value) pairs, so can be
+ * searched for after scraping the History server web page.
+ *
+ * 2. Any with the prefix `OPTION_` are options from the configuration.
+ *
+ * 3. Any with the prefix `DEFAULT_` are the default value of options
+ *
+ * 4. Any with the prefix `TEXT_` are text messages which may appear in web pages
+ * and other messages (and so can be scanned for in tests)
+ */
 private[spark] object YarnHistoryProvider {
 
   /**
-   * Default port
+   * Default port. This is hard coded elsewhere in the history server; it is
+   * replicated here
    */
   val SPARK_HISTORY_UI_PORT_DEFAULT = 18080
+
   /**
    * Name of the class to use in configuration strings
    */
@@ -733,7 +920,7 @@ private[spark] object YarnHistoryProvider {
     "Timeline service is disabled: application history cannot be retrieved"
 
   val TEXT_NEVER_UPDATED = "Never"
-  val TEXT_INVALID_UPDATE_INTERVAL = s"Invalid update interval defined in $OPTION_UPDATE_INTERVAL"
+  val TEXT_INVALID_UPDATE_INTERVAL = s"Invalid update interval defined in $OPTION_MIN_REFRESH_INTERVAL"
   
   
   val KEY_LISTING_REFRESH_INTERVAL = "Update Interval"
@@ -742,8 +929,14 @@ private[spark] object YarnHistoryProvider {
    * Option for the interval for listing timeline refreshes. Bigger: less chatty.
    * Smaller: history more responsive.
    */
-  val OPTION_UPDATE_INTERVAL = "spark.history.yarn.updateInterval"
-  val DEFAULT_UPDATE_INTERVAL_SECONDS = 60
+  val OPTION_MIN_REFRESH_INTERVAL = "spark.history.yarn.min-refresh-interval"
+  val DEFAULT_MIN_REFRESH_INTERVAL_SECONDS = 60
+
+  /**
+   * Option for the number of events to retrieve
+   */
+  val OPTION_EVENT_FETCH_LIMIT = "spark.history.yarn.event-fetch-limit"
+  val DEFAULT_EVENT_FETCH_LIMIT = 1000
 
   /**
    * Maximum timeline of the window when getting updates.
@@ -754,9 +947,11 @@ private[spark] object YarnHistoryProvider {
 
   val OPTION_DETAILED_INFO = "spark.history.yarn.diagnostics"
 
-  val KEY_TOKEN_RENEWAL = "Token Renewed"
-  val KEY_TOKEN_RENEWAL_COUNT = "Token Renewal Count"
-  val KEY_TO_STRING = "Internal State"
+  val KEY_TOKEN_RENEWAL = "x-Token Renewed"
+  val KEY_TOKEN_RENEWAL_COUNT = "x-Token Renewal Count"
+  val KEY_TO_STRING = "x-Internal State"
   val KEY_USERNAME = "User"
-
+  val KEY_MIN_REFRESH_INTERVAL = "x-Minimum refresh interval"
+  val KEY_CURRENT_TIME = "Current Time"
+  val KEY_EVENT_FETCH_LIMIT = "x-" + OPTION_EVENT_FETCH_LIMIT
 }

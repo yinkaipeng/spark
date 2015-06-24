@@ -131,8 +131,8 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
          YarnConfiguration.TIMELINE_SERVICE_STORE -> classOf[MemoryTimelineStore].getName,
          YarnConfiguration.TIMELINE_SERVICE_CLIENT_MAX_RETRIES -> "1",
          YarnConfiguration.TIMELINE_SERVICE_CLIENT_RETRY_INTERVAL_MS -> "200"))
-    // check for updates every second
-    sparkConf.set(YarnHistoryProvider.OPTION_UPDATE_INTERVAL, "1")
+    // turn off the minimum refresh interval
+    sparkConf.set(YarnHistoryProvider.OPTION_MIN_REFRESH_INTERVAL, "0")
   }
 
   /**
@@ -221,7 +221,14 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
   case class TimedOut() extends Outcome
 
   /**
-   * Spin and sleep awaiting an observable state
+   * Spin and sleep awaiting an observable state.
+   *
+   * The scalatest `eventually` operator is similar, and even adds exponential backoff.
+   * What this offers is
+   * 1. The ability of the probe to offer more than just success/fail, but a "fail fast"
+   * operation which stops spinning early.
+   * 2. A detailed operation to invoke on failure, so provide more diagnostics than
+   * just the assertion.
    * @param interval sleep interval
    * @param timeout time to wait
    * @param probe probe to execute
@@ -421,16 +428,21 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    * @param timeout timeout
    * @return the successful listing
    */
-  def awaitRefreshExecuted(provider: YarnHistoryProvider, timeout: Long): Unit = {
+  def awaitRefreshExecuted(provider: YarnHistoryProvider,
+      triggerRefresh: Boolean,
+      timeout: Long): Unit = {
     val initialCount = provider.getRefreshCount();
     def listingProbe(): Outcome = {
       outcomeFromBool(provider.getRefreshCount() > initialCount)
     }
     def failure(outcome: Outcome, i: Int, b: Boolean): Unit = {
-      fail(s"After $i attempts, refresh count is initialCount: $provider")
+      fail(s"After $i attempts, refresh count is $initialCount: $provider")
     }
     require(provider.isRefreshThreadRunning(),
      s"refresh thread is not running in $provider")
+    if (triggerRefresh) {
+      provider.triggerRefresh()
+    }
     spinForState("await refresh count",
       100,
       timeout,

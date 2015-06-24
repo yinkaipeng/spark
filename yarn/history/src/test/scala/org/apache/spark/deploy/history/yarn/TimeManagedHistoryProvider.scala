@@ -26,12 +26,23 @@ import org.apache.spark.SparkConf
  * the current clock. This is needed to reliably test windowed operations
  * and other actions in which the clock is checked.
  * @param sparkConf configuration of the provider
- * @param t
+ * @param startTime the start time (millis)
+ * @param tickInterval amount to increase on a `tick()`
  */
-class TimeManagedHistoryProvider(sparkConf: SparkConf, var t:Long = 0L)
+class TimeManagedHistoryProvider(sparkConf: SparkConf,
+    var startTime: Long = 0L,
+    var tickInterval: Long = 1000L)
     extends YarnHistoryProvider(sparkConf){
 
-  private val time = new AtomicLong(t)
+  private val time = new AtomicLong(startTime)
+
+  /**
+   * Is the timeline service (and therefore this provider) enabled.
+   * @return true : always
+   */
+  override def enabled: Boolean = {
+    true
+  }
 
   /**
    * Return the current time
@@ -50,7 +61,7 @@ class TimeManagedHistoryProvider(sparkConf: SparkConf, var t:Long = 0L)
    * @return the new value
    */
   def tick(): Long = {
-    time.incrementAndGet()
+    incrementTime(tickInterval)
   }
 
   def incrementTime(t: Long): Long = {

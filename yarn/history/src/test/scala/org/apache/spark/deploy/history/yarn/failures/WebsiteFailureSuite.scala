@@ -44,7 +44,7 @@ class WebsiteFailureSuite extends AbstractTestsWithHistoryServices {
   def expectFailuresToBeSwallowed(webUI: URL, provider: YarnHistoryProvider): Unit = {
     val connector = createUrlConnector()
 
-    awaitRefreshExecuted(provider, TEST_STARTUP_DELAY)
+    awaitRefreshExecuted(provider, true, TEST_STARTUP_DELAY)
     awaitURL(webUI, TEST_STARTUP_DELAY)
     awaitURLContainsText(connector, webUI,
       FailingTimelineQueryClient.ERROR_TEXT, TEST_STARTUP_DELAY)

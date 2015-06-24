@@ -253,7 +253,17 @@ To switch to the timeline history, set `spark.history.provider` to
 
     spark.history.provider org.apache.spark.deploy.history.yarn.YarnHistoryProvider
 
-Specific configuration options:
+The history server bindings in `yarn-site.xml` will also be needed, so that the history
+provider can retrieve events from the YARN Timeline Service.
+
+The history provider retrieves data from the timeline service on startup, and again when
+the page is refreshed by a user. It does not do any updates in the background, to reduce
+the load on the (shared) timeline service. 
+
+This means that to get the most current history data, try refreshing the page more than once:
+the first to trigger the fetch of the latest data; the second to view the updated history
+
+YARN History Provider Configuration Options:
 
 <table class="table">
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
@@ -263,6 +273,30 @@ Specific configuration options:
     <td>
       The period, in seconds, at which information displayed by this history server is updated.
       Each update checks for any changes made to application timeline histories.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.history.yarn.diagnostics</code></td>
+    <td>false</td>
+    <td>
+      A flag to indicate whether low-level diagnostics information should be included in
+      status pages. This is for debugging and diagnostics.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.history.yarn.min-refresh-interval</code></td>
+    <td>60</td>
+    <td>
+      Minimum time in seconds between refreshes of the history data; refreshing the
+      page before this limit will not trigger an update.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.history.yarn.event-fetch-limit</code></td>
+    <td>1000</td>
+    <td>
+      Maximum number of application histories to fetch
+      from the timeline server in a query.
     </td>
   </tr>
 </table>

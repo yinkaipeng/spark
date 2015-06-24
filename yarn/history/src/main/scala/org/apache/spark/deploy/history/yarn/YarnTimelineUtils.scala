@@ -409,7 +409,7 @@ private[spark] object YarnTimelineUtils extends Logging {
     val lastTimestamp = Math.max(startTime, endTime)
     var lastUpdated = numberField(en, FIELD_LAST_UPDATED).longValue
     if (lastUpdated < lastTimestamp) {
-      logDebug(s"Updated time $lastUpdated < latest event $lastTimestamp, overwriting")
+      logDebug(s"lastUpdated field $lastUpdated < latest timestamp $lastTimestamp; overwriting")
       lastUpdated = lastTimestamp
     }
 

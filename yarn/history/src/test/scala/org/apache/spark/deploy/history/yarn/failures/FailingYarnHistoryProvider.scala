@@ -103,11 +103,10 @@ class FailingYarnHistoryProvider(
    *
    * When this thread exits, it will close the `timelineQueryClient`
    * instance
-   * @param interval sleep interval, must be greater than zero
    */
-  override def startRefreshThread(interval: Long): Unit = {
+  override def startRefreshThread(): Unit = {
     if (refreshEnabled) {
-      super.startRefreshThread(interval)
+      super.startRefreshThread()
     }
   }
 }

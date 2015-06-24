@@ -34,6 +34,7 @@ import org.apache.spark.util.Utils
  */
 class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
 
+  val EVENT_PROCESSED_TIMEOUT = 2000
 
   override def setupConfiguration(sparkConf: SparkConf): SparkConf = {
     super.setupConfiguration(sparkConf)
@@ -80,13 +81,13 @@ class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
       listener.onApplicationStart(started)
       val jobId = 2
       listener.onJobStart(jobStartEvent(startTime + 1, jobId))
-      awaitEventsProcessed(historyService, 1, 2000)
+      awaitEventsProcessed(historyService, 1, EVENT_PROCESSED_TIMEOUT)
       flushHistoryServiceToSuccess()
 
       // await for a  refresh
 
       // listing
-      val incompleteListing = awaitListingSize(provider, 1, TEST_STARTUP_DELAY)
+      val incompleteListing = awaitListingSize(provider, 1, EVENT_PROCESSED_TIMEOUT)
 
       val queryClient = createTimelineQueryClient()
 
@@ -99,7 +100,7 @@ class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
       listener.onJobEnd(jobSuccessEvent(startTime + 1, jobId))
       //stop the app
       historyService.stop()
-      awaitEmptyQueue(historyService, TEST_STARTUP_DELAY)
+      awaitEmptyQueue(historyService, EVENT_PROCESSED_TIMEOUT)
       val yarnAppId = applicationId.toString()
       // validate ATS has it
       val timelineEntities =
@@ -118,13 +119,13 @@ class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
       // at this point the REST UI is happy. Check the provider level
 
       // listing
-      val history = awaitListingSize(provider, 1, TEST_STARTUP_DELAY)
+      val history = awaitListingSize(provider, 1, EVENT_PROCESSED_TIMEOUT)
 
       //and look for the complete app
 
-      awaitURL(webUI, TEST_STARTUP_DELAY)
+      awaitURL(webUI, EVENT_PROCESSED_TIMEOUT)
       val completeBody = awaitURLDoesNotContainText(connector, webUI,
-           no_completed_applications, TEST_STARTUP_DELAY)
+           no_completed_applications, EVENT_PROCESSED_TIMEOUT)
       // look for the link
       assertContains(completeBody, s"${yarnAppId}</a>")
 

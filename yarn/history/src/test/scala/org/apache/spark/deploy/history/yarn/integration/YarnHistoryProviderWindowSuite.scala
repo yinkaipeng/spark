@@ -94,7 +94,7 @@ class YarnHistoryProviderWindowSuite
       // now read it in via history provider
       describe("read in listing")
 
-      provider = new TimeManagedHistoryProvider(sparkCtx.conf, end2Time)
+      provider = new TimeManagedHistoryProvider(sparkCtx.conf, end2Time, 1)
       val listing1 = awaitListingSize(provider, 2, TEST_STARTUP_DELAY)
       logInfo(s"Listing 1: $listing1")
       assertCompleted(lookup(listing1, applicationId2), s"app2 in listing1 $listing1")
@@ -115,8 +115,8 @@ class YarnHistoryProviderWindowSuite
       // Now await a refresh
       describe("read in listing #2")
 
-      awaitRefreshExecuted(provider, TEST_STARTUP_DELAY)
-      awaitRefreshExecuted(provider, TEST_STARTUP_DELAY)
+      awaitRefreshExecuted(provider, true, TEST_STARTUP_DELAY)
+      awaitRefreshExecuted(provider, true, TEST_STARTUP_DELAY)
 
       val allApps = provider.listApplications()
       logInfo(s"allApps : ${allApps.applications}")
