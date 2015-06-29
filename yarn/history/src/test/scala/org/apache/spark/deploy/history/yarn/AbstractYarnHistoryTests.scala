@@ -18,7 +18,8 @@
 package org.apache.spark.deploy.history.yarn
 
 import org.apache.hadoop.service.Service
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
+import org.apache.hadoop.yarn.api.records.ApplicationId
+import org.scalatest.{OneInstancePerTest, BeforeAndAfter, FunSuite, Matchers}
 
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
 import org.apache.spark.{Logging, SparkConf, SparkContext}
@@ -41,6 +42,7 @@ import org.apache.spark.{Logging, SparkConf, SparkContext}
 abstract class AbstractYarnHistoryTests
     extends FunSuite with TimelineOptionsInContext with TimelineServiceDisabled
     with HistoryServiceNotListeningToSparkContext
+    with OneInstancePerTest
     with BeforeAndAfter with Logging with ExtraAssertions with Matchers {
 
   protected var sparkCtx: SparkContext = _
@@ -97,10 +99,11 @@ abstract class AbstractYarnHistoryTests
    * @param sc context
    * @return the instantiated service
    */
-  protected def startHistoryService(sc: SparkContext): YarnHistoryService = {
+  protected def startHistoryService(sc: SparkContext, id: ApplicationId = applicationId):
+  YarnHistoryService = {
     assertNotNull(sc, "Spark context")
     val service = new YarnHistoryService()
-    assert(service.start(sc, applicationId), s"client start failed: $service")
+    assert(service.start(sc, id), s"client start failed: $service")
     assert(service.isInState(Service.STATE.STARTED), s"wrong state: $service")
     service
   }

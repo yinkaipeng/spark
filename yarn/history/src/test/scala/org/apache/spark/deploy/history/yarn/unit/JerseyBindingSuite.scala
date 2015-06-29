@@ -21,10 +21,9 @@ import java.io.{ByteArrayInputStream, FileNotFoundException, IOException}
 import java.net.URI
 
 import com.sun.jersey.api.client.{ClientHandlerException, ClientResponse, UniformInterfaceException}
-import org.apache.hadoop.fs.PathPermissionException
 
 import org.apache.spark.deploy.history.yarn.AbstractYarnHistoryTests
-import org.apache.spark.deploy.history.yarn.rest.JerseyBinding
+import org.apache.spark.deploy.history.yarn.rest.{UnauthorizedRequestException, JerseyBinding}
 
 /**
  * Unit test of how well the Jersey Binding works -especially some error handling logic
@@ -66,6 +65,15 @@ class JerseyBindingSuite extends AbstractYarnHistoryTests {
     }
   }
 
+  def assertExceptionDetails(ex: Throwable, messageCheck: String, stringCheck: String): Unit = {
+    if (!ex.getMessage.contains(messageCheck)) {
+      throw ex;
+    }
+    if (!stringCheck.isEmpty && !ex.toString.contains(stringCheck)) {
+      throw ex;
+    }
+  }
+
   /**
    * If a [[ClientHandlerException]] does not contains an IOE, it
    * is wrapped, but the inner text is extracted
@@ -75,8 +83,7 @@ class JerseyBindingSuite extends AbstractYarnHistoryTests {
     val che = new ClientHandlerException(npe)
     val ex = translate(che)
     assertResult(che) { ex.getCause}
-    assert(ex.getMessage.contains("oops"))
-    assert(ex.toString.contains(uriPath))
+    assertExceptionDetails(ex, "oops", uriPath)
   }
 
   /**
@@ -87,8 +94,8 @@ class JerseyBindingSuite extends AbstractYarnHistoryTests {
     val che = new ClientHandlerException("che")
     val ex = translate(che)
     assertResult(che) { ex.getCause}
-    assert(ex.getMessage.contains("che"))
-    assert(ex.toString.contains(uriPath))
+    assertExceptionDetails(ex, "che", uriPath)
+
   }
 
   /**
@@ -99,8 +106,7 @@ class JerseyBindingSuite extends AbstractYarnHistoryTests {
     val che = new ClientHandlerException("che")
     val ex = JerseyBinding.translateException("POST", null, che)
     assertResult(che) { ex.getCause}
-    assert(ex.toString.contains("POST"))
-    assert(ex.toString.contains("unknown"))
+    assertExceptionDetails(ex, "POST", "unknown")
   }
 
 
@@ -109,8 +115,7 @@ class JerseyBindingSuite extends AbstractYarnHistoryTests {
     val uie = new UniformInterfaceException("uae", null, false)
     val ex = translate(uie)
     assertResult(uie) { ex.getCause }
-    assert(ex.getMessage.contains("uae"))
-    assert(ex.toString.contains(uriPath))
+    assertExceptionDetails(ex, "uae", uriPath)
   }
 
   test("UniformInterfaceException 404 no body response") {
@@ -118,18 +123,16 @@ class JerseyBindingSuite extends AbstractYarnHistoryTests {
     val ex = translate(uie)
     assertResult(uie) { ex.getCause }
     assert(ex.isInstanceOf[FileNotFoundException], s"not FileNotFoundException: $ex")
-    assert (ex.getMessage.contains("404"))
-    assert (ex.toString.contains(uriPath))
-  }
+    assertExceptionDetails(ex, "404", uriPath)
 
+  }
 
   test("UniformInterfaceException 403 forbidden") {
     val uie = newUIE(403, "forbidden", false)
     val ex = translate(uie)
     assertResult(uie) { ex.getCause }
-    assert(ex.isInstanceOf[PathPermissionException], s"not PathPermissionException: $ex")
-    assert(ex.getMessage.contains("403"))
-    assert(ex.toString.contains(uriPath))
+    assert(ex.isInstanceOf[UnauthorizedRequestException], s"not UnauthorizedRequestException: $ex")
+    assertExceptionDetails(ex, "Forbidden", uriPath)
   }
 
 
@@ -138,10 +141,7 @@ class JerseyBindingSuite extends AbstractYarnHistoryTests {
     val ex = translate(uie)
     assertResult(uie) { ex.getCause }
     assert(ex.isInstanceOf[IOException], s"not IOException: $ex")
-    assert(ex.getMessage.contains("500"))
-    assert(ex.getMessage.contains("GET"))
-    assert(ex.toString.contains(uriPath))
+    assertExceptionDetails(ex, "500", uriPath)
   }
-
 
 }

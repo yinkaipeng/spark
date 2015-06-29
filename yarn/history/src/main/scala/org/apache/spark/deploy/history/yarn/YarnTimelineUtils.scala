@@ -20,9 +20,10 @@ package org.apache.spark.deploy.history.yarn
 
 import java.io.IOException
 import java.net.{URI, URL}
-import java.util
+import java.text.DateFormat
+import java.{lang, util}
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.{ArrayList => JArrayList, Collection => JCollection, Date, HashMap => JHashMap, Map => JMap}
+import java.util.{ArrayList => JArrayList, Collection => JCollection, HashMap => JHashMap, Map => JMap, Date}
 
 import scala.collection.JavaConversions._
 import scala.util.control.NonFatal
@@ -171,16 +172,28 @@ private[spark] object YarnTimelineUtils extends Logging {
 
   def describeEntity(entity: TimelineEntity): String = {
     val events: util.List[TimelineEvent] = entity.getEvents
-    val eventDetails = if (events != null) {
+    val eventSummary = if (events != null) {
       s"contains ${events.size()} event(s)"
     } else {
       "contains no events"
     }
 
-    s"Timeline Entity ${entity.getEntityType}/${entity.getEntityId}@${entity.getDomainId}} " +
-        (if (entity.getStartTime() != null)
-           s"${new Date(entity.getStartTime())} " else "no start time ") +
-        eventDetails
+    val header = s"${entity.getEntityType }/${entity.getEntityId }@${entity.getDomainId }}"
+    val otherInfo = entity.getOtherInfo().foldLeft("\n") (
+      (acc,kv) => acc + s"${kv._1} = ${kv._2}"
+    )
+    s"Timeline Entity " + header +
+        " " + otherInfo +
+        " " + timeFieldToString(entity.getStartTime(), "start") +
+        " " + eventSummary
+  }
+
+  def timeFieldToString(time: lang.Long, field: String): String = {
+    if (time != null) {
+      s"${new Date(time) } "
+    } else {
+       ("no " + field + " time ")
+     }
   }
 
   /**
@@ -362,17 +375,21 @@ private[spark] object YarnTimelineUtils extends Logging {
   }
 
   /**
-   * Lookup a required numeric field in the `otherInfo` section of a [[TimelineEntity]]
+   * Lookup a required numeric field in the `otherInfo` section of a [[TimelineEntity]],
+   * fall back to `defval` if the field is absent or cannot be parsed
    * @param en entity
    * @param name field name
+   * @param defval default value
    * @return the value
-   * @throws Exception if the field is not found or it is not a number
    */
-  private def numberField(en: TimelineEntity, name: String) : Number = {
-    val contents = field(en, name)
-    contents match {
-      case n: Number => n
-      case _ => 0L
+  private def numberField(en: TimelineEntity, name: String, defval:Long = 0L) : Number = {
+    try {
+      field(en, name) match {
+        case n: Number => n
+        case _ => defval
+      }
+    } catch {
+      case NonFatal(e) => defval
     }
   }
 
@@ -380,25 +397,159 @@ private[spark] object YarnTimelineUtils extends Logging {
    * Build an [[ApplicationHistoryInfo]] instance from
    * a [[TimelineEntity]]
    * @param en the entity
-   * @return an history info structure. The completed bit is strue if the entity has an
+   * @return an history info structure. The completed bit is true if the entity has an
    *         end time.
    * @throws Exception if the entity lacked an entry of that key
    * @throws ClassCastException if the the key contained value, but it
    *                            could not be converted to the desired type
    */
   def toApplicationHistoryInfo(en: TimelineEntity) : ApplicationHistoryInfo = {
-    var endTime = 0L
-    try {
-      endTime = numberField(en, FIELD_END_TIME).longValue
-    } catch {
-      case NonFatal(e) => endTime = 0L
+    val endTime = numberField(en, FIELD_END_TIME).longValue
+    val startTime = numberField(en, FIELD_START_TIME).longValue
+    val lastTimestamp = Math.max(startTime, endTime)
+    var lastUpdated = numberField(en, FIELD_LAST_UPDATED).longValue
+    if (lastUpdated < lastTimestamp) {
+      logDebug(s"lastUpdated field $lastUpdated < latest timestamp $lastTimestamp; overwriting")
+      lastUpdated = lastTimestamp
     }
+
     ApplicationHistoryInfo(en.getEntityId(),
       field(en, FIELD_APP_NAME).asInstanceOf[String],
-      numberField(en, FIELD_START_TIME).longValue,
+      startTime,
       endTime,
-      endTime,
+      lastUpdated,
       field(en, FIELD_APP_USER).asInstanceOf[String],
       endTime > 0)
+  }
+
+  /**
+   * Build date for display in status messages
+   * @param timestamp time in milliseconds post-Epoch
+   * @param unset string to use if timestamp == 0
+   * @return a string for messages
+   */
+  def humanDateCurrentTZ(timestamp: Long, unset: String) : String = {
+    if (timestamp == 0) {
+      unset
+    } else {
+      val dateFormatter = DateFormat.getDateTimeInstance(DateFormat.DEFAULT,
+                                                          DateFormat.LONG)
+      dateFormatter.format(timestamp)
+    }
+  }
+
+  /**
+   * Short formatted time
+   * @param timestamp time in milliseconds post-Epoch
+   * @param unset string to use if timestamp == 0
+   * @return a string for messages
+   */
+  def timeShort(timestamp: Long, unset: String) : String = {
+    if (timestamp == 0) {
+      unset
+    } else {
+      val dateFormatter = DateFormat.getTimeInstance(DateFormat.SHORT)
+      dateFormatter.format(timestamp)
+    }
+  }
+
+  /**
+   * Describe the application history, includind timestamps & completed
+   * flag
+   * @param info history info to describe
+   * @return a string description
+   */
+  def describeApplicationHistoryInfo(info: ApplicationHistoryInfo) : String = {
+    val core = s"ApplicationHistoryInfo [${info.id }] ${info.name }"
+    val never = "-"
+    s"$core : started ${timeShort(info.startTime, never)}," +
+        s" ended ${ timeShort(info.endTime, never) }" +
+        s" updated ${ timeShort(info.lastUpdated, never) }" +
+        s" completed = ${info.completed}"
+  }
+
+
+  /**
+   * Build a combined list with the policy of
+   * all original values come first, followed by the later ones.
+   * Unless there is a later entry of the same ID...
+   * In which case, that later entry appears.
+   * @param original original list of entries
+   * @param latest later list of entries
+   * @return a combined list.
+   */
+  def combineResults(original: Seq[ApplicationHistoryInfo],
+      latest: Seq[ApplicationHistoryInfo]): Seq[ApplicationHistoryInfo] = {
+    var map = new scala.collection.mutable.HashMap[String, ApplicationHistoryInfo]
+    val results = new scala.collection.mutable.LinkedList[ApplicationHistoryInfo]
+    latest.map((elt) => map.put(elt.id, elt))
+    // append the original values
+    val filteredOrig = original.filterNot((elt) => map.contains(elt.id))
+    filteredOrig ++ latest
+  }
+
+
+  /**
+   * Sort a list of applications by their start time
+   * @param history history list
+   * @return a new, sorted list
+   */
+  def sortApplicationsByStartTime(history: Seq[ApplicationHistoryInfo]):
+    Seq[ApplicationHistoryInfo] = {
+    history.sortBy(_.startTime)
+  }
+
+  /**
+   * Find the latest application in the list. Scans the list once, so is O(n) even if
+   * the list is already sorted.
+   * @param history history to scan (which can be an empty list
+   * @return the latest element in the list
+   */
+  def findLatestApplication(history: Seq[ApplicationHistoryInfo]): Option[ApplicationHistoryInfo] = {
+    history match {
+      case Nil => None
+      case l => Some(l.reduceLeft((x, y) => if (x.startTime < y.startTime) y else x))
+    }
+  }
+
+  /**
+   * Find the latest application in the list. Scans the list once, so is O(n) even if
+   * the list is already sorted.
+   * @param history history to scan (which can be an empty list
+   * @return the element in the list which started first
+   */
+  def findOldestApplication(history: Seq[ApplicationHistoryInfo]): Option[ApplicationHistoryInfo] = {
+    history match {
+      case Nil => None
+      case l => Some(l.reduceLeft((x, y) => if (x.startTime <= y.startTime) x else y))
+    }
+  }
+
+  /**
+   * Find the application that represents the start of the update window.
+   *
+   * First it locates the oldest incomplete application in the list.
+   * If there are no incomplete entries, then the latest completed entry is picked up
+   * @param history history to scan (which can be an empty list)
+   * @return the latest element in the list, or `None` for no match
+   */
+  def findStartOfWindow(history: Seq[ApplicationHistoryInfo]): Option[ApplicationHistoryInfo] = {
+    findIncompleteApplications(history) match {
+        // no incomplete apps; use latest
+      case Nil => findLatestApplication(history)
+      case incomplete => findOldestApplication(incomplete)
+    }
+  }
+
+  /**
+   * Build the list of all incomplete applications
+   * @param history
+   */
+  def findIncompleteApplications(history: Seq[ApplicationHistoryInfo]): Seq[ApplicationHistoryInfo] = {
+    history.filter(!_.completed)
+  }
+
+  def findAppById(history: Seq[ApplicationHistoryInfo], id: String): Option[ApplicationHistoryInfo] = {
+    history.find(_.id == id)
   }
 }

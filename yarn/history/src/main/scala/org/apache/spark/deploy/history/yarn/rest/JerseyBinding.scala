@@ -28,7 +28,6 @@ import com.sun.jersey.api.client.{Client, ClientHandlerException, ClientResponse
 import com.sun.jersey.api.json.JSONConfiguration
 import com.sun.jersey.client.urlconnection.{HttpURLConnectionFactory, URLConnectionClientHandler}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.PathPermissionException
 import org.apache.hadoop.security.token.delegation.web.DelegationTokenAuthenticatedURL
 import org.codehaus.jackson.jaxrs.JacksonJaxbJsonProvider
 import org.codehaus.jackson.map.ObjectMapper
@@ -49,6 +48,24 @@ private[spark] class JerseyBinding(conf: Configuration, token: DelegationTokenAu
   override def getHttpURLConnection(url: URL): HttpURLConnection = {
     connector.getHttpURLConnection(url)
   }
+  
+  /**
+  * reset the token
+   */
+  def resetToken(): Unit = {
+    connector.resetToken()
+  }
+
+  /**
+   * Create a Jersey client with the UGI binding set up.
+   * @param conf Hadoop configuration
+   * @param clientConfig jersey client config
+   * @return a new client instance
+   */
+  def createClient(conf: Configuration, clientConfig: ClientConfig): Client = {
+    new Client(handler, clientConfig)
+  }
+
 }
 
 private[spark] object JerseyBinding extends Logging {
@@ -160,30 +177,41 @@ private[spark] object JerseyBinding extends Logging {
     exception: UniformInterfaceException): IOException = {
     var ioe: IOException = null
     val response = exception.getResponse
-    val uri = if (targetURL != null) targetURL.toString else ("unknown URL")
+    val url = if (targetURL != null) targetURL.toString else ("unknown URL")
     if (response != null) {
       val status: Int = response.getStatus
       val body = bodyOfResponse(response, 256)
-      val errorText = s"Bad $verb request: status code $status against $uri; $body"
-      if (status == HttpServletResponse.SC_UNAUTHORIZED ||
-          status == HttpServletResponse.SC_FORBIDDEN) {
-        ioe = new PathPermissionException(errorText)
-      } else if (status == HttpServletResponse.SC_BAD_REQUEST ||
-          status == HttpServletResponse.SC_NOT_ACCEPTABLE ||
-          status == HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE) {
-        // ideally a specific exception could be raised here, but there is no ideal match in the JDK
-        ioe = new IOException(errorText)
+      val errorText = s"Bad $verb request: status code $status against $url; $body"
+      status match {
 
-      } else if (status > 400 && status < 500) {
-        ioe = new FileNotFoundException(
-            s"Bad $verb request: status code $status against $uri; $body")
-      } else {
-        ioe = new IOException(errorText)
+        case HttpServletResponse.SC_UNAUTHORIZED =>
+          ioe = new UnauthorizedRequestException(url,
+            s"Unauthorized (401) access to $url",
+            exception)
+
+        case HttpServletResponse.SC_FORBIDDEN =>
+          ioe =  new UnauthorizedRequestException(url,
+            s"Forbidden (403) access to $url",
+            exception)
+
+        case HttpServletResponse.SC_BAD_REQUEST
+          | HttpServletResponse.SC_NOT_ACCEPTABLE
+          | HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE =>
+          throw new IOException(errorText, exception)
+
+        case resultCode: Int if resultCode >= 400 && resultCode <500 =>
+          ioe = new FileNotFoundException(
+            s"Bad $verb request: status code $status against $url; $body")
+          ioe.initCause(exception)
+
+        case _ =>
+          ioe = new IOException(errorText, exception)
+
       }
     } else {
-      ioe = new IOException(s"$verb $uri failed: $exception")
+      // no response
+      ioe = new IOException(s"$verb $url failed: $exception", exception)
     }
-    ioe.initCause(exception)
     ioe
   }
 
@@ -197,8 +225,7 @@ private[spark] object JerseyBinding extends Logging {
   def createJerseyClient(conf: Configuration,
       clientConfig: ClientConfig,
       token: DelegationTokenAuthenticatedURL.Token = new DelegationTokenAuthenticatedURL.Token): Client = {
-    val jerseyBinding = new JerseyBinding(conf, token)
-    new Client(jerseyBinding.handler, clientConfig)
+    new JerseyBinding(conf, token).createClient(conf, clientConfig)
   }
 
   /**

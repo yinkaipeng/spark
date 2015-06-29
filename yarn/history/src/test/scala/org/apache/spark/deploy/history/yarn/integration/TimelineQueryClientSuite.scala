@@ -71,7 +71,7 @@ class TimelineQueryClientSuite extends AbstractTestsWithHistoryServices {
     assert(timelineEntities.size == 1, "empty TimelineEntity list")
     assertEquals(te, timelineEntities.head)
 
-    val entity2 = queryClient.getEntity(SPARK_EVENT_ENTITY_TYPE, te.getEntityId )
+    val entity2 = queryClient.getEntity(SPARK_EVENT_ENTITY_TYPE, te.getEntityId() )
     assertEquals(te, entity2)
 
     val listing2 = queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE,
@@ -102,8 +102,8 @@ class TimelineQueryClientSuite extends AbstractTestsWithHistoryServices {
     val ex = intercept[HttpRequestException] {
       client.healthCheck()
     }
-    log.debug(s"GET $client",ex)
-    assertContains(ex.toString(),"<html>")
+    log.debug(s"GET $client", ex)
+    assertContains(ex.toString(), "text/html")
   }
 
 }

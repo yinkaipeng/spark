@@ -129,10 +129,24 @@ trait ExtraAssertions extends Logging with Assertions {
    * @param source source string
    * @param contained string to look for
    */
-  def assertContains(source: String, contained: String): Unit = {
-    assertNotNull(source, "null source")
-    assert(source.contains(contained),
-          s"did not find '${contained}' in '${source}'")
+  def assertContains(source: String, contained: String, text: String = ""): Unit = {
+    assertNotNull(source, s"$text null source")
+    assertNotNull(contained, s"$text null `contained`")
+    if (!source.contains(contained)) {
+      fail(s"$text -Did not find '${contained }' in '${source }'")
+    }
+  }
+
+  /**
+   * Assert that a source string does contains the `contained` substring.
+   * @param source source string
+   * @param contained string to look for
+   */
+  def assertDoesNotContain(source: String, contained: String, text: String = ""): Unit = {
+    assertNotNull(source, s"$text null source")
+    assertNotNull(contained, s"$text null `contained`")
+    assert(!source.contains(contained),
+          s"$text -Found '${contained}' in '${source}'")
   }
 
   /**

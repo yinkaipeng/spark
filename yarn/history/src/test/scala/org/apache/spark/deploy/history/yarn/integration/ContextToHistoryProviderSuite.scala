@@ -27,7 +27,7 @@ import org.apache.spark.deploy.history.yarn.{HandleSparkEvent, HistoryServiceLis
 import org.apache.spark.util.Utils
 
 /**
- * full hookup from spark context to timeline then reread. This is the big one
+ * full hookup from spark context to timeline then reread.
  */
 class ContextToHistoryProviderSuite
     extends AbstractTestsWithHistoryServices
@@ -59,7 +59,7 @@ class ContextToHistoryProviderSuite
                                  Utils.getCurrentUserName())
       historyService.enqueue(new HandleSparkEvent(event, startTime))
       flushes += 1
-      awaitEmptyQueue(historyService, 5000)
+      awaitEmptyQueue(historyService, TEST_STARTUP_DELAY)
 
       // add a local file to generate an update event
       /*
@@ -100,10 +100,7 @@ class ContextToHistoryProviderSuite
 
       // now read it in via history provider
       val provider = new YarnHistoryProvider(sparkCtx.conf)
-      val history = provider.getListing()
-      assertResult(1, "size of history") {
-        history.size
-      }
+      val history = awaitListingSize(provider, 1, TEST_STARTUP_DELAY)
       val info = history.head
       assert(info.completed, s"application not flagged as completed")
       provider.getAppUI(info.id)

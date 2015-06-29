@@ -27,10 +27,14 @@ import org.apache.spark.scheduler.cluster.YarnExtensionServices
 import org.apache.spark.util.Utils
 
 /**
- * This is the complete integration test
+ * Test handling/logging of incomplete applications.
+ *
+ * This implicitly tests some of the windowing logic. Specifically, do completed
+ * applications get picked up?
  */
-class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
+class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
 
+  val EVENT_PROCESSED_TIMEOUT = 2000
 
   override def setupConfiguration(sparkConf: SparkConf): SparkConf = {
     super.setupConfiguration(sparkConf)
@@ -39,39 +43,64 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
     sparkConf.set(SPARK_HISTORY_UI_PORT, findPort().toString)
   }
 
-  test("Instantiate HistoryProvider") {
-    val provider = createHistoryProvider(sparkCtx.getConf)
-    provider.stop()
-  }
 
-  test("WebUI hooked up") {
-    def probeEmptyWebUIVoid(webUI: URL, provider: YarnHistoryProvider): Unit = {
-      probeEmptyWebUI(webUI, provider)
+  test("WebUI incomplete view") {
+    def checkEmptyIncomplete(webUI: URL, provider: YarnHistoryProvider): Unit = {
+      val connector = createUrlConnector()
+      val url = new URL(webUI, "/?" + page1_incomplete_flag)
+      val incompleted = connector.execHttpOperation("GET", url, null, "")
+      val body = incompleted.responseBody
+      logInfo(s"$url => $body")
+      assertContains(body, no_incomplete_applications, s"In $url")
     }
-    webUITest("WebUI hooked up", probeEmptyWebUIVoid)
+
+    webUITest("incomplete view", checkEmptyIncomplete)
   }
 
   test("Publish Events and GET the web UI") {
     def submitAndCheck(webUI: URL, provider: YarnHistoryProvider): Unit = {
+      val connector = createUrlConnector()
+      val incompleteURL = new URL(webUI, "/?" + incomplete_flag)
+      awaitURL(incompleteURL, TEST_STARTUP_DELAY)
 
+      def listIncompleteApps(): String = {
+        connector.execHttpOperation("GET", incompleteURL, null, "").responseBody
+      }
       historyService = startHistoryService(sparkCtx)
       val timeline = historyService.getTimelineServiceAddress()
       val listener = new YarnEventListener(sparkCtx, historyService)
+      // initial view has no incomplete applications
+      assertContains(listIncompleteApps(), no_incomplete_applications,
+        "initial incomplete page is empty")
+
       val startTime = now()
 
       val started = appStartEvent(startTime,
                                    sparkCtx.applicationId,
                                    Utils.getCurrentUserName())
       listener.onApplicationStart(started)
-      awaitEventsProcessed(historyService, 1, 2000)
+      val jobId = 2
+      listener.onJobStart(jobStartEvent(startTime + 1, jobId))
+      awaitEventsProcessed(historyService, 1, EVENT_PROCESSED_TIMEOUT)
       flushHistoryServiceToSuccess()
 
-      val connector = createUrlConnector()
+      // await for a  refresh
+
+      // listing
+      val incompleteListing = awaitListingSize(provider, 1, EVENT_PROCESSED_TIMEOUT)
+
       val queryClient = createTimelineQueryClient()
 
-      //now stop the app
+      // check for work in progress
+      assertDoesNotContain(listIncompleteApps(), no_incomplete_applications,
+        "'incomplete application' list empty")
+
+      logInfo("Ending job and application")
+      //job completion event
+      listener.onJobEnd(jobSuccessEvent(startTime + 1, jobId))
+      //stop the app
       historyService.stop()
-      awaitEmptyQueue(historyService, TEST_STARTUP_DELAY)
+      awaitEmptyQueue(historyService, EVENT_PROCESSED_TIMEOUT)
       val yarnAppId = applicationId.toString()
       // validate ATS has it
       val timelineEntities =
@@ -90,24 +119,25 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
       // at this point the REST UI is happy. Check the provider level
 
       // listing
-      val history = awaitListingSize(provider, 1, TEST_STARTUP_DELAY)
+      val history = awaitListingSize(provider, 1, EVENT_PROCESSED_TIMEOUT)
 
       //and look for the complete app
 
-      awaitURL(webUI, TEST_STARTUP_DELAY)
+      awaitURL(webUI, EVENT_PROCESSED_TIMEOUT)
       val completeBody = awaitURLDoesNotContainText(connector, webUI,
-           no_completed_applications, TEST_STARTUP_DELAY)
-      logInfo(s"GET /\n$completeBody")
+           no_completed_applications, EVENT_PROCESSED_TIMEOUT)
       // look for the link
-      assertContains(completeBody,s"${yarnAppId}</a>")
+      assertContains(completeBody, s"${yarnAppId}</a>")
 
-      val appPath = s"/history/${yarnAppId }"
+      val appPath = s"/history/${yarnAppId}"
       // GET the app
       val appURL = new URL(webUI, appPath)
       val appUI = connector.execHttpOperation("GET", appURL, null, "")
       val appUIBody = appUI.responseBody
       logInfo(s"Application\n$appUIBody")
       assertContains(appUIBody, APP_NAME)
+      // look for the completed job
+      assertContains(appUIBody, completedJobsMarker)
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/jobs"), null, "")
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/stages"), null, "")
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/storage"), null, "")
@@ -123,6 +153,9 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
         case None => fail(s"Did not get a UI for $yarnAppId")
       }
 
+
+      // final view has no incomplete applications
+      assertContains(listIncompleteApps, no_incomplete_applications)
 
     }
 

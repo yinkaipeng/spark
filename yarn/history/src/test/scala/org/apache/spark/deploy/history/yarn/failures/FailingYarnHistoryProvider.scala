@@ -21,49 +21,43 @@ import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.yarn.YarnHistoryProvider
 import org.apache.spark.deploy.history.yarn.rest.{JerseyBinding, TimelineQueryClient}
+import org.apache.spark.{Logging, SparkConf}
 
 /**
  * This is a YARN history provider that can be given
  * a (possibly failing) query client, and can be configured
- * as to whether to start with a health check
+ * as to whether to start with a health check.
  * @param queryClient query client
  * @param healthAlreadyChecked should the initial health
  *                             check be skipped? It will if this
  *                             is true
  * @param endpoint URI of the service.
  */
-class FailingYarnHistoryProvider(queryClient: TimelineQueryClient,
+class FailingYarnHistoryProvider(
+    queryClient: TimelineQueryClient,
     healthAlreadyChecked: Boolean,
-    endpoint: URI) extends YarnHistoryProvider(new SparkConf()) {
-
-  private var _enabled: Boolean = true
+    endpoint: URI,
+    sparkConf: SparkConf,
+    refreshEnabled: Boolean = false) extends YarnHistoryProvider(sparkConf) with Logging {
 
   init()
+
+
+  /**
+   * Is the timeline service (and therefore this provider) enabled.
+   * @return true : always
+   */
+  override def enabled: Boolean = {
+    true
+  }
 
   /**
    * Any initialization logic
    */
   private def init(): Unit = {
     getHealthFlag().set(healthAlreadyChecked)
-  }
-
-
-  /**
-   * the current enabled flag value, which can be dynamically changed
-   */
-  override def enabled: Boolean = {
-    _enabled
-  }
-
-  /**
-   * Update the enabled flag
-   * @param b new value
-   */
-  def setEnabled(b: Boolean): Unit = {
-    _enabled = b
   }
 
   /**
@@ -77,7 +71,7 @@ class FailingYarnHistoryProvider(queryClient: TimelineQueryClient,
   /**
    * @return the `queryClient` field.
    */
-  override protected def createTimelineQueryClient: TimelineQueryClient = {
+  override protected def createTimelineQueryClient(): TimelineQueryClient = {
     queryClient
   }
 
@@ -96,12 +90,56 @@ class FailingYarnHistoryProvider(queryClient: TimelineQueryClient,
     getHealthFlag().set(b)
   }
 
+
+  /**
+   * export the health chck for testing
+   */
+  override def maybeCheckHealth(): Boolean = {
+    super.maybeCheckHealth()
+  }
+
+  /**
+   * Start the refresh thread with the given interval.
+   *
+   * When this thread exits, it will close the `timelineQueryClient`
+   * instance
+   */
+  override def startRefreshThread(): Unit = {
+    if (refreshEnabled) {
+      super.startRefreshThread()
+    }
+  }
+}
+
+/**
+ * A failing yarn history provider that returns enabled=false, always
+ * @param queryClient query client
+ * @param healthAlreadyChecked should the initial health
+ *                             check be skipped? It will if this
+ *                             is true
+ * @param endpoint URI of the service.
+ * @param sparkConf
+ */
+class DisabledFailingYarnHistoryProvider(queryClient: TimelineQueryClient,
+    healthAlreadyChecked: Boolean,
+    endpoint: URI,
+    sparkConf: SparkConf) extends FailingYarnHistoryProvider(
+    queryClient, healthAlreadyChecked,
+    endpoint,
+    sparkConf) {
+
+  /**
+   * false
+   */
+  override def enabled: Boolean = {
+    false
+  }
 }
 
 /**
  * Some operations to help the failure tests
  */
-object FailingYarnHistoryProvider {
+object FailingYarnHistoryProvider extends Logging {
 
   def createQueryClient(): FailingTimelineQueryClient = {
     new FailingTimelineQueryClient(new URI("http://localhost:80/"),
@@ -114,10 +152,14 @@ object FailingYarnHistoryProvider {
    * This inner provider calls most of its internal methods.
    * @return
    */
-  def createFailingProvider(healthAlreadyChecked: Boolean = false): YarnHistoryProvider = {
+  def createFailingProvider(sparkConf: SparkConf,
+      healthAlreadyChecked: Boolean = false,
+      refreshEnabled: Boolean = false): YarnHistoryProvider = {
     val failingClient = createQueryClient()
     new FailingYarnHistoryProvider(failingClient,
-                                    healthAlreadyChecked,
-                                    new URI("http://localhost:80/"))
+      healthAlreadyChecked,
+      new URI("http://localhost:80/"),
+      sparkConf,
+      refreshEnabled)
   }
 }

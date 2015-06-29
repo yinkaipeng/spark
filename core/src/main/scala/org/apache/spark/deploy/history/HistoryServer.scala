@@ -174,8 +174,8 @@ object HistoryServer extends Logging {
 
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
-    initSecurity()
     new HistoryServerArguments(conf, argStrings)
+    initSecurity()
     val securityManager = new SecurityManager(conf)
 
     val providerName = conf.getOption("spark.history.provider")
@@ -211,6 +211,8 @@ object HistoryServer extends Logging {
       val principalName = conf.get("spark.history.kerberos.principal")
       val keytabFilename = conf.get("spark.history.kerberos.keytab")
       SparkHadoopUtil.get.loginUserFromKeytab(principalName, keytabFilename)
+    } else {
+      logDebug(s"Kerberos is not enabled")
     }
   }
 

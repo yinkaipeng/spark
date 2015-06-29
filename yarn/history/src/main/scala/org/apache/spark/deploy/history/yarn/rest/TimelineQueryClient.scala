@@ -17,9 +17,9 @@
  */
 package org.apache.spark.deploy.history.yarn.rest
 
-import java.io.Closeable
+import java.io.{FileNotFoundException, Closeable}
 import java.net.{URI, URL}
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicLong, AtomicBoolean}
 import javax.servlet.http.HttpServletResponse
 import javax.ws.rs.core.MediaType
 
@@ -28,6 +28,7 @@ import scala.collection.JavaConverters._
 import com.sun.jersey.api.client.config.ClientConfig
 import com.sun.jersey.api.client.{Client, ClientResponse, WebResource}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.security.token.delegation.web.DelegationTokenAuthenticatedURL
 import org.apache.hadoop.yarn.api.records.timeline.{TimelineEntities, TimelineEntity}
 import org.codehaus.jackson.annotate.{JsonAnySetter, JsonIgnoreProperties}
@@ -52,23 +53,45 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
    */
   private val closed = new AtomicBoolean(false)
   private val timelineURL = timelineURI.toURL
+  private val retryLimit = 3
+  private val retry_interval = 100
 
   /**
-   * the delegation token used
+   * the delegation token (unused until delegation support implemented)
    */
-  var token: DelegationTokenAuthenticatedURL.Token = new DelegationTokenAuthenticatedURL.Token
+  private var token: DelegationTokenAuthenticatedURL.Token = new DelegationTokenAuthenticatedURL.Token
+
+  /**
+   * The last time there was a token renewal operation.
+   */
+  private val _lastTokenRenewal = new AtomicLong(0)
+  private val _tokenRenewalCount = new AtomicLong(0)
+
+  /**
+   * Jersey binding -this exposes the method to reset the token
+   */
+  private val jerseyBinding = new JerseyBinding(conf, token)
 
   /**
    * Jersey Client using config from constructor
    */
-  val jerseyClient: Client = {
-    JerseyBinding.createJerseyClient(conf, jerseyClientConfig, token)
-  }
+  private val jerseyClient: Client = jerseyBinding.createClient(conf, jerseyClientConfig)
 
   /**
    * Base resource of ATS
    */
   private val timelineResource = jerseyClient.resource(timelineURI)
+
+  init()
+
+  private def init(): Unit = {
+    logDebug("logging in ")
+    // this operation has side effects including triggering a refresh thread, so leave alone
+    val user = UserGroupInformation.getLoginUser()
+    logInfo(s"User = ${user}")
+    // now do an initial checkin
+    UserGroupInformation.getCurrentUser.checkTGTAndReloginFromKeytab()
+  }
 
   /**
    * When this instance is closed, the jersey client is stopped
@@ -120,18 +143,51 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
    * into more specific exceptions.
    * @param uri URI (used when generating text reporting exceptions)
    * @param action action to perform
+   * @param retries  number of retries on any failed operation
    * @tparam T type of response
    * @return the result of the action
    */
-  def exec[T](verb: String, uri: URI, action: (() => T)): T = {
+  def exec[T](verb: String, uri: URI, action: (() => T), retries: Int = retryLimit): T = {
     logDebug(s"$verb $uri")
     try {
       innerExecAction(action)
     } catch {
       case e: Exception =>
-        logWarning(s"$verb $uri failed", e)
-        throw JerseyBinding.translateException(verb, uri, e)
+        val exception = JerseyBinding.translateException(verb, uri, e)
+        logDebug(s"$verb $uri failed: $exception", exception)
+        exception match {
+          case ure: FileNotFoundException =>
+            logInfo(s"Not found: $uri")
+
+          case ure: UnauthorizedRequestException =>
+            // possible expiry
+            logInfo(s"Renewing Auth token due to $exception")
+            resetConnection()
+
+          case other: Exception =>
+            logWarning(s"$verb $uri failed: $exception")
+            logDebug(s"detail", exception)
+        }
+        if (retries > 0) {
+          logInfo(s"Retrying -remaining attempts: $retries")
+          Thread.sleep(retry_interval)
+          exec(verb, uri, action, retries - 1)
+        } else {
+          throw exception
+        }
     }
+  }
+
+  /**
+   * Reset the delegation token. Also triggers a TGT login,
+   * just for completeness
+   */
+  def resetConnection(): Unit = {
+    logInfo("Resetting connection")
+    UserGroupInformation.getCurrentUser.checkTGTAndReloginFromKeytab()
+    jerseyBinding.resetToken()
+    _lastTokenRenewal.set(System.currentTimeMillis())
+    _tokenRenewalCount.incrementAndGet()
   }
 
   /**
@@ -192,23 +248,19 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
     val endpoint = aboutURI.toString
     val status = clientResponse.getClientResponseStatus.getStatusCode
     val body = clientResponse.getEntity(classOf[String])
+
+    // validate the content type is JSON; if not its usually the wrong URL
     val contentType = clientResponse.getType
     if (MediaType.APPLICATION_JSON_TYPE != contentType) {
-      // wrong media type
-      val m = s"Wrong content type: expected application/json but got $contentType." +
-          s" Check the URL of the timeline service: $aboutURI"
-      val text = if (contentType.isCompatible(MediaType.valueOf("text/*"))) {
-        m + "\n" + body
-      } else {
-        m
-      }
       throw new HttpRequestException(status, "GET", endpoint ,
-          text,
-          body)
+        s"Wrong content type: expected application/json but got $contentType. " +
+            TimelineQueryClient.MESSAGE_CHECK_URL + s": $aboutURI",
+        body)
     }
+    // an empty body is a sign of other problems
     if (body.isEmpty) {
       throw new HttpRequestException(status, "GET", endpoint,
-              s"No data in the response")
+            TimelineQueryClient.MESSAGE_EMPTY_RESPONSE + s": $aboutURI")
     }
     // finally, issue an about() operation again to force the JSON parse
     about()
@@ -309,6 +361,18 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
   override def toString: String = {
     s"Timeline Query Client against $timelineURI"
   }
+
+  /**
+   * Get the time the token was last renewed
+   * @return a system timestamp of the last renewal; 0 on startup
+   */
+  def lastTokenRenewal: Long = {
+    _lastTokenRenewal.get()
+  }
+
+  def tokenRenewalCount: Long = {
+    _tokenRenewalCount.get()
+  }
 }
 
 /**
@@ -327,4 +391,9 @@ private [spark] class AboutResponse {
     other += (key -> value)
   }
 
+}
+
+private[spark] object TimelineQueryClient {
+  val MESSAGE_CHECK_URL = "Check the URL of the timeline service:"
+  val MESSAGE_EMPTY_RESPONSE = s"No data in the response"
 }

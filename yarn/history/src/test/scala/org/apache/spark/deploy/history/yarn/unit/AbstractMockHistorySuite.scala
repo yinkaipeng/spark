@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.history.yarn.unit
 
 import org.apache.hadoop.service.{Service, ServiceOperations}
+import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.hadoop.yarn.api.records.timeline.{TimelineEntity, TimelinePutResponse}
 import org.apache.hadoop.yarn.client.api.TimelineClient
 import org.mockito.Matchers._
@@ -64,12 +65,12 @@ class AbstractMockHistorySuite()
    * @param sc context
    * @return the instantiated service
    */
-  override protected def startHistoryService(sc: SparkContext):
+  override protected def startHistoryService(sc: SparkContext, id: ApplicationId = applicationId):
   YarnHistoryService = {
     val service = spy(new YarnHistoryService())
     assert(timelineClient != null)
     doReturn(timelineClient).when(service).createTimelineClient()
-    service.start(sc, applicationId)
+    service.start(sc, id)
     assert(service.isInState(Service.STATE.STARTED), s"Not started $service")
     service
   }

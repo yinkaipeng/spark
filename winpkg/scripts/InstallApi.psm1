@@ -139,9 +139,9 @@ function Install(
 		{
 			CreateAndConfigureHadoopService $service $HDP_RESOURCES_DIR $sparkInstallToBin $serviceCredential
             $cmd="$ENV:WINDIR\system32\sc.exe config $service start= disabled"
-            if ($service -eq "yarnsparkhiveserver2")
+            if ($service -eq "sparkhistoryserver")
             {
-                $cmd="$ENV:WINDIR\system32\sc.exe config $service start= demand"	
+                $cmd="$ENV:WINDIR\system32\sc.exe config $service start= demand"
             }
             Invoke-CmdChk $cmd
 			###
@@ -149,6 +149,15 @@ function Install(
             ###
 
             Write-Log "Creating service config ${sparkInstallToBin}\$service.xml"
+
+            ### Logging set up
+            $sparkLogDir = join-path (get-item (get-item $ENV:HADOOP_LOG_DIR).PSParentPath).FullName "spark"
+            New-Item -ItemType "Directory" -Path $sparkLogDir -ErrorAction SilentlyContinue
+            $logFile="${service}.log"
+            $logJvmOpts="-Dlog4jspark.log.dir=${sparkLogDir} -Dspark.log.file=${logFile} -Dlog4jspark.root.logger=INFO,DRFA"
+            $ENV:SPARK_DAEMON_JAVA_OPTS="${logJvmOpts}"
+
+            Write-Log "JVM options: $ENV:SPARK_DAEMON_JAVA_OPTS"
 
             ### Master and slave's reference to master URL must be identical (i.e. if master is setup with IP, slave must reference master as IP address)
             ### Note that with sparkmaster HA enabled, we can still use headnodehost:7077 as the master string.
@@ -382,6 +391,13 @@ function Configure(
         Write-Log "Updating hive-site.xml for Spark"
         UpdateXmlConfig "$ENV:SPARK_HOME\conf\hive-site.xml" @{"hive.metastore.uris" = "thrift://${ENV:HIVE_SERVER_HOST}:9083"}
       
+        #Updating log4j.properties for Spark
+        Write-Log "Updating log4j.properties for Spark"
+        $sparkLogDir = join-path (get-item (get-item $ENV:HADOOP_LOG_DIR).PSParentPath).FullName "spark"
+        New-Item -ItemType "Directory" -Path $sparkLogDir -ErrorAction SilentlyContinue
+   
+      
+        # (gc "$ENV:SPARK_HOME\conf\log4j.properties") -replace 'log4jspark.log.dir=.',"log4jspark.log.dir=$sparkLogDir"|sc "$ENV:SPARK_HOME\conf\log4j.properties"
         Write-Log "Configuration of spark is finished"
     }
     else

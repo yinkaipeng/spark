@@ -25,7 +25,7 @@ import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.apache.spark.Logging
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.{ExtraAssertions, HandleSparkEvent, YarnHistoryService, YarnTestUtils, YarnTimelineUtils}
-import org.apache.spark.scheduler.{AccumulableInfo, SparkListenerEvent, SparkListenerStageCompleted, SparkListenerStageSubmitted, SparkListenerTaskGettingResult, SparkListenerTaskStart, StageInfo, TaskInfo, TaskLocality}
+import org.apache.spark.scheduler.{JobSucceeded, SparkListenerJobEnd, AccumulableInfo, SparkListenerEvent, SparkListenerStageCompleted, SparkListenerStageSubmitted, SparkListenerTaskGettingResult, SparkListenerTaskStart, StageInfo, TaskInfo, TaskLocality}
 
 /**
  * Test low-level marshalling, robustness and quality of exception messages
@@ -63,7 +63,13 @@ class EventMarshallingSuite extends FunSuite
   }
 
   test("round trip app start") {
-    validateRoundTrip(YarnTestUtils.appStartEvent(1))
+    val startEvent = YarnTestUtils.appStartEvent(1)
+    assertResult(YarnTestUtils.APP_USER) {
+      startEvent.sparkUser
+    }
+    val dest = validateRoundTrip(startEvent)
+    assert(startEvent.time === dest.time )
+    assert(startEvent.sparkUser === dest.sparkUser )
   }
 
   test("round trip app end") {
@@ -94,11 +100,24 @@ class EventMarshallingSuite extends FunSuite
     assert(isEqual(taskInfo, dest.taskInfo))
   }
 
+  test("SparkListenerJobEnd") {
+    val endTime = 3000L
+    val id = 3
+    val result = JobSucceeded
+    val src = new SparkListenerJobEnd(id, endTime, result)
+    val dest = roundTrip(src)
+    assert(endTime === dest.time)
+    assert(id === dest.jobId)
+    assert(result === dest.jobResult)
+  }
 
-  def validateRoundTrip(sparkEvt: SparkListenerEvent): Unit = {
+
+  def validateRoundTrip[T <: SparkListenerEvent](sparkEvt: T): T = {
+    val trip = roundTrip(sparkEvt)
     assertResult(sparkEvt) {
-      roundTrip(sparkEvt)
+      trip
     }
+    trip
   }
 
   /**

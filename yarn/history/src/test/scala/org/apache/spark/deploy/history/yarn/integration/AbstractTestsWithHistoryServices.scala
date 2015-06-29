@@ -20,6 +20,7 @@ package org.apache.spark.deploy.history.yarn.integration
 import java.net.{Socket, URL}
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.security.token.delegation.web.DelegationTokenAuthenticatedURL
 import org.apache.hadoop.service.{Service, ServiceOperations}
 import org.apache.hadoop.yarn.api.records.timeline.{TimelineEntity, TimelineEvent, TimelinePutResponse}
 import org.apache.hadoop.yarn.client.api.TimelineClient
@@ -47,13 +48,22 @@ abstract class AbstractTestsWithHistoryServices
   protected var _timelineClient: TimelineClient = _
   protected var historyService: YarnHistoryService = _
 
-  protected val incomplete_flag = "showIncomplete=true"
+  protected val incomplete_flag = "&showIncomplete=true"
+  protected val page1_flag = "&page=1"
+  protected val page1_incomplete_flag = "&page=1&showIncomplete=true"
+
+
 
   protected val no_completed_applications = "No completed applications found!"
   protected val no_incomplete_applications = "No incomplete applications found!"
 
-  def applicationHistoryServer: ApplicationHistoryServer = _applicationHistoryServer
-  def timelineClient: TimelineClient = _timelineClient
+  def applicationHistoryServer: ApplicationHistoryServer = {
+    _applicationHistoryServer
+  }
+
+  def timelineClient: TimelineClient = {
+    _timelineClient
+  }
 
   /*
    * Setup phase creates a local ATS server and a client of it
@@ -71,16 +81,16 @@ abstract class AbstractTestsWithHistoryServices
    * <code>historyService</code>
    */
   override def teardown(): Unit = {
-    logInfo("Teardown of history server, timeline client and history service")
+    describe("Teardown of history server, timeline client and history service")
     if (historyService != null && !historyService.isInState(Service.STATE.STARTED)) {
       flushHistoryServiceToSuccess()
       spinForState("post thread halting in teardown",
                     interval = 50,
-                    timeout = 5000,
+                    timeout = TEST_STARTUP_DELAY,
                     probe = (() => outcomeFromBool(!historyService.isPostThreadActive)),
-                    failure = (_, _) => ())
+                    failure = (_, _, _) => ())
       ServiceOperations.stopQuietly(historyService)
-      awaitServiceThreadStopped(historyService, 5000)
+      awaitServiceThreadStopped(historyService, TEST_STARTUP_DELAY)
     }
     ServiceOperations.stopQuietly(_applicationHistoryServer)
     ServiceOperations.stopQuietly(_timelineClient)
@@ -92,7 +102,8 @@ abstract class AbstractTestsWithHistoryServices
    * @return a URL connector for issuing HTTP requests
    */
   protected def createUrlConnector(): SpnegoUrlConnector = {
-    SpnegoUrlConnector.newInstance(sparkCtx.hadoopConfiguration)
+    SpnegoUrlConnector.newInstance(sparkCtx.hadoopConfiguration,
+      new DelegationTokenAuthenticatedURL.Token)
   }
 
   /**
@@ -110,7 +121,7 @@ abstract class AbstractTestsWithHistoryServices
     _applicationHistoryServer.start()
     // Wait for AHS to come up
     val endpoint = YarnTimelineUtils.timelineWebappUri(conf, "")
-    awaitURL(endpoint.toURL, 5000)
+    awaitURL(endpoint.toURL, TEST_STARTUP_DELAY)
   }
 
 
@@ -156,11 +167,21 @@ abstract class AbstractTestsWithHistoryServices
    * then assert that there were no failures
    */
   protected def flushHistoryServiceToSuccess(): Unit = {
-    assertNotNull(historyService, "null history queue")
+    flushHistoryServiceToSuccess(historyService)
+  }
+
+  /**
+   * Flush a history service to success
+   * @param history service to flush
+   * @param delay time to wait for an empty queue
+   */
+  def flushHistoryServiceToSuccess(history: YarnHistoryService, delay: Int= TEST_STARTUP_DELAY):
+  Unit = {
+    assertNotNull(history, "null history queue")
     historyService.asyncFlush()
-    awaitEmptyQueue(historyService, 5000)
-    assertResult(0, s"-Post failure count: $historyService") {
-      historyService.getEventPostFailures
+    awaitEmptyQueue(history, delay)
+    assertResult(0, s"Post failure count: $history") {
+      history.getEventPostFailures
     }
   }
 
@@ -191,14 +212,21 @@ abstract class AbstractTestsWithHistoryServices
    * is stopped.
    * @param probe probe to run
    */
-  def webUITest(probe: (URL, YarnHistoryProvider) => Unit) {
+  def webUITest(name: String, probe: (URL, YarnHistoryProvider) => Unit) {
     val s = new Socket()
-    val (port, server, webUI, provider) = createHistoryServer(18081)
+    val (port, server, webUI, provider) = createHistoryServer(findPort())
     try {
       server.bind()
+      describe(name)
       probe(webUI, provider)
     } finally {
-      server.stop()
+      describe("stopping history service")
+      try {
+        server.stop()
+      } catch {
+        case e: Exception =>
+          logInfo(s"In History Server teardown: $e", e)
+      }
     }
   }
 
@@ -209,7 +237,7 @@ abstract class AbstractTestsWithHistoryServices
    * @param webUI web UI
    * @param provider provider
    */
-  def probeEmptyWebUI(webUI: URL, provider: YarnHistoryProvider): Unit = {
+  def probeEmptyWebUI(webUI: URL, provider: YarnHistoryProvider): String = {
     val body: String = getHtmlPage(webUI,
        "<title>History Server</title>"
         :: no_completed_applications
@@ -217,6 +245,7 @@ abstract class AbstractTestsWithHistoryServices
         :: YarnHistoryProvider.KEY_PROVIDER_DETAILS
         :: Nil)
     logInfo(s"$body")
+    body
   }
 
   /**
@@ -228,14 +257,32 @@ abstract class AbstractTestsWithHistoryServices
   protected def getHtmlPage(page: URL, checks: List[String]): String = {
     val connector = createUrlConnector()
     val outcome = connector.execHttpOperation("GET", page, null, "")
-    logInfo(s"$page => $outcome")
+    logDebug(s"$page => $outcome")
     assert(outcome.contentType.startsWith("text/html"),
             s"content type of $outcome")
     val body = outcome.responseBody
-    checks foreach { text =>
-      assertContains(body, text)
-    }
+    assertStringsInBody(body, checks)
     body
+  }
+
+  /**
+   * Assert that a list of checks are in the HTML body
+   * @param body body of HTML (or other string)
+   * @param checks list of strings to assert are present
+   */
+  def assertStringsInBody(body: String, checks: List[String]): Unit = {
+    var missing: List[String] = Nil
+    var text = "[ "
+    checks foreach { check =>
+        if (!body.contains(check)) {
+          missing = check :: missing
+          text = text +"\"" + check +"\" "
+        }
+    }
+    text = text +"]"
+    if (missing.nonEmpty) {
+      fail(s"Did not find $text in\n$body")
+    }
   }
 
   /**

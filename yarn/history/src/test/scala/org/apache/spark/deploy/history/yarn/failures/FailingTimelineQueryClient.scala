@@ -17,8 +17,10 @@
  */
 package org.apache.spark.deploy.history.yarn.failures
 
+import java.io.ByteArrayInputStream
 import java.net.{NoRouteToHostException, URI}
 
+import com.sun.jersey.api.client.{UniformInterfaceException, ClientResponse}
 import com.sun.jersey.api.client.config.ClientConfig
 import org.apache.hadoop.conf.Configuration
 
@@ -51,5 +53,27 @@ class FailingTimelineQueryClient(timelineURI: URI,
 
 object FailingTimelineQueryClient {
   val ERROR_TEXT = "No-route-to-host"
+
+}
+
+/**
+ * Client which returns a wrapped HTTP status code
+ */
+class ClientResponseTimelineQueryClient(status: Int, text: String,
+    timelineURI: URI, conf: Configuration, jerseyClientConfig: ClientConfig)
+    extends TimelineQueryClient(timelineURI, conf, jerseyClientConfig) {
+
+  val response = new ClientResponse(status,
+    null,
+    new ByteArrayInputStream(text.getBytes("UTF-8")),
+    null)
+
+  /**
+   * Throw the exception
+   */
+  override def innerExecAction[T](action: () => T): T = {
+
+    throw new UniformInterfaceException(response, false)
+  }
 
 }

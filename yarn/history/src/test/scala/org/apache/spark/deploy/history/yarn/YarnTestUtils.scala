@@ -26,7 +26,9 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.timeline.MemoryTimelineStore
 
 import org.apache.spark.SparkConf
-import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerEnvironmentUpdate, SparkListenerEvent}
+import org.apache.spark.deploy.history.ApplicationHistoryInfo
+import org.apache.spark.deploy.history.yarn.rest.SpnegoUrlConnector
+import org.apache.spark.scheduler.{JobFailed, JobSucceeded, SparkListenerJobEnd, SparkListenerJobStart, SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerEnvironmentUpdate, SparkListenerEvent}
 import org.apache.spark.util.Utils
 
 object YarnTestUtils extends ExtraAssertions with FreePortFinder {
@@ -41,6 +43,11 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
   val applicationStart = SparkListenerApplicationStart("YarnTestUtils",
                 Some(applicationId.toString), 42L, "bob")
   val applicationEnd = SparkListenerApplicationEnd(84L)
+
+  /**
+   * Time to wait for anything to start/state to be reached
+   */
+  val TEST_STARTUP_DELAY = 5000
 
   /**
    * Cancel a test if the network isn't there.
@@ -124,6 +131,8 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
          YarnConfiguration.TIMELINE_SERVICE_STORE -> classOf[MemoryTimelineStore].getName,
          YarnConfiguration.TIMELINE_SERVICE_CLIENT_MAX_RETRIES -> "1",
          YarnConfiguration.TIMELINE_SERVICE_CLIENT_RETRY_INTERVAL_MS -> "200"))
+    // turn off the minimum refresh interval
+    sparkConf.set(YarnHistoryProvider.OPTION_MIN_REFRESH_INTERVAL, "0")
   }
 
   /**
@@ -162,6 +171,9 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    */
   val SPARK_HISTORY_UI_PORT = "spark.history.ui.port"
 
+  val completedJobsMarker = "Completed Jobs (1)"
+  val activeJobsMarker = "Active Jobs (1)"
+
   /**
    * Create an app start event, using the fixed [[APP_NAME]] and [[APP_USER]] values
    * for appname and user
@@ -177,6 +189,18 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
 
   def appStopEvent(time: Long = 1): SparkListenerApplicationEnd = {
     new SparkListenerApplicationEnd(time)
+  }
+
+  def jobStartEvent(time: Long, id: Int) : SparkListenerJobStart = {
+    new SparkListenerJobStart(id, time, Nil, null)
+  }
+
+  def jobSuccessEvent(time: Long, id: Int) : SparkListenerJobEnd = {
+    new SparkListenerJobEnd(id, time, JobSucceeded)
+  }
+
+  def jobFailureEvent(time: Long, id: Int, ex: Exception) : SparkListenerJobEnd = {
+    new SparkListenerJobEnd(id, time, JobFailed(ex))
   }
 
   def newEntity(time: Long): TimelineEntity = {
@@ -197,13 +221,23 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
   case class TimedOut() extends Outcome
 
   /**
-   * Spin and sleep awaiting an observable state
+   * Spin and sleep awaiting an observable state.
+   *
+   * The scalatest `eventually` operator is similar, and even adds exponential backoff.
+   * What this offers is
+   * 1. The ability of the probe to offer more than just success/fail, but a "fail fast"
+   * operation which stops spinning early.
+   * 2. A detailed operation to invoke on failure, so provide more diagnostics than
+   * just the assertion.
    * @param interval sleep interval
    * @param timeout time to wait
    * @param probe probe to execute
    * @param failure closure invoked on timeout/probe failure
    */
-  def spinForState(description: String, interval: Long, timeout: Long, probe: () => Outcome, failure: (Int, Boolean) => Unit): Unit = {
+  def spinForState(description: String,
+      interval: Long,
+      timeout: Long, probe: () => Outcome,
+      failure: (Outcome, Int, Boolean) => Unit): Unit = {
     logInfo(description)
     val timelimit = now() + timeout
     var result: Outcome = Retry()
@@ -224,8 +258,8 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
       }
     } while (result == Retry())
     result match {
-      case Fail() => failure(iterations, false)
-      case TimedOut() => failure(iterations, true)
+      case Fail() => failure(result, iterations, false)
+      case TimedOut() => failure(result, iterations, true)
       case _ =>
     }
   }
@@ -269,7 +303,7 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
       outcomeFromBool(historyService.getEventsProcessed == expected)
     }
 
-    def eventProcessFailure(iterations: Int, timeout: Boolean): Unit = {
+    def eventProcessFailure(outcome: Outcome, iterations: Int, timeout: Boolean): Unit = {
       val eventsCount = historyService.getEventsProcessed
       val details = s"after $iterations iterations; events processed=$eventsCount"
       logError(s"event process failure $details")
@@ -309,13 +343,12 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
      failure action is simply to attempt the connection without
      catching the exception raised
      */
-    def failure(iterations: Int, timeout: Boolean): Unit = {
+    def failure(outcome: Outcome, iterations: Int, timeout: Boolean): Unit = {
       url.openStream().close()
     }
 
     spinForState(s"Awaiting a response from URL $url",
-                  interval = 50, timeout = timeout, probe = probe, failure = failure)
-
+     interval = 50, timeout = timeout, probe = probe, failure = failure)
   }
 
 
@@ -327,12 +360,11 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
   def awaitEmptyQueue(historyService: YarnHistoryService, timeout: Long): Unit = {
 
     spinForState("awaiting empty queue",
-                  interval = 50,
-                  timeout = timeout,
-                  probe = (() => outcomeFromBool(historyService.getQueueSize == 0)),
-                  failure = ((_, _) => fail(s"queue never cleared: ${
-                    historyService.getQueueSize
-                  }")))
+      interval = 50,
+      timeout = timeout,
+      probe = (() => outcomeFromBool(historyService.getQueueSize == 0)),
+      failure = ((_, _, _) =>
+        fail(s"queue never cleared: ${ historyService.getQueueSize }")))
   }
 
   /**
@@ -343,10 +375,11 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    */
   def awaitFlushCount(historyService: YarnHistoryService, count: Int, timeout: Long): Unit = {
     spinForState(s"awaiting flush count of $count",
-                  interval = 50,
-                  timeout = timeout,
-                  probe = (() => outcomeFromBool(historyService.getFlushCount() == count)),
-                  failure = ((_, _) => fail(s"flush count not $count in $historyService")))
+      interval = 50,
+      timeout = timeout,
+      probe = (() => outcomeFromBool(historyService.getFlushCount() == count)),
+      failure = ((_, _, _) =>
+        fail(s"flush count not $count in $historyService")))
   }
 
 
@@ -358,11 +391,137 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
   def awaitServiceThreadStopped(historyService: YarnHistoryService, timeout: Long): Unit = {
     assertNotNull(historyService, "null historyService")
     spinForState("awaitServiceThreadStopped",
-                  interval = 50,
-                  timeout = timeout,
-                  probe = (() => outcomeFromBool(!historyService.isPostThreadActive)),
-                  failure = ((_,
-                      _) => fail(s"history service post thread did not finish : $historyService")))
+      interval = 50,
+      timeout = timeout,
+      probe = (() => outcomeFromBool(!historyService.isPostThreadActive)),
+      failure = ((_, _, _) =>
+        fail(s"history service post thread did not finish : $historyService")))
+  }
+
+  /**
+   * Wait for the listing size to match that desired.
+   * @param provider provider
+   * @param size size to require
+   * @param timeout timeout
+   * @return the successful listing
+   */
+  def awaitListingSize(provider: YarnHistoryProvider, size: Long, timeout: Long):
+      Seq[ApplicationHistoryInfo] = {
+    def listingProbe(): Outcome = {
+      outcomeFromBool(provider.getListing().size == size)
+    }
+    def failure(outcome: Outcome, i: Int, b: Boolean): Unit = {
+      fail(s"after $i attempts, provider listing size !=${size}:  ${provider.getListing()}\n" +
+          s"${provider}")
+    }
+    spinForState(s"await listing size=${size}",
+      100,
+      timeout,
+      listingProbe,
+      failure)
+    provider.getListing()
+  }
+
+  /**
+   * Wait for the refresh count to increment by at least one iteration
+   * @param provider provider
+   * @param timeout timeout
+   * @return the successful listing
+   */
+  def awaitRefreshExecuted(provider: YarnHistoryProvider,
+      triggerRefresh: Boolean,
+      timeout: Long): Unit = {
+    val initialCount = provider.getRefreshCount();
+    def listingProbe(): Outcome = {
+      outcomeFromBool(provider.getRefreshCount() > initialCount)
+    }
+    def failure(outcome: Outcome, i: Int, b: Boolean): Unit = {
+      fail(s"After $i attempts, refresh count is $initialCount: $provider")
+    }
+    require(provider.isRefreshThreadRunning(),
+     s"refresh thread is not running in $provider")
+    if (triggerRefresh) {
+      provider.triggerRefresh()
+    }
+    spinForState("await refresh count",
+      100,
+      timeout,
+      listingProbe,
+      failure)
+  }
+
+  /**
+   * Spin awaiting a URL to not contain some text
+   * @param connector connector to use
+   * @param url URL to probe
+   *  @param text text which must not be present
+   * @param timeout timeout in mils
+   */
+  def awaitURLDoesNotContainText(connector: SpnegoUrlConnector,
+      url: URL, text: String, timeout: Long): String = {
+    def get: String = {
+      connector.execHttpOperation("GET", url, null, "").responseBody
+    }
+    def probe(): Outcome = {
+      try {
+        outcomeFromBool(!get.contains(text))
+      } catch {
+        case ioe: IOException =>
+          Retry()
+        case ex: Exception =>
+          throw ex;
+      }
+    }
+
+    /*
+     failure action is simply to attempt the connection without
+     catching the exception raised
+     */
+    def failure(outcome: Outcome, iterations: Int, timeout: Boolean): Unit = {
+      assertDoesNotContain(get, text)
+    }
+
+    spinForState(s"Awaiting a response from URL $url",
+                  interval = 50, timeout = timeout, probe = probe, failure = failure)
+
+    get
+  }
+
+  /**
+   * Spin awaiting a URL to contain some text
+   * @param connector connector to use
+   * @param url URL to probe
+   * @param text text which must be present
+   * @param timeout timeout in mils
+   */
+  def awaitURLContainsText(connector: SpnegoUrlConnector,
+      url: URL, text: String, timeout: Long): String = {
+    def get: String = {
+      connector.execHttpOperation("GET", url, null, "").responseBody
+    }
+    def probe(): Outcome = {
+      try {
+        outcomeFromBool(get.contains(text))
+      } catch {
+        case ioe: IOException =>
+          Retry()
+        case ex: Exception =>
+          throw ex;
+      }
+    }
+
+    /*
+     failure action is simply to attempt the connection without
+     catching the exception raised
+     */
+    def failure(outcome: Outcome, iterations: Int, timeout: Boolean): Unit = {
+      assertContains(get, text)
+    }
+
+    spinForState(s"Awaiting a response from URL $url",
+                  interval = 50, timeout = timeout, probe = probe, failure = failure)
+
+    get
   }
 
 }

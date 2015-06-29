@@ -15,26 +15,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.history.yarn.integration
+package org.apache.spark.deploy.history.yarn.rest
 
-import org.apache.spark.deploy.history.yarn.YarnEventListener
-import org.apache.spark.deploy.history.yarn.YarnTestUtils._
+import java.io.IOException
 
-class TimelinePostSuite extends AbstractTestsWithHistoryServices {
-
-  test("Round Trip App Stop") {
-    historyService = startHistoryService(sparkCtx)
-    val sparkEvt = appStopEvent()
-    val outcome = postEvent(sparkEvt, 100)
-    historyService.stop()
-    awaitEmptyQueue(historyService, 1000)
-  }
-
-  test("App Start Via Event Listener") {
-    historyService = startHistoryService(sparkCtx)
-    val listener = new YarnEventListener(sparkCtx, historyService)
-    val sparkEvt = appStartEvent()
-    listener.onApplicationStart(sparkEvt)
-  }
+/**
+ * Special exception to indicate a request was forbidden/unauthorized.
+ * This implies that it's potentially a delegation-renewal-related failure
+ * @param msg text to use in the message
+ * @param cause optional cause
+ */
+private[spark] class UnauthorizedRequestException(
+    url: String,
+    private val msg: String, private val cause: Throwable = null)
+    extends IOException(msg, cause) {
 
 }
