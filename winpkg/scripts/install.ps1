@@ -41,7 +41,23 @@ function Main( $scriptDir )
     Write-Log "Username: $username"
     Write-Log "CredentialFilePath: $credentialFilePath"
 
-	
+    ### Logging set up
+    ### Creates the directory $ENV:HADOOP_LOG_DIR\..\spark.
+    ### If $ENV:HADOOP_LOG_DIR is defined, then it must exist in the filesystem.
+    Write-Log "HADOOP_LOG_DIR=$ENV:HADOOP_LOG_DIR"
+    if (Test-Path Env:\HADOOP_LOG_DIR)
+    {
+        $sparkLogDir = join-path (get-item (get-item $ENV:HADOOP_LOG_DIR).PSParentPath).FullName "spark"
+        New-Item -ItemType "Directory" -Path $sparkLogDir -ErrorAction SilentlyContinue
+        $ENV:SPARK_LOG_DIR="$sparkLogDir"
+    }
+    else
+    {
+        Write-Log "HADOOP_LOG_DIR unset"
+        $ENV:SPARK_LOG_DIR=""
+    }
+    Write-Log "SPARK_LOG_DIR='$ENV:SPARK_LOG_DIR'"
+
     $roles = "sparkmaster sparkslave sparkhiveserver2 yarnsparkhiveserver2 sparkhistoryserver"
     Install "Spark" $ENV:HADOOP_NODE_INSTALL_ROOT $serviceCredential $roles
         

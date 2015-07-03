@@ -151,13 +151,24 @@ function Install(
             Write-Log "Creating service config ${sparkInstallToBin}\$service.xml"
 
             ### Logging set up
-            $sparkLogDir = join-path (get-item (get-item $ENV:HADOOP_LOG_DIR).PSParentPath).FullName "spark"
-            New-Item -ItemType "Directory" -Path $sparkLogDir -ErrorAction SilentlyContinue
-            $logFile="${service}.log"
-            $logJvmOpts="-Dlog4jspark.log.dir=${sparkLogDir} -Dspark.log.file=${logFile} -Dlog4jspark.root.logger=INFO,DRFA"
-            $ENV:SPARK_DAEMON_JAVA_OPTS="${logJvmOpts}"
+            ### If the environment variable SPARK_LOG_DIR is set, the Log4j options
+            ### are set to use the DRFA Logger using $service.log as the filename in
+            ### the log directory.
+            ### These are set in $ENV:SPARK_DAEMON_JAVA_OPTS which is then picked up
+            ### by spark-class.cmd to include in the command line defined in $service.xml
 
-            Write-Log "JVM options: $ENV:SPARK_DAEMON_JAVA_OPTS"
+            if (Test-Path Env:\SPARK_LOG_DIR)
+            {
+                $sparkLogDir=$Env:SPARK_LOG_DIR
+                $logFile="${service}.log"
+                $logJvmOpts="-Dlog4jspark.log.dir=${sparkLogDir} -Dspark.log.file=${logFile} -Dlog4jspark.root.logger=INFO,DRFA"
+                $ENV:SPARK_DAEMON_JAVA_OPTS="$logJvmOpts"
+            }
+            else
+            {
+                $ENV:SPARK_DAEMON_JAVA_OPTS=""
+            }
+            Write-Log  "SPARK_DAEMON_JAVA_OPTS='$ENV:SPARK_DAEMON_JAVA_OPTS'"
 
             ### Master and slave's reference to master URL must be identical (i.e. if master is setup with IP, slave must reference master as IP address)
             ### Note that with sparkmaster HA enabled, we can still use headnodehost:7077 as the master string.
