@@ -392,12 +392,13 @@ function Configure(
         UpdateXmlConfig "$ENV:SPARK_HOME\conf\hive-site.xml" @{"hive.metastore.uris" = "thrift://${ENV:HIVE_SERVER_HOST}:9083"}
       
         #Updating log4j.properties for Spark
-        Write-Log "Updating log4j.properties for Spark"
-        $sparkLogDir = join-path (get-item (get-item $ENV:HADOOP_LOG_DIR).PSParentPath).FullName "spark"
-        New-Item -ItemType "Directory" -Path $sparkLogDir -ErrorAction SilentlyContinue
-   
-      
-        # (gc "$ENV:SPARK_HOME\conf\log4j.properties") -replace 'log4jspark.log.dir=.',"log4jspark.log.dir=$sparkLogDir"|sc "$ENV:SPARK_HOME\conf\log4j.properties"
+        if ((Test-Path Env:\SPARK_LOG_DIR) -and ($ENV:SPARK_LOG_DIR -ne $null))
+        {
+            Write-Log "Updating log4j.properties for Spark"
+            $sparkLogDir = $ENV:SPARK_LOG_DIR
+            New-Item -ItemType "Directory" -Path $sparkLogDir -ErrorAction SilentlyContinue
+            (gc "$ENV:SPARK_HOME\conf\log4j.properties") -replace 'log4jspark.log.dir=.',"log4jspark.log.dir=$sparkLogDir"|sc "$ENV:SPARK_HOME\conf\log4j.properties"
+        }
         Write-Log "Configuration of spark is finished"
     }
     else
