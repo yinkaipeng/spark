@@ -1,12 +1,21 @@
 Changes only in Hortonworks github and not in Apache Spark release 1.3.1 and hence not covered by CHANGES.txt.
 
 INCOMPATIBLE CHANGES
-SPARK-2883: not in Spark-1.3. orcFile and saveAsOrcFile is changed to use DataFrameReader and DataFrameWriter in Spark-1.4
+
+    SPARK-2883: not in Spark-1.3. orcFile and saveAsOrcFile is changed to use
+    DataFrameReader and DataFrameWriter in Spark-1.4
 
 NEW FEATURES
 
+    SPARK-1537: Add integration with Yarn's Application Timeline Server
+
 IMPROVEMENTS
-JDK1.7 repackaging.
-Backport SPARK-7326.
+
+    JDK1.7 repackaging.
+    SPARK-7326: Performing window() on a WindowedDStream doesn't work all
+    the time (backported from Spark 1.4).
 
 BUG FIXES
+
+    SPARK-8394: HistoryServer doesn't read kerberos options from Spark
+    configuration (backported from Spark 1.4).
