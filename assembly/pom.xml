@@ -15,13 +15,12 @@
   ~ See the License for the specific language governing permissions and
   ~ limitations under the License.
   -->
-
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.10</artifactId>
-    <version>1.3.1</version>
+    <version>1.3.1.2.3.0.0-2557</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -141,8 +140,8 @@
                 <transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
                   <resource>log4j.properties</resource>
                 </transformer>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer"/>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer"/>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheLicenseResourceTransformer" />
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer" />
               </transformers>
             </configuration>
           </execution>
@@ -214,20 +213,20 @@
                 </goals>
                 <configuration>
                   <tasks if="jar.tool">
-                    <mkdir dir="${spark.shaded.unjar}"/>
-                    <echo message="Unjar ${spark.jar} to ${spark.shaded.unjar}"/>
-                    <unzip src="${spark.jar}" dest="${spark.shaded.unjar}"/>
-                    <echo message="move original ${spark.jar} to ${spark.shaded.jar} ."/>
-                    <copy file="${spark.jar}" tofile="${spark.shaded.jar}"/>
-                    <echo message="Jar file to ${spark.jar} -C ${spark.shaded.unjar} . with tool ${jar.tool}"/>
+                    <mkdir dir="${spark.shaded.unjar}" />
+                    <echo message="Unjar ${spark.jar} to ${spark.shaded.unjar}" />
+                    <unzip dest="${spark.shaded.unjar}" src="${spark.jar}" />
+                    <echo message="move original ${spark.jar} to ${spark.shaded.jar} ." />
+                    <copy file="${spark.jar}" tofile="${spark.shaded.jar}" />
+                    <echo message="Jar file to ${spark.jar} -C ${spark.shaded.unjar} . with tool ${jar.tool}" />
                     <exec executable="${jar.tool}">
-                      <arg value="cf"/>
-                      <arg value="${spark.jar}"/>
-                      <arg value="-C"/>
-                      <arg value="${spark.shaded.unjar}"/>
-                      <arg value="."/>
+                      <arg value="cf" />
+                      <arg value="${spark.jar}" />
+                      <arg value="-C" />
+                      <arg value="${spark.shaded.unjar}" />
+                      <arg value="." />
                     </exec>
-                    <delete dir="${spark.shaded.unjar}"/>
+                    <delete dir="${spark.shaded.unjar}" />
                   </tasks>
                 </configuration>
               </execution>
@@ -426,20 +425,20 @@
                 </goals>
                 <configuration>
                   <tasks if="jar.tool">
-                    <mkdir dir="${spark.shaded.unjar}"/>
-                    <echo message="Unjar ${spark.jar} to ${spark.shaded.unjar}"/>
-                    <unzip src="${spark.jar}" dest="${spark.shaded.unjar}"/>
-                    <echo message="move original ${spark.jar} to ${spark.shaded.jar} ."/>
-                    <copy file="${spark.jar}" tofile="${spark.shaded.jar}"/>
-                    <echo message="Jar file to ${spark.jar} -C ${spark.shaded.unjar} . with tool ${jar.tool}"/>
+                    <mkdir dir="${spark.shaded.unjar}" />
+                    <echo message="Unjar ${spark.jar} to ${spark.shaded.unjar}" />
+                    <unzip dest="${spark.shaded.unjar}" src="${spark.jar}" />
+                    <echo message="move original ${spark.jar} to ${spark.shaded.jar} ." />
+                    <copy file="${spark.jar}" tofile="${spark.shaded.jar}" />
+                    <echo message="Jar file to ${spark.jar} -C ${spark.shaded.unjar} . with tool ${jar.tool}" />
                     <exec executable="${jar.tool}">
-                      <arg value="cf"/>
-                      <arg value="${spark.jar}"/>
-                      <arg value="-C"/>
-                      <arg value="${spark.shaded.unjar}"/>
-                      <arg value="."/>
+                      <arg value="cf" />
+                      <arg value="${spark.jar}" />
+                      <arg value="-C" />
+                      <arg value="${spark.shaded.unjar}" />
+                      <arg value="." />
                     </exec>
-                    <delete dir="${spark.shaded.unjar}"/>
+                    <delete dir="${spark.shaded.unjar}" />
                   </tasks>
                 </configuration>
               </execution>
