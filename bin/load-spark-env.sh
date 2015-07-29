@@ -20,13 +20,13 @@
 # This script loads spark-env.sh if it exists, and ensures it is only loaded once.
 # spark-env.sh is loaded from SPARK_CONF_DIR if set, or within the current directory's
 # conf/ subdirectory.
-FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
+FWDIR="$(cd "`dirname $(readlink -nf "$0")`"/.. ; pwd -P)"
 
 if [ -z "$SPARK_ENV_LOADED" ]; then
   export SPARK_ENV_LOADED=1
 
   # Returns the parent of the directory this script lives in.
-  parent_dir="$(cd "`dirname "$0"`"/..; pwd)"
+  parent_dir="$(cd "`dirname $(readlink -nf "$0")`"/..; pwd -P)"
 
   user_conf_dir="${SPARK_CONF_DIR:-"$parent_dir"/conf}"
 

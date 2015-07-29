@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+SPARK_HOME="$(cd "`dirname $(readlink -nf "$0")`"/..; pwd -P)"
 
 # disable randomized hash for string in Python 3.3+
 export PYTHONHASHSEED=0
