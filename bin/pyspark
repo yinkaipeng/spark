@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+export SPARK_HOME="$(cd "`dirname $(readlink -nf "$0")`"/..; pwd -P)"
 
 source "$SPARK_HOME"/bin/load-spark-env.sh
 export _SPARK_CMD_USAGE="Usage: ./bin/pyspark [options]"
