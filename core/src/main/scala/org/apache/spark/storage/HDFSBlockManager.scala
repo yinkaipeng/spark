@@ -52,11 +52,11 @@ private[spark]  class HDFSBlockManager extends ExternalBlockManager with Logging
     val appFolderName = blockManager.conf.get(ExternalBlockStore.FOLD_NAME)
     rootDirs = s"$storeDir/$appFolderName/$executorId"
     master = conf.getOption(ExternalBlockStore.MASTER_URL)
-    fs = master.map(m=>FileSystem.get(new URI(m), hadoopConf)).getOrElse(FileSystem.get(hadoopConf))
+    fs = master.map(m => FileSystem.get(new URI(m), hadoopConf)).getOrElse(FileSystem.get(hadoopConf))
     hdfsDirs = createDirs()
     subDirsPerDir = blockManager.conf.get("spark.externalBlockStore.subDirectories",
       ExternalBlockStore.SUB_DIRS_PER_DIR).toInt
-    subDirs  = Array.fill(hdfsDirs.length)(new Array[String](subDirsPerDir))
+    subDirs = Array.fill(hdfsDirs.length)(new Array[String](subDirsPerDir))
   }
 
   override def toString(): String = {"ExternalBlockStore-HDFS"}
@@ -95,20 +95,6 @@ private[spark]  class HDFSBlockManager extends ExternalBlockManager with Logging
       os.close()
     }
   }
-/*
-  override def putValues(blockId: BlockId, values: Iterator[_]): Unit = {
-    val file = getFile(blockId)
-    val os = fs.create(new Path(file));
-    try {
-      blockManager.dataSerializeStream(blockId, os, values)
-    } catch {
-      case NonFatal(e) =>
-        logWarning(s"Failed to put values of block $blockId into HDFS", e)
-    } finally {
-      os.close()
-    }
-  }
-  */
 
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
     val p = new Path(getFile(blockId))
@@ -130,15 +116,6 @@ private[spark]  class HDFSBlockManager extends ExternalBlockManager with Logging
       is.close()
     }
   }
-/*
-  override def getValues(blockId: BlockId): Option[Iterator[_]] = {
-    val file = getFile(blockId)
-    val is = fs.open(new Path(file));
-    Option(is).map { is =>
-      blockManager.dataDeserializeStream(blockId, is)
-    }
-  }
-  */
 
   override def getSize(blockId: BlockId): Long = {
     val p = new Path(getFile(blockId))
