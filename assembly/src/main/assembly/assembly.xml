@@ -117,7 +117,7 @@
       </directory>
       <outputDirectory>/lib</outputDirectory>
       <includes>
-        <include>spark-examples-${project.version}-hadoop${hadoop.version}.jar</include>
+        <include>spark-examples-*.jar</include>
       </includes>
     </fileSet>
     <fileSet>
