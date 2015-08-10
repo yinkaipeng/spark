@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Map}
+import scala.reflect.runtime.universe
 import scala.util.{Try, Success, Failure}
 
 import com.google.common.base.Objects
@@ -33,6 +34,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.token.{TokenIdentifier, Token}
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
@@ -217,6 +219,7 @@ private[spark] class Client(
     val dst = new Path(fs.getHomeDirectory(), appStagingDir)
     val nns = getNameNodesToAccess(sparkConf) + dst
     obtainTokensForNamenodes(nns, hadoopConf, credentials)
+    obtainTokenForHBase(hadoopConf, credentials)
 
     val replication = sparkConf.getInt("spark.yarn.submit.file.replication",
       fs.getDefaultReplication(dst)).toShort
@@ -901,6 +904,42 @@ object Client extends Logging {
       }
     }
   }
+
+  /**
+   * Obtain security token for HBase.
+   */
+  def obtainTokenForHBase(conf: Configuration, credentials: Credentials): Unit = {
+    if (UserGroupInformation.isSecurityEnabled) {
+      val mirror = universe.runtimeMirror(getClass.getClassLoader)
+
+      try {
+        val confCreate = mirror.classLoader.
+          loadClass("org.apache.hadoop.hbase.HBaseConfiguration").
+          getMethod("create", classOf[Configuration])
+        val obtainToken = mirror.classLoader.
+          loadClass("org.apache.hadoop.hbase.security.token.TokenUtil").
+          getMethod("obtainToken", classOf[Configuration])
+
+        logDebug("Attempting to fetch HBase security token.")
+
+        val hbaseConf = confCreate.invoke(null, conf)
+        val token = obtainToken.invoke(null, hbaseConf).asInstanceOf[Token[TokenIdentifier]]
+        credentials.addToken(token.getService, token)
+
+        logInfo("Added HBase security token to credentials.")
+      } catch {
+        case e: java.lang.NoSuchMethodException =>
+          logInfo("HBase Method not found: " + e)
+        case e: java.lang.ClassNotFoundException =>
+          logDebug("HBase Class not found: " + e)
+        case e: java.lang.NoClassDefFoundError =>
+          logDebug("HBase Class not found: " + e)
+        case e: Exception =>
+          logError("Exception when obtaining HBase security token: " + e)
+      }
+    }
+  }
+
 
   /**
    * Return whether the two file systems are the same.
