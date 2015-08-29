@@ -55,6 +55,7 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
   private val timelineURL = timelineURI.toURL
   private val retryLimit = 3
   private val retry_interval = 100
+  private val APPLICATION_JSON = "application/json"
 
   /**
    * the delegation token (unused until delegation support implemented)
@@ -156,8 +157,10 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
         val exception = JerseyBinding.translateException(verb, uri, e)
         logDebug(s"$verb $uri failed: $exception", exception)
         exception match {
-          case ure: FileNotFoundException =>
+          case notFound: FileNotFoundException =>
             logInfo(s"Not found: $uri")
+            // it's not likely to come back: fail fast
+            throw notFound
 
           case ure: UnauthorizedRequestException =>
             // possible expiry
@@ -211,7 +214,7 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
     val aboutURI = uri("")
     val resource = jerseyClient.resource(aboutURI)
     val body = get(aboutURI,
-         (() => resource.accept(MediaType.APPLICATION_JSON).get(classOf[String])))
+         (() => resource.accept(APPLICATION_JSON).get(classOf[String])))
     val json = parse(body)
     json \ "About" match {
       case s: JString =>
@@ -334,7 +337,7 @@ private[spark] class TimelineQueryClient(timelineURI: URI,
       // execute the request
       val response = get(resource.getURI,
           (() => resource
-                 .accept(MediaType.APPLICATION_JSON)
+                 .accept(APPLICATION_JSON)
                  .get(classOf[TimelineEntities])))
       response.getEntities.asScala.toList
   }
@@ -393,7 +396,16 @@ private [spark] class AboutResponse {
 
 }
 
+/**
+ * Constants associated with the Query API
+ */
 private[spark] object TimelineQueryClient {
   val MESSAGE_CHECK_URL = "Check the URL of the timeline service:"
   val MESSAGE_EMPTY_RESPONSE = s"No data in the response"
+
+  val EVENTS = "EVENTS"
+  val LAST_EVENT_ONLY = "LASTEVENTONLY"
+  val OTHER_INFO = "OTHERINFO"
+  val PRIMARY_FILTERS = "PRIMARYFILTERS"
+  val RELATED_ENTITIES = "RELATEDENTITIES"
 }

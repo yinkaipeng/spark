@@ -22,7 +22,6 @@ import java.net.URI
 import java.util.Date
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.{AtomicLong, AtomicBoolean}
-import java.util.zip.ZipOutputStream
 
 import scala.collection.JavaConversions._
 
@@ -34,6 +33,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.rest.{JerseyBinding, TimelineQueryClient}
+import org.apache.spark.deploy.history.yarn.rest.TimelineQueryClient._
 import org.apache.spark.deploy.history.{ApplicationHistoryInfo, ApplicationHistoryProvider, HistoryServer}
 import org.apache.spark.scheduler.{ApplicationEventListener, SparkListenerBus}
 import org.apache.spark.ui.SparkUI
@@ -428,7 +428,8 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
         client.listEntities(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE,
           windowStart = windowStart,
           windowEnd = windowEnd,
-          limit = limit)
+          limit = limit,
+          fields = Seq(PRIMARY_FILTERS, OTHER_INFO))
 
       val listing = timelineEntities.flatMap { en =>
         try { {
