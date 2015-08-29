@@ -77,6 +77,9 @@ private[spark] class ApplicationMaster(
 
   private var delegationTokenRenewerOption: Option[AMDelegationTokenRenewer] = None
 
+  def getAttemptId(): ApplicationAttemptId = {
+    client.getAttemptId()
+  }
   final def run(): Int = {
     try {
       val appAttemptId = client.getAttemptId()
@@ -578,6 +581,10 @@ object ApplicationMaster extends Logging {
 
   private[spark] def sparkContextStopped(sc: SparkContext): Boolean = {
     master.sparkContextStopped(sc)
+  }
+
+  private[spark] def getAttemptId(): ApplicationAttemptId = {
+    master.getAttemptId
   }
 
 }

@@ -22,6 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 
+import org.apache.spark.util.Utils
 import org.apache.spark.{SparkException, Logging, SparkContext}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments}
 import org.apache.spark.scheduler.TaskSchedulerImpl
@@ -35,6 +36,7 @@ private[spark] class YarnClientSchedulerBackend(
   private var client: Client = null
   private var appId: ApplicationId = null
   private var monitorThread: Thread = null
+  private val services: YarnExtensionServices = new YarnExtensionServices()
 
   /**
    * Create a Yarn client to submit an application to the ResourceManager.
@@ -60,7 +62,7 @@ private[spark] class YarnClientSchedulerBackend(
     // we initialize our driver scheduler backend, which serves these properties
     // to the executors
     super.start()
-
+    services.start(sc, appId, null, true, Utils.SPARK_CONTEXT_SHUTDOWN_PRIORITY - 2 )
     waitForApplication()
     monitorThread = asyncMonitorApplication()
     monitorThread.start()
@@ -157,6 +159,7 @@ private[spark] class YarnClientSchedulerBackend(
     }
     super.stop()
     client.stop()
+    services.close()
     logInfo("Stopped")
   }
 
