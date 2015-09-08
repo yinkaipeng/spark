@@ -1111,6 +1111,15 @@ object Client extends Logging {
    * Obtains token for the Hive metastore and adds them to the credentials.
    */
   private def obtainTokenForHiveMetastore(conf: Configuration, credentials: Credentials) {
+    try {
+      val mirror = universe.runtimeMirror(getClass.getClassLoader)
+      val instrument =
+        mirror.classLoader.loadClass(
+          "org.apache.spark.sql.hive.instrument.HiveInstrumentationAgent")
+      instrument.getMethod("instrument").invoke(null)
+    } catch {
+      case _ => logInfo("HiveInstrumentationAgent Exception")
+    }
     if (UserGroupInformation.isSecurityEnabled) {
       val mirror = universe.runtimeMirror(getClass.getClassLoader)
 
@@ -1139,7 +1148,7 @@ object Client extends Logging {
           if (principal != None && username != None) {
             val tokenStr = hiveClass.getMethod("getDelegationToken",
               classOf[java.lang.String], classOf[java.lang.String])
-              .invoke(hive, username.get, principal.get).asInstanceOf[java.lang.String]
+              .invoke(hive, username.get, username.get).asInstanceOf[java.lang.String]
 
             val hive2Token = new Token[DelegationTokenIdentifier]()
             hive2Token.decodeFromUrlString(tokenStr)

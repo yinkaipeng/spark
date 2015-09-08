@@ -47,6 +47,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, QueryExecutionException, SetCommand}
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.hive.execution.{DescribeHiveTableCommand, HiveNativeCommand}
+import org.apache.spark.sql.hive.instrument.HiveInstrumentationAgent
 import org.apache.spark.sql.sources.{DDLParser, DataSourceStrategy}
 import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.types._
@@ -71,6 +72,7 @@ private[hive] class HiveQLDialect extends ParserDialect {
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
 
+  HiveInstrumentationAgent.instrument
   import HiveContext._
 
   /**

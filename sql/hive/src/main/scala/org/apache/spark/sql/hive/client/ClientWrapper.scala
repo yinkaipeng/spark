@@ -39,6 +39,7 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.spark.Logging
 import org.apache.spark.sql.execution.QueryExecutionException
 
+import scala.reflect.runtime._
 
 /**
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
@@ -107,7 +108,7 @@ private[hive] class ClientWrapper(
         // (i.e. initClassLoader at here).
         // We call initialConf.setClassLoader(initClassLoader) at here to make
         // this action explicit.
-        initialConf.setClassLoader(initClassLoader)
+        //initialConf.setClassLoader(initClassLoader)
         config.foreach { case (k, v) =>
           logDebug(s"Hive Config: $k=$v")
           initialConf.set(k, v)
