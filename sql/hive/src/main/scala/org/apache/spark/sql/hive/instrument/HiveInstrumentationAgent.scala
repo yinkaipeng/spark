@@ -40,7 +40,7 @@ object HiveInstrumentationAgent {
   private val newClass = pool.get("org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge23")
   private val oldClass = pool.get("org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge20S")
 
-  def instrument = {
+  def instrument: Unit = {
     if (ShimLoader.getHadoopShims.isSecurityEnabled && ShimLoader.getMajorVersion == "0.23")  {
       if (!latch.getAndSet(true)) {
         val targetMethods = oldClass.getDeclaredMethods
@@ -56,7 +56,7 @@ object HiveInstrumentationAgent {
     }
   }
 
-  private def swapMethodBody(targetMethod: CtMethod) {
+  private def swapMethodBody(targetMethod: CtMethod): Unit = {
     val desc = targetMethod.getMethodInfo().getDescriptor()
     try {
       val sourceMethod = newClass.getMethod(targetMethod.getName(), desc)
