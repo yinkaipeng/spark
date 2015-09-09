@@ -108,7 +108,7 @@ private[hive] class ClientWrapper(
         // (i.e. initClassLoader at here).
         // We call initialConf.setClassLoader(initClassLoader) at here to make
         // this action explicit.
-        //initialConf.setClassLoader(initClassLoader)
+        // initialConf.setClassLoader(initClassLoader)
         config.foreach { case (k, v) =>
           logDebug(s"Hive Config: $k=$v")
           initialConf.set(k, v)
