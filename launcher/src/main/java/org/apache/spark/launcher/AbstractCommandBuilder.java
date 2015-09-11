@@ -223,6 +223,11 @@ abstract class AbstractCommandBuilder {
     addToClassPath(cp, getenv("HADOOP_CONF_DIR"));
     addToClassPath(cp, getenv("YARN_CONF_DIR"));
     addToClassPath(cp, getenv("SPARK_DIST_CLASSPATH"));
+
+    // Add Azure wasb path only on linux sku
+    if (!isWindows()){
+        addToClassPath(cp, "/usr/hdp/current/hadoop-client/hadoop-azure.jar");
+    }
     return cp;
   }
 
