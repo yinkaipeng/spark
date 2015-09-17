@@ -398,19 +398,10 @@ function Configure(
         }
         WriteSparkConfigFile $sparkDefaults_file $active_config
         
+        #Updating hive-site.xml for Spark
         Write-Log "Updating hive-site.xml for Spark"
-        $xmlFile = "$ENV:HIVE_CONF_DIR\hive-site.xml"
-        $xml = New-Object System.Xml.XmlDocument
-        $xml.PreserveWhitespace = $false
-        $xml.Load($xmlFile)
-        $value =$null
-        $xml.SelectNodes('/configuration/property') | ? { $_.name -eq "hive.metastore.uris" } | % { $value = $_.value }
-        $xml.ReleasePath
-        if ($value -ne $null)
-        {
-            UpdateXmlConfig "$ENV:SPARK_HOME\conf\hive-site.xml" @{"hive.metastore.uris" = "$value"}
-        }
-
+        UpdateXmlConfig "$ENV:SPARK_HOME\conf\hive-site.xml" @{"hive.metastore.uris" = "thrift://${ENV:HIVE_SERVER_HOST}:9083"}
+      
         #Updating log4j.properties for Spark
         if ((Test-Path Env:\SPARK_LOG_DIR) -and ($ENV:SPARK_LOG_DIR -ne $null))
         {
