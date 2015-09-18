@@ -103,7 +103,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  test("Simple selection form ORC table") {
+  def simpleSelect() {
     val data = (1 to 10).map { i =>
       Person(s"name_$i", i, (0 to 1).map { m => Contact(s"contact_$m", s"phone_$m") })
     }
@@ -147,6 +147,16 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         }
       }
     }
+  }
+
+  test("Simple selection form ORC table") {
+    simpleSelect()
+  }
+
+  test("SPARK-10623 Enable ORC PPD") {
+    sqlContext.setConf("spark.sql.orc.filterPushdown", "true")
+    simpleSelect()
+    sqlContext.setConf("spark.sql.orc.filterPushdown", "false")
   }
 
   test("save and load case class RDD with `None`s as orc") {
