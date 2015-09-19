@@ -224,9 +224,13 @@ abstract class AbstractCommandBuilder {
     addToClassPath(cp, getenv("YARN_CONF_DIR"));
     addToClassPath(cp, getenv("SPARK_DIST_CLASSPATH"));
 
-    // Add Azure wasb path only on linux sku
+    // Add Azure wasb paths only on linux sku
     if (!isWindows()){
         addToClassPath(cp, "/usr/hdp/current/hadoop-client/hadoop-azure.jar");
+        // find first matched azure-storage jar at hadoop-client/lib
+        // i.e. /usr/hdp/current/hadoop-client/lib/azure-storage-2.2.0.jar
+        String azureStorageJar = findAzureStorageJar();
+        addToClassPath(cp, azureStorageJar);
     }
     return cp;
   }
@@ -314,6 +318,26 @@ abstract class AbstractCommandBuilder {
 
   String getenv(String key) {
     return firstNonEmpty(childEnv.get(key), System.getenv(key));
+  }
+
+  private String findAzureStorageJar() {
+    String hadoopClientHome = "/usr/hdp/current/hadoop-client";
+    File libdir;
+    libdir = new File(hadoopClientHome, "lib");
+    checkState(libdir.isDirectory(), "Library directory '%s' does not exist.",
+          libdir.getAbsolutePath());
+
+    final Pattern re = Pattern.compile("azure-storage.*\\.jar");
+    FileFilter filter = new FileFilter() {
+      @Override
+      public boolean accept(File file) {
+        return file.isFile() && re.matcher(file.getName()).matches();
+      }
+    };
+    File[] azureStorageJars = libdir.listFiles(filter);
+    // return first jar if found, else return empty string
+    return azureStorageJars != null && azureStorageJars.length > 0 ?
+      azureStorageJars[0].getAbsolutePath() : "";
   }
 
   private String findAssembly() {
