@@ -226,11 +226,19 @@ abstract class AbstractCommandBuilder {
 
     // Add Azure wasb paths only on linux sku
     if (!isWindows()){
+      try {
+        String hadoopClientHome = "/usr/hdp/current/hadoop-client";
+        File azureJar = new File(hadoopClientHome, "hadoop-azure.jar");
+        checkState(azureJar.isFile(), "Library directory '%s' does not exist.",
+            azureJar.getAbsolutePath());
         addToClassPath(cp, "/usr/hdp/current/hadoop-client/hadoop-azure.jar");
         // find first matched azure-storage jar at hadoop-client/lib
         // i.e. /usr/hdp/current/hadoop-client/lib/azure-storage-2.2.0.jar
         String azureStorageJar = findAzureStorageJar();
         addToClassPath(cp, azureStorageJar);
+      } catch (Exception e) {
+        System.err.println("The azure jar cannot be located. Skip adding it to classpath");
+      }
     }
     return cp;
   }
