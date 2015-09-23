@@ -89,6 +89,9 @@ while (( "$#" )); do
     --help)
       exit_with_usage
       ;;
+    --HDP)
+      build_flags="-PhadoopVersion=${HADOOP_VERSION} -PtezVersion=${TEZ_VERSION} -PsparkVersion=${SPARK_VERSION}"
+      ;;
     *)
       break
       ;;
