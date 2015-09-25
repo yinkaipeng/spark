@@ -1,0 +1,15 @@
+Changes only in Hortonworks github and not in Apache Spark release 1.4.1 and hence not covered by CHANGES.txt.
+
+NEW FEATURES
+
+     SPARK-1537: Add integration with Yarn's Application Timeline Server
+     SPARK-6112: Provide external block store support through HDFS RAM_DISK
+
+BUG FIXES
+     SPARK-10623: NoSuchElementException thrown when ORC predicate push-down is turned on
+
+IMPROVEMENTS
+     1. Atomatically add azure support (including azure related jar in classpath)
+     2. Support accessing hive metastore in both yarn-client and yarn-cluster mode in kerberos cluster. 
+     But it does not support accessing different version of hive metastore, and spark.sql.hive.metastore.version
+     is not valid.
