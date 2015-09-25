@@ -226,6 +226,23 @@ abstract class AbstractCommandBuilder {
     addToClassPath(cp, getenv("HADOOP_CONF_DIR"));
     addToClassPath(cp, getenv("YARN_CONF_DIR"));
     addToClassPath(cp, getenv("SPARK_DIST_CLASSPATH"));
+
+    // Add Azure wasb paths only on linux sku
+    if (!isWindows()){
+      try {
+        String hadoopClientHome = "/usr/hdp/current/hadoop-client";
+        File azureJar = new File(hadoopClientHome, "hadoop-azure.jar");
+        checkState(azureJar.isFile(), "Library directory '%s' does not exist.",
+            azureJar.getAbsolutePath());
+        addToClassPath(cp, "/usr/hdp/current/hadoop-client/hadoop-azure.jar");
+        // find first matched azure-storage jar at hadoop-client/lib
+        // i.e. /usr/hdp/current/hadoop-client/lib/azure-storage-2.2.0.jar
+        String azureStorageJar = findAzureStorageJar();
+        addToClassPath(cp, azureStorageJar);
+      } catch (Exception e) {
+        System.err.println("The azure jar cannot be located. Skip adding it to classpath");
+      }
+    }
     return cp;
   }
 
@@ -315,6 +332,26 @@ abstract class AbstractCommandBuilder {
 
   String getenv(String key) {
     return firstNonEmpty(childEnv.get(key), System.getenv(key));
+  }
+
+  private String findAzureStorageJar() {
+    String hadoopClientHome = "/usr/hdp/current/hadoop-client";
+    File libdir;
+    libdir = new File(hadoopClientHome, "lib");
+    checkState(libdir.isDirectory(), "Library directory '%s' does not exist.",
+          libdir.getAbsolutePath());
+
+    final Pattern re = Pattern.compile("azure-storage.*\\.jar");
+    FileFilter filter = new FileFilter() {
+      @Override
+      public boolean accept(File file) {
+        return file.isFile() && re.matcher(file.getName()).matches();
+      }
+    };
+    File[] azureStorageJars = libdir.listFiles(filter);
+    // return first jar if found, else return empty string
+    return azureStorageJars != null && azureStorageJars.length > 0 ?
+      azureStorageJars[0].getAbsolutePath() : "";
   }
 
   private String findAssembly() {
