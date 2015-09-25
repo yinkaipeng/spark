@@ -127,13 +127,8 @@ abstract class AbstractHistoryIntegrationTests
   def stopHistoryService(hservice: YarnHistoryService): Unit = {
     if (hservice != null && hservice.serviceState == YarnHistoryService.StartedState) {
       flushHistoryServiceToSuccess()
-      spinForState("post thread halting in teardown",
-        interval = 50,
-        timeout = TEST_STARTUP_DELAY,
-        probe = () => outcomeFromBool(!hservice.isPostThreadActive),
-        failure = failure_noop)
       hservice.stop()
-      awaitServiceThreadStopped(hservice, TEST_STARTUP_DELAY)
+      awaitServiceThreadStopped(hservice, TEST_STARTUP_DELAY, false)
     }
   }
 
@@ -153,17 +148,16 @@ abstract class AbstractHistoryIntegrationTests
   protected def startTimelineClientAndAHS(conf: Configuration): Unit = {
     ServiceOperations.stopQuietly(_applicationHistoryServer)
     ServiceOperations.stopQuietly(_timelineClient)
-    _timelineClient = TimelineClient.createTimelineClient
+    _timelineClient = TimelineClient.createTimelineClient()
     _timelineClient.init(conf)
     _timelineClient.start()
-    _applicationHistoryServer = new ApplicationHistoryServer
+    _applicationHistoryServer = new ApplicationHistoryServer()
     _applicationHistoryServer.init(_timelineClient.getConfig)
     _applicationHistoryServer.start()
     // Wait for AHS to come up
     val endpoint = YarnTimelineUtils.timelineWebappUri(conf, "")
     awaitURL(endpoint.toURL, TEST_STARTUP_DELAY)
   }
-
 
   protected def createTimelineQueryClient(): TimelineQueryClient = {
     new TimelineQueryClient(historyService.timelineWebappAddress,
@@ -248,7 +242,7 @@ abstract class AbstractHistoryIntegrationTests
    * @param probe probe to run
    */
   def webUITest(name: String, probe: (URL, YarnHistoryProvider) => Unit): Unit = {
-    val (port, server, webUI, provider) = createHistoryServer(findPort())
+    val (_, server, webUI, provider) = createHistoryServer(findPort())
     try {
       server.bind()
       describe(name)
@@ -366,7 +360,7 @@ abstract class AbstractHistoryIntegrationTests
    * @param sparkEvent spark event
    */
   def enqueue(sparkEvent: SparkListenerEvent): Unit = {
-    val time = eventTime(sparkEvent).getOrElse {
+    eventTime(sparkEvent).getOrElse {
       throw new RuntimeException(s"No time from $sparkEvent")
     }
     assert(historyService.enqueue(sparkEvent))
