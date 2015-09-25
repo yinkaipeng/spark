@@ -29,6 +29,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
+import org.apache.spark.deploy.yarn.ApplicationMaster
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.{IntParam, Utils}
@@ -37,9 +38,13 @@ private[spark] class YarnClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext)
   extends YarnSchedulerBackend(scheduler, sc) {
+  private val services: YarnExtensionServices = new YarnExtensionServices()
 
   override def start() {
     super.start()
+    val attemptId = ApplicationMaster.getAttemptId
+    val binding = YarnExtensionServiceBinding(sc, attemptId.getApplicationId(), Some(attemptId))
+    services.start(binding)
     totalExpectedExecutors = DEFAULT_NUMBER_EXECUTORS
     if (System.getenv("SPARK_EXECUTOR_INSTANCES") != null) {
       totalExpectedExecutors = IntParam.unapply(System.getenv("SPARK_EXECUTOR_INSTANCES"))
@@ -47,6 +52,11 @@ private[spark] class YarnClusterSchedulerBackend(
     }
     // System property can override environment variable.
     totalExpectedExecutors = sc.getConf.getInt("spark.executor.instances", totalExpectedExecutors)
+  }
+
+  override def stop(): Unit = {
+    super.stop()
+    services.stop()
   }
 
   override def applicationId(): String =

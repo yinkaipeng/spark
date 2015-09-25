@@ -42,6 +42,7 @@ private[history] class HistoryServerArguments(conf: SparkConf, args: Array[Strin
         printUsageAndExit(0)
 
       case ("--properties-file") :: value :: tail =>
+        logDebug(s"Using Properties file $value")
         propertiesFile = value
         parse(tail)
 

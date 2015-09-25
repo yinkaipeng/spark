@@ -34,6 +34,7 @@ private[spark] class YarnClientSchedulerBackend(
   private var client: Client = null
   private var appId: ApplicationId = null
   private var monitorThread: MonitorThread = null
+  private val services: YarnExtensionServices = new YarnExtensionServices()
 
   /**
    * Create a Yarn client to submit an application to the ResourceManager.
@@ -59,7 +60,8 @@ private[spark] class YarnClientSchedulerBackend(
     // we initialize our driver scheduler backend, which serves these properties
     // to the executors
     super.start()
-
+    val binding = YarnExtensionServiceBinding(sc, appId, None)
+    services.start(binding)
     waitForApplication()
 
     // SPARK-8851: In yarn-client mode, the AM still does the credentials refresh. The driver
@@ -180,6 +182,7 @@ private[spark] class YarnClientSchedulerBackend(
     super.stop()
     client.stop()
     YarnSparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
+    services.stop()
     logInfo("Stopped")
   }
 
