@@ -714,25 +714,29 @@ private[spark] class YarnHistoryService extends YarnExtensionService with Loggin
     var currentRetryDelay = retryInterval
     while (!stopped.get) {
       try {
-        val head = _entityQueue.take()
-        val (_, ex) = postOneEntity(head)
-        if (ex.isDefined && !stopped.get()) {
-          // something went wrong and it wasn't being told to stop
-          if (!lastAttemptFailed) {
-            // avoid filling up logs with repeated failures
-            logWarning(s"Exception submitting entity to ${_timelineWebappAddress}", ex.get)
+        // spin, rather than block, to check for the stopped bit -sometimes interrupts
+        // appear to get swallowed
+        val head = _entityQueue.pollFirst(1000, TimeUnit.MILLISECONDS)
+        if (head != null) {
+          val (_, ex) = postOneEntity(head)
+          if (ex.isDefined && !stopped.get()) {
+            // something went wrong and it wasn't being told to stop
+            if (!lastAttemptFailed) {
+              // avoid filling up logs with repeated failures
+              logWarning(s"Exception submitting entity to ${_timelineWebappAddress}", ex.get)
+            }
+            // log failure and repost
+            lastAttemptFailed = true
+            currentRetryDelay += retryInterval
+            _entityQueue.addFirst(head)
+            if (currentRetryDelay > 0 ) {
+              Thread.sleep(currentRetryDelay)
+            }
+          } else {
+            // success
+            lastAttemptFailed = false
+            currentRetryDelay = retryInterval
           }
-          // log failure and repost
-          lastAttemptFailed = true
-          currentRetryDelay += retryInterval
-          _entityQueue.addFirst(head)
-          if (currentRetryDelay > 0 ) {
-            Thread.sleep(currentRetryDelay)
-          }
-        } else {
-          // success
-          lastAttemptFailed = false
-          currentRetryDelay = retryInterval
         }
       } catch {
         case ex: InterruptedException =>

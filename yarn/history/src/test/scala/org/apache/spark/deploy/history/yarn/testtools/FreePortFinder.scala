@@ -55,8 +55,13 @@ trait FreePortFinder {
     "127.0.0.1"
   }
 
-  def findIPv4AddressAsPortPair(): String = {
-    localIPv4Address() + ":" + findPort()
+  /**
+   * Get a local address as an address:port string and an integer port value
+   * @return a free port to bind to
+   */
+  def findIPv4AddressAsPortPair(): (String, Int) = {
+    val port = findPort()
+    (localIPv4Address() + ":" + port, port)
   }
 
 }

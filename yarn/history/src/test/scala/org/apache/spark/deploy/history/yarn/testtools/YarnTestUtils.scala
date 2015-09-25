@@ -155,10 +155,20 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    * @return the modified config
    */
   def addBasicTimelineOptions(sparkConf: SparkConf): SparkConf = {
+    val (timelineService, timelinePort) = findIPv4AddressAsPortPair()
+    var webapp: String = ""
+    var webappPort = timelinePort
+    // configure web while catching very rare race condition of port recycling
+    do {
+      // convoluted assignment as compiler was failing on a direct update
+      val (webapp2, webappPort2) = findIPv4AddressAsPortPair()
+      webapp = webapp2
+      webappPort = webappPort2
+    } while (webappPort == timelinePort)
     applyHadoopOptions(sparkConf,
       Map(YarnConfiguration.TIMELINE_SERVICE_ENABLED -> "true",
-         YarnConfiguration.TIMELINE_SERVICE_ADDRESS -> findIPv4AddressAsPortPair(),
-         YarnConfiguration.TIMELINE_SERVICE_WEBAPP_ADDRESS -> findIPv4AddressAsPortPair(),
+         YarnConfiguration.TIMELINE_SERVICE_ADDRESS -> timelineService,
+         YarnConfiguration.TIMELINE_SERVICE_WEBAPP_ADDRESS -> webapp,
          YarnConfiguration.TIMELINE_SERVICE_STORE -> classOf[MemoryTimelineStore].getName,
          YarnConfiguration.TIMELINE_SERVICE_CLIENT_MAX_RETRIES -> "1",
          YarnConfiguration.TIMELINE_SERVICE_CLIENT_RETRY_INTERVAL_MS -> "200"))
@@ -530,14 +540,20 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    *
    * @param historyService history service
    * @param timeout timeout in milliseconds
+   * @param failOnTimeout flag -fail vs warn on timeout. Default: true
    */
-  def awaitServiceThreadStopped(historyService: YarnHistoryService, timeout: Long): Unit = {
+  def awaitServiceThreadStopped(historyService: YarnHistoryService, timeout: Long,
+      failOnTimeout: Boolean= true): Unit = {
     assertNotNull(historyService, "null historyService")
     spinForState("awaitServiceThreadStopped",
       interval = 50,
       timeout = timeout,
       probe = () => outcomeFromBool(!historyService.isPostThreadActive),
-      failure = (_, _, _) => fail(s"history service post thread did not finish : $historyService"))
+      failure = (_, _, _) => if (failOnTimeout) {
+        fail(s"After $timeout mS, history service post thread did not finish : $historyService")
+      } else {
+        logWarning(s"After $timeout mS, history service post thread did not finish : $historyService")
+      })
   }
 
   /**
