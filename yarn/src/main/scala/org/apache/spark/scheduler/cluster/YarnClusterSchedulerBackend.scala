@@ -17,22 +17,14 @@
 
 package org.apache.spark.scheduler.cluster
 
-import java.net.NetworkInterface
-
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
-
-import scala.collection.JavaConverters._
-
-import org.apache.hadoop.yarn.api.records.NodeState
-import org.apache.hadoop.yarn.client.api.YarnClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
 import org.apache.spark.deploy.yarn.ApplicationMaster
-import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.scheduler.TaskSchedulerImpl
-import org.apache.spark.util.{IntParam, Utils}
+import org.apache.spark.util.Utils
 
 private[spark] class YarnClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
@@ -45,13 +37,7 @@ private[spark] class YarnClusterSchedulerBackend(
     val attemptId = ApplicationMaster.getAttemptId
     val binding = YarnExtensionServiceBinding(sc, attemptId.getApplicationId(), Some(attemptId))
     services.start(binding)
-    totalExpectedExecutors = DEFAULT_NUMBER_EXECUTORS
-    if (System.getenv("SPARK_EXECUTOR_INSTANCES") != null) {
-      totalExpectedExecutors = IntParam.unapply(System.getenv("SPARK_EXECUTOR_INSTANCES"))
-        .getOrElse(totalExpectedExecutors)
-    }
-    // System property can override environment variable.
-    totalExpectedExecutors = sc.getConf.getInt("spark.executor.instances", totalExpectedExecutors)
+    totalExpectedExecutors = YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sc.conf)
   }
 
   override def stop(): Unit = {
