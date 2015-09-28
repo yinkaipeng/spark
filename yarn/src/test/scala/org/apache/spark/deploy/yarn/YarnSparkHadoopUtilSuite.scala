@@ -32,6 +32,7 @@ import org.scalatest.Matchers
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
 
@@ -262,4 +263,14 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
     inner
   }
 
+  test("check different hadoop utils based on env variable") {
+    try {
+      System.setProperty("SPARK_YARN_MODE", "true")
+      assert(SparkHadoopUtil.get.getClass === classOf[YarnSparkHadoopUtil])
+      System.setProperty("SPARK_YARN_MODE", "false")
+      assert(SparkHadoopUtil.get.getClass === classOf[SparkHadoopUtil])
+    } finally {
+      System.clearProperty("SPARK_YARN_MODE")
+    }
+  }
 }
