@@ -15,9 +15,7 @@
   ~ See the License for the specific language governing permissions and
   ~ limitations under the License.
   -->
-
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache</groupId>
@@ -26,7 +24,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.10</artifactId>
-  <version>1.4.1</version>
+  <version>1.4.1.2.3.2.0-2950</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -130,13 +128,13 @@
     <mesos.classifier>shaded-protobuf</mesos.classifier>
     <slf4j.version>1.7.10</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
-    <hadoop.version>2.2.0</hadoop.version>
+    <hadoop.version>2.7.1.2.3.2.0-2950</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
-    <hbase.version>0.98.7-hadoop2</hbase.version>
+    <hbase.version>1.1.2.2.3.2.0-2950</hbase.version>
     <hbase.artifact>hbase</hbase.artifact>
-    <flume.version>1.4.0</flume.version>
-    <zookeeper.version>3.4.5</zookeeper.version>
+    <flume.version>1.5.2.2.3.2.0-2950</flume.version>
+    <zookeeper.version>3.4.6.2.3.2.0-2950</zookeeper.version>
     <curator.version>2.4.0</curator.version>
     <hive.group>org.spark-project.hive</hive.group>
     <!-- Version used in Maven Hive dependency -->
@@ -1306,7 +1304,7 @@
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
             <argLine>-ea -Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
-            <stderr/>
+            <stderr />
             <environmentVariables>
               <!--
                 Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
@@ -1440,10 +1438,10 @@
             </goals>
             <configuration>
               <scripts>
-                <script><![CDATA[
+                <script>
                 def file = new File(project.properties.test_classpath_file)
                 project.properties.test_classpath = file.getText().split().join(":")
-                ]]></script>
+                </script>
               </scripts>
             </configuration>
           </execution>
@@ -1714,9 +1712,9 @@
     <profile>
       <id>hadoop-1</id>
       <properties>
-        <hadoop.version>1.0.4</hadoop.version>
-        <protobuf.version>2.4.1</protobuf.version>
-        <hbase.version>0.98.7-hadoop1</hbase.version>
+        <hadoop.version>2.7.1.2.3.2.0-2950</hadoop.version>
+        <protobuf.version>2.5.0</protobuf.version>
+        <hbase.version>1.1.2.2.3.2.0-2950</hbase.version>
         <avro.mapred.classifier>hadoop1</avro.mapred.classifier>
         <codehaus.jackson.version>1.8.8</codehaus.jackson.version>
       </properties>
@@ -1730,7 +1728,7 @@
     <profile>
       <id>hadoop-2.3</id>
       <properties>
-        <hadoop.version>2.3.0</hadoop.version>
+        <hadoop.version>2.7.1.2.3.2.0-2950</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
         <commons.math3.version>3.1.1</commons.math3.version>
       </properties>
@@ -1739,7 +1737,7 @@
     <profile>
       <id>hadoop-2.4</id>
       <properties>
-        <hadoop.version>2.4.0</hadoop.version>
+        <hadoop.version>2.7.1.2.3.2.0-2950</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
         <commons.math3.version>3.1.1</commons.math3.version>
       </properties>
@@ -1748,10 +1746,10 @@
     <profile>
       <id>hadoop-2.6</id>
       <properties>
-        <hadoop.version>2.6.0</hadoop.version>
+        <hadoop.version>2.7.1.2.3.2.0-2950</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
         <commons.math3.version>3.1.1</commons.math3.version>
-        <zookeeper.version>3.4.6</zookeeper.version>
+        <zookeeper.version>3.4.6.2.3.2.0-2950</zookeeper.version>
         <curator.version>2.6.0</curator.version>
       </properties>
     </profile>
@@ -1767,20 +1765,20 @@
     <profile>
       <id>mapr3</id>
       <properties>
-        <hadoop.version>1.0.3-mapr-3.0.3</hadoop.version>
+        <hadoop.version>2.7.1.2.3.2.0-2950</hadoop.version>
         <yarn.version>2.4.1-mapr-1408</yarn.version>
-        <hbase.version>0.98.4-mapr-1408</hbase.version>
-        <zookeeper.version>3.4.5-mapr-1406</zookeeper.version>
+        <hbase.version>1.1.2.2.3.2.0-2950</hbase.version>
+        <zookeeper.version>3.4.6.2.3.2.0-2950</zookeeper.version>
       </properties>
     </profile>
 
     <profile>
       <id>mapr4</id>
       <properties>
-        <hadoop.version>2.4.1-mapr-1408</hadoop.version>
+        <hadoop.version>2.7.1.2.3.2.0-2950</hadoop.version>
         <yarn.version>2.4.1-mapr-1408</yarn.version>
-        <hbase.version>0.98.4-mapr-1408</hbase.version>
-        <zookeeper.version>3.4.5-mapr-1406</zookeeper.version>
+        <hbase.version>1.1.2.2.3.2.0-2950</hbase.version>
+        <zookeeper.version>3.4.6.2.3.2.0-2950</zookeeper.version>
       </properties>
       <dependencies>
         <dependency>
