@@ -423,7 +423,7 @@ private[spark] object YarnTimelineUtils extends Logging {
     val sparkUser = field(en, FIELD_APP_USER).asInstanceOf[String]
     val completed = endTime > 0
     val entityId = en.getEntityId()
-    val attemptId = Some(entityId)
+    val attemptId = None
 
     val attempt = ApplicationAttemptInfo(
       attemptId,

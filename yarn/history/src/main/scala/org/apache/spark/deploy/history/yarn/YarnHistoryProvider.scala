@@ -595,7 +595,8 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
         val conf = this.sparkConf.clone()
         val appSecManager = new SecurityManager(conf)
         SparkUI.createHistoryUI(conf, bus, appSecManager, appId,
-          HistoryServer.UI_PATH_PREFIX + s"/${appId }", entity.getStartTime)
+          HistoryServer.getAttemptURI(appId, None),
+          entity.getStartTime)
       }
       val events = entity.getEvents
       logInfo(s"App $appId history contains ${events.size() } events")
