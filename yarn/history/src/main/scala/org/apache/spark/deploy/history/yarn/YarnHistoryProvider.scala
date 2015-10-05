@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history.yarn
 
-import java.io.FileNotFoundException
+import java.io.{IOException, FileNotFoundException}
 import java.net.URI
 import java.util.Date
 import java.util.concurrent.LinkedBlockingQueue
@@ -618,7 +618,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
         logInfo(s"Unknown application $appId", e)
         setLastFailure(e)
         None
-      case e: Exception =>
+      case e: IOException =>
         logWarning(s"Failed to get attempt information for $appId", e)
         setLastFailure(e)
         None
