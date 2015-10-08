@@ -89,7 +89,7 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
       val l1 = awaitListingSize(provider, 1, TEST_STARTUP_DELAY)
 
       // resolve to entry
-      provider.getAppUI(yarnAppId, None) match {
+      provider.getAppUI(yarnAppId, Some(yarnAppId)) match {
         case Some(yarnAppUI) =>
           // success
         case None => fail(s"Did not get a UI for $yarnAppId")
@@ -104,7 +104,7 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
       // look for the link
       assertContains(completeBody,s"${yarnAppId}</a>")
 
-      val appPath = s"/history/${yarnAppId }"
+      val appPath = s"/history/$yarnAppId/$yarnAppId"
       // GET the app
       val appURL = new URL(webUI, appPath)
       val appUI = connector.execHttpOperation("GET", appURL, null, "")
@@ -116,15 +116,6 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/storage"), null, "")
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/environment"), null, "")
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/executors"), null, "")
-
-
-      // resolve to entry
-      val appUIwrapper = provider.getAppUI(yarnAppId, Some(yarnAppId))
-      appUIwrapper match {
-        case Some(yarnAppUI) =>
-        // success
-        case None => fail(s"Did not get a UI for $yarnAppId")
-      }
 
     }
 

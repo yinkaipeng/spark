@@ -568,6 +568,9 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       // Timeline is disabled: return nothing
       return None
     }
+    if (attemptId.isEmpty || attemptId.get != appId) {
+      return None
+    }
     maybeCheckEndpoint()
     try {
       val entity = getTimelineEntity(appId)

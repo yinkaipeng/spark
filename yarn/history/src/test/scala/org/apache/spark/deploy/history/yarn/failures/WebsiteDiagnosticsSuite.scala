@@ -75,7 +75,7 @@ class WebsiteDiagnosticsSuite extends AbstractTestsWithHistoryServices {
    */
   def expectApplicationLookupToFailInEndpointCheck(webUI: URL, provider: YarnHistoryProvider): Unit = {
     val connector = createUrlConnector()
-    val appURL = new URL(webUI, "/history/app-0001")
+    val appURL = new URL(webUI, "/history/app-0001/app-0001")
     describe(s"Expecting endpoint checks to fail while retrieving $appURL")
     awaitURL(webUI, TEST_STARTUP_DELAY)
     try {

@@ -80,7 +80,7 @@ class IncompleteSparkUISuite extends AbstractTestsWithHistoryServices {
 
       val yarnAppId = applicationId.toString()
 
-      val appPath = s"/history/${yarnAppId}"
+      val appPath = s"/history/$yarnAppId/$yarnAppId"
       // GET the app
       val appURL = new URL(webUI, appPath)
       val appUIBody = connector.execHttpOperation("GET", appURL, null, "").responseBody
