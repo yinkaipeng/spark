@@ -35,7 +35,7 @@ class RealHistorySuite extends AbstractTestsWithHistoryServices {
 
   /** path to the resource with the history */
   val History1 = "org/apache/spark/deploy/history/yarn/integration/history-1.json"
-  val EntityCount = 16
+  val EntityCount = 2
 
   override def setupConfiguration(sparkConf: SparkConf): SparkConf = {
     super.setupConfiguration(sparkConf)
@@ -83,7 +83,7 @@ class RealHistorySuite extends AbstractTestsWithHistoryServices {
       assertNotNull(entity, s"Null entity from $yarnAppId")
 
       // listing
-      val l1 = awaitListingSize(provider, EntityCount, TEST_STARTUP_DELAY)
+      awaitListingSize(provider, EntityCount, TEST_STARTUP_DELAY)
 
       // resolve to entry
       provider.getAppUI(yarnAppId, None) match {
