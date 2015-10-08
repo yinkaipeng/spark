@@ -119,7 +119,7 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
 
 
       // resolve to entry
-      val appUIwrapper = provider.getAppUI(yarnAppId)
+      val appUIwrapper = provider.getAppUI(yarnAppId, Some(yarnAppId))
       appUIwrapper match {
         case Some(yarnAppUI) =>
         // success

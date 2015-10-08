@@ -192,7 +192,7 @@ class TimelineListenerSuite extends AbstractTestsWithHistoryServices {
     assert(attempt.lastUpdated > 0, s"attempt.lastUpdated zero time in $info")
     assert(started.appName === info.name, s"info.name != started.appName in $info")
     assert(userName === attempt.sparkUser, s"attempt.sparkUser != username in $info")
-    val appUI = provider.getAppUI(info.id)
+    val appUI = provider.getAppUI(info.id, Some(info.id))
 
     val timelineEntity = queryClient.getEntity(SPARK_EVENT_ENTITY_TYPE, info.id)
     val events = timelineEntity.getEvents.asScala.toList

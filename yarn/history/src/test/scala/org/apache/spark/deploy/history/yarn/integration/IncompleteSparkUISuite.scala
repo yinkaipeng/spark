@@ -89,7 +89,7 @@ class IncompleteSparkUISuite extends AbstractTestsWithHistoryServices {
       assertContains(appUIBody, activeJobsMarker, s"active jobs string in $appURL")
 
       // resolve to entry
-      val appUIwrapper = provider.getAppUI(yarnAppId)
+      val appUIwrapper = provider.getAppUI(yarnAppId, Some(yarnAppId))
       appUIwrapper match {
         case Some(yarnAppUI) =>
         // success

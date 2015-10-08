@@ -86,23 +86,22 @@ class RealHistorySuite extends AbstractTestsWithHistoryServices {
       awaitListingSize(provider, EntityCount, TEST_STARTUP_DELAY)
 
       // resolve to entry
-      provider.getAppUI(yarnAppId, None) match {
+      provider.getAppUI(yarnAppId, Some(yarnAppId)) match {
         case Some(yarnAppUI) =>
         // success
         case None => fail(s"Did not get a UI for $yarnAppId")
       }
 
-      //and look for the complete app
-
+      // and look for the complete app
       awaitURL(webUI, TEST_STARTUP_DELAY)
       val completeBody = awaitURLDoesNotContainText(connector, webUI,
         no_completed_applications, TEST_STARTUP_DELAY)
       logInfo(s"GET /\n$completeBody")
       // look for the link
       assertContains(completeBody,
-        "<a href=\"/history/application_1443668830514_0008\">")
+        "<a href=\"/history/application_1443668830514_0008/application_1443668830514_0008\">")
 
-      val appPath = s"/history/$yarnAppId"
+      val appPath = s"/history/$yarnAppId/$yarnAppId"
       // GET the app
       val appURL = new URL(webUI, appPath)
       val appUI = connector.execHttpOperation("GET", appURL, null, "")
@@ -114,16 +113,6 @@ class RealHistorySuite extends AbstractTestsWithHistoryServices {
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/storage"), null, "")
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/environment"), null, "")
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/executors"), null, "")
-
-
-      // resolve to entry
-      val appUIwrapper = provider.getAppUI(yarnAppId)
-      appUIwrapper match {
-        case Some(yarnAppUI) =>
-        // success
-        case None => fail(s"Did not get a UI for $yarnAppId")
-      }
-
     }
 
     webUITest("submit and check", examineHistory)
