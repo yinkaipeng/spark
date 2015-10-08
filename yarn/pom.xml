@@ -137,6 +137,11 @@
        <artifactId>jersey-server</artifactId>
        <scope>test</scope>
      </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.module</groupId>
+      <artifactId>jackson-module-jaxb-annotations</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <profiles>
@@ -191,6 +196,20 @@
                   <sources>
                     <source>history/src/test/scala</source>
                   </sources>
+                </configuration>
+              </execution>
+              <execution>
+                <id>add-test-resource</id>
+                <phase>generate-test-resources</phase>
+                <goals>
+                  <goal>add-test-resource</goal>
+                </goals>
+                <configuration>
+                  <resources>
+                    <resource>
+                      <directory>history/src/test/resources</directory>
+                    </resource>
+                  </resources>
                 </configuration>
               </execution>
             </executions>

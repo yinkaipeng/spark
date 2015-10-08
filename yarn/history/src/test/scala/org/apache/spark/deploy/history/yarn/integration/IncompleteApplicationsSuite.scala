@@ -125,7 +125,7 @@ class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
       // look for the link
       assertContains(completeBody, s"${yarnAppId}</a>", "expecting app listed in completed page")
 
-      val appPath = s"/history/${yarnAppId}"
+      val appPath = s"/history/$yarnAppId/$yarnAppId"
       // GET the app
       val appURL = new URL(webUI, appPath)
       val appUI = connector.execHttpOperation("GET", appURL, null, "")
@@ -142,7 +142,7 @@ class IncompleteApplicationsSuite extends AbstractTestsWithHistoryServices {
 
 
       // resolve to entry
-      val appUIwrapper = provider.getAppUI(yarnAppId)
+      val appUIwrapper = provider.getAppUI(yarnAppId, Some(yarnAppId))
       appUIwrapper match {
         case Some(yarnAppUI) =>
         // success

@@ -109,7 +109,7 @@ class TimelineQueryFailureSuite extends AbstractTestsWithHistoryServices {
     provider.setEndpointChecked(true)
 
     try {
-      assert(None === provider.getAppUI("app1"))
+      assert(None === provider.getAppUI("app1", Some("app1")))
       val lastException = provider.getLastFailure()
       assertNotNull(lastException, "null last exception")
       lastException match {

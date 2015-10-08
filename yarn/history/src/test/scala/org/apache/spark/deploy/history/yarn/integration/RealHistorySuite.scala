@@ -22,15 +22,20 @@ import java.net.URL
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.deploy.history.yarn.YarnTestUtils._
-import org.apache.spark.deploy.history.yarn.{YarnEventListener, YarnHistoryProvider, YarnHistoryService}
+import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
+import org.apache.spark.deploy.history.yarn.failures.FailingYarnHistoryProvider
+import org.apache.spark.deploy.history.yarn.rest.{JerseyBinding, TimelineQueryClient}
+import org.apache.spark.deploy.history.yarn.{YarnHistoryProvider, YarnHistoryService}
 import org.apache.spark.scheduler.cluster.YarnExtensionServices
-import org.apache.spark.util.Utils
 
 /**
- * This is the complete integration test
+ * Loads in a real history
  */
-class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
+class RealHistorySuite extends AbstractTestsWithHistoryServices {
 
+  /** path to the resource with the history */
+  val History1 = "org/apache/spark/deploy/history/yarn/integration/history-1.json"
+  val EntityCount = 2
 
   override def setupConfiguration(sparkConf: SparkConf): SparkConf = {
     super.setupConfiguration(sparkConf)
@@ -39,70 +44,62 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
     sparkConf.set(SPARK_HISTORY_UI_PORT, findPort().toString)
   }
 
-  test("Instantiate HistoryProvider") {
-    val provider = createHistoryProvider(sparkCtx.getConf)
-    provider.stop()
+  var historyProvider: FailingYarnHistoryProvider = _
+
+  /**
+   * Create a history provider bonded to the resource entity list
+   * @param conf configuration
+   * @return the instance
+   */
+  override protected def createHistoryProvider(conf: SparkConf): YarnHistoryProvider = {
+    val client = createTimelineQueryClient()
+    historyProvider = new FailingYarnHistoryProvider(client, true, client.getTimelineURI(),
+      conf, true)
+    historyProvider
   }
 
-  test("WebUI hooked up") {
-    def probeEmptyWebUIVoid(webUI: URL, provider: YarnHistoryProvider): Unit = {
-      probeEmptyWebUI(webUI, provider)
-    }
-    webUITest("WebUI hooked up", probeEmptyWebUIVoid)
+  protected override def createTimelineQueryClient(): TimelineQueryClient = {
+    new ResourceDrivenTimelineQueryClient(
+      History1,
+      new URL(getTimelineEndpoint(sparkCtx.hadoopConfiguration).toURL, "/").toURI,
+      sparkCtx.hadoopConfiguration,
+      JerseyBinding.createClientConfig())
   }
 
   test("Publish Events and GET the web UI") {
-    def submitAndCheck(webUI: URL, provider: YarnHistoryProvider): Unit = {
-
-      historyService = startHistoryService(sparkCtx)
-      val timeline = historyService.getTimelineServiceAddress()
-      val listener = new YarnEventListener(sparkCtx, historyService)
-      val startTime = now()
-
-      val started = appStartEvent(startTime,
-                                   sparkCtx.applicationId,
-                                   Utils.getCurrentUserName())
-      listener.onApplicationStart(started)
-      awaitEventsProcessed(historyService, 1, 2000)
-      flushHistoryServiceToSuccess()
+    def examineHistory(webUI: URL, provider: YarnHistoryProvider): Unit = {
 
       val connector = createUrlConnector()
-      val queryClient = createTimelineQueryClient()
+      val queryClient = historyProvider.getTimelineQueryClient()
 
-      //now stop the app
-      historyService.stop()
-      awaitEmptyQueue(historyService, TEST_STARTUP_DELAY)
-      val yarnAppId = applicationId.toString()
-      // validate ATS has it
       val timelineEntities =
-        queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE,
-                                  primaryFilter = Some(FILTER_APP_END, FILTER_APP_END_VALUE))
-      assert(1 === timelineEntities.size, "entities listed by app end filter")
-      val entry = timelineEntities.head
-      assert(yarnAppId === entry.getEntityId, s"no entry of id $yarnAppId")
+        queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE)
+      assert(EntityCount === timelineEntities.size,
+        s"entities listed count = ${timelineEntities.size}")
+      val yarnAppId = "application_1443668830514_0008"
 
+      assertNotNull(yarnAppId, s"Null entityId from $yarnAppId")
       val entity = queryClient.getEntity(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE, yarnAppId)
-
-      // at this point the REST UI is happy. Check the provider level
+      assertNotNull(entity, s"Null entity from $yarnAppId")
 
       // listing
-      val l1 = awaitListingSize(provider, 1, TEST_STARTUP_DELAY)
+      awaitListingSize(provider, EntityCount, TEST_STARTUP_DELAY)
 
       // resolve to entry
       provider.getAppUI(yarnAppId, Some(yarnAppId)) match {
         case Some(yarnAppUI) =>
-          // success
+        // success
         case None => fail(s"Did not get a UI for $yarnAppId")
       }
 
-      //and look for the complete app
-
+      // and look for the complete app
       awaitURL(webUI, TEST_STARTUP_DELAY)
       val completeBody = awaitURLDoesNotContainText(connector, webUI,
-           no_completed_applications, TEST_STARTUP_DELAY)
+        no_completed_applications, TEST_STARTUP_DELAY)
       logInfo(s"GET /\n$completeBody")
       // look for the link
-      assertContains(completeBody,s"${yarnAppId}</a>")
+      assertContains(completeBody,
+        "<a href=\"/history/application_1443668830514_0008/application_1443668830514_0008\">")
 
       val appPath = s"/history/$yarnAppId/$yarnAppId"
       // GET the app
@@ -110,16 +107,15 @@ class WebsiteIntegrationSuite extends AbstractTestsWithHistoryServices {
       val appUI = connector.execHttpOperation("GET", appURL, null, "")
       val appUIBody = appUI.responseBody
       logInfo(s"Application\n$appUIBody")
-      assertContains(appUIBody, APP_NAME)
+      assertContains(appUIBody, "SparkSQL::10.0.0.143")
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/jobs"), null, "")
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/stages"), null, "")
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/storage"), null, "")
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/environment"), null, "")
       connector.execHttpOperation("GET", new URL(appURL, s"$appPath/executors"), null, "")
-
     }
 
-    webUITest("submit and check", submitAndCheck)
+    webUITest("submit and check", examineHistory)
   }
 
 }

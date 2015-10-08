@@ -80,7 +80,7 @@ class IncompleteSparkUISuite extends AbstractTestsWithHistoryServices {
 
       val yarnAppId = applicationId.toString()
 
-      val appPath = s"/history/${yarnAppId}"
+      val appPath = s"/history/$yarnAppId/$yarnAppId"
       // GET the app
       val appURL = new URL(webUI, appPath)
       val appUIBody = connector.execHttpOperation("GET", appURL, null, "").responseBody
@@ -89,7 +89,7 @@ class IncompleteSparkUISuite extends AbstractTestsWithHistoryServices {
       assertContains(appUIBody, activeJobsMarker, s"active jobs string in $appURL")
 
       // resolve to entry
-      val appUIwrapper = provider.getAppUI(yarnAppId)
+      val appUIwrapper = provider.getAppUI(yarnAppId, Some(yarnAppId))
       appUIwrapper match {
         case Some(yarnAppUI) =>
         // success

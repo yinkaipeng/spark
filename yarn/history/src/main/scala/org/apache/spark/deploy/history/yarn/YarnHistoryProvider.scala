@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history.yarn
 
-import java.io.FileNotFoundException
+import java.io.{IOException, FileNotFoundException}
 import java.net.URI
 import java.util.Date
 import java.util.concurrent.LinkedBlockingQueue
@@ -554,7 +554,6 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
     getTimelineQueryClient().getEntity(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE, appId)
   }
 
-
   /**
    * Returns the Spark UI for a specific application.
    * <p>
@@ -564,20 +563,12 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @return The application's UI, or `None` if application is not found.
    */
   override def getAppUI(appId: String, attemptId: Option[String]): Option[SparkUI] = {
-    getAppUI(appId)
-  }
-
-  /**
-   * Build the application UI for an application
-   * <p>
-   * If the timeline is  not enabled, returns `None`
-   * @param appId The application ID.
-   * @return The application's UI, or `None` if application is not found.
-   */
-  def getAppUI(appId: String): Option[SparkUI] = {
-    logDebug(s"Request UI with appId $appId")
+    logDebug(s"Request UI with appId $appId attempt $attemptId")
     if (!enabled) {
       // Timeline is disabled: return nothing
+      return None
+    }
+    if (attemptId.isEmpty || attemptId.get != appId) {
       return None
     }
     maybeCheckEndpoint()
@@ -595,7 +586,8 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
         val conf = this.sparkConf.clone()
         val appSecManager = new SecurityManager(conf)
         SparkUI.createHistoryUI(conf, bus, appSecManager, appId,
-          HistoryServer.UI_PATH_PREFIX + s"/${appId }", entity.getStartTime)
+          HistoryServer.getAttemptURI(appId, attemptId),
+          entity.getStartTime)
       }
       val events = entity.getEvents
       logInfo(s"App $appId history contains ${events.size() } events")
@@ -618,7 +610,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
         logInfo(s"Unknown application $appId", e)
         setLastFailure(e)
         None
-      case e: Exception =>
+      case e: IOException =>
         logWarning(s"Failed to get attempt information for $appId", e)
         setLastFailure(e)
         None
@@ -960,9 +952,7 @@ private[spark] object YarnHistoryProvider {
     "Timeline service is disabled: application history cannot be retrieved"
 
   val TEXT_NEVER_UPDATED = "Never"
-  val TEXT_INVALID_UPDATE_INTERVAL = s"Invalid update interval defined in $OPTION_MIN_REFRESH_INTERVAL"
-  
-  
+
   val KEY_LISTING_REFRESH_INTERVAL = "Update Interval"
 
   /**
@@ -971,6 +961,8 @@ private[spark] object YarnHistoryProvider {
    */
   val OPTION_MIN_REFRESH_INTERVAL = "spark.history.yarn.min-refresh-interval"
   val DEFAULT_MIN_REFRESH_INTERVAL_SECONDS = 60
+  val TEXT_INVALID_UPDATE_INTERVAL = s"Invalid update interval defined" +
+      s" in $OPTION_MIN_REFRESH_INTERVAL"
 
   /**
    * Option for the number of events to retrieve
