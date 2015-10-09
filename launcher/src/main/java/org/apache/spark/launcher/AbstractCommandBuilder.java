@@ -237,7 +237,7 @@ abstract class AbstractCommandBuilder {
         String azureStorageJar = findAzureStorageJar();
         addToClassPath(cp, azureStorageJar);
 
-        String log4jHome = "/usr/lib/hadoop-logging";
+        String log4jHome = "/usr/lib/hdinsight-logging";
         File sinkJar = new File(log4jHome, "mdsdclient-1.0.jar");
         checkState(sinkJar.isFile(), "Library directory '%s' does not exist.",
             sinkJar.getAbsolutePath());
