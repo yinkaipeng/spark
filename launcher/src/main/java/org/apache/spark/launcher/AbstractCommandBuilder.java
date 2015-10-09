@@ -239,6 +239,23 @@ abstract class AbstractCommandBuilder {
         // i.e. /usr/hdp/current/hadoop-client/lib/azure-storage-2.2.0.jar
         String azureStorageJar = findAzureStorageJar();
         addToClassPath(cp, azureStorageJar);
+
+        String log4jHome = "/usr/lib/hdinsight-logging";
+        File sinkJar = new File(log4jHome, "mdsdclient-1.0.jar");
+        checkState(sinkJar.isFile(), "Library directory '%s' does not exist.",
+            sinkJar.getAbsolutePath());
+        addToClassPath(cp, "/usr/lib/hdinsight-logging/mdsdclient-1.0.jar");
+
+        sinkJar = new File(log4jHome, "microsoft-log4j-etwappender-1.0.jar");
+        checkState(sinkJar.isFile(), "Library directory '%s' does not exist.",
+            sinkJar.getAbsolutePath());
+        addToClassPath(cp, "/usr/lib/hdinsight-logging/microsoft-log4j-etwappender-1.0.jar");
+
+        sinkJar = new File(log4jHome, "json-simple-1.1.jar");
+        checkState(sinkJar.isFile(), "Library directory '%s' does not exist.",
+            sinkJar.getAbsolutePath());
+        addToClassPath(cp, "/usr/lib/hdinsight-logging/json-simple-1.1.jar");
+
       } catch (Exception e) {
         System.err.println("The azure jar cannot be located. Skip adding it to classpath");
       }
