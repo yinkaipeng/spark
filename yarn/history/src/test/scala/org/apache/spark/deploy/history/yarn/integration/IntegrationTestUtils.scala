@@ -1,13 +1,12 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,11 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.deploy.history.yarn.integration
 
 import java.io.IOException
 import java.net.URL
 
+import org.apache.hadoop.yarn.api.records.impl.pb.ApplicationReportPBImpl
 import org.apache.hadoop.yarn.api.records.{ApplicationId, ApplicationReport, YarnApplicationState}
 import org.scalatest.exceptions.TestFailedException
 
@@ -27,7 +28,7 @@ import org.apache.spark.deploy.history.yarn.rest.SpnegoUrlConnector
 import org.apache.spark.deploy.history.yarn.server.YarnProviderUtils._
 import org.apache.spark.deploy.history.yarn.server.{TimelineApplicationAttemptInfo, YarnHistoryProvider}
 import org.apache.spark.deploy.history.yarn.testtools.YarnTestUtils._
-import org.apache.spark.deploy.history.yarn.testtools.{StubApplicationAttemptId, StubApplicationId, StubApplicationReport}
+import org.apache.spark.deploy.history.yarn.testtools.{StubApplicationAttemptId, StubApplicationId}
 import org.apache.spark.deploy.history.{ApplicationAttemptInfo, ApplicationHistoryInfo}
 
 /**
@@ -67,9 +68,12 @@ private[yarn] trait IntegrationTestUtils {
    */
   def stubApplicationReport(id: Int, clusterTimestamp: Long, attempt: Int,
       state: YarnApplicationState,
-      startTime: Long, finishTime: Long = 0): StubApplicationReport = {
+      startTime: Long, finishTime: Long = 0): ApplicationReport = {
     val yarnId = new StubApplicationId(id, clusterTimestamp)
-    val report = new StubApplicationReport()
+    // this is tagged as hadoop private. The alternate tactic: create your own implementation,
+    // is brittle against Hadoop versions, as new fields are added. Using this
+    // class does at least ensure that it is current.
+    val report = new ApplicationReportPBImpl()
     report.setApplicationId(yarnId)
     report.setCurrentApplicationAttemptId(new StubApplicationAttemptId(yarnId, attempt))
     report.setYarnApplicationState(state)
