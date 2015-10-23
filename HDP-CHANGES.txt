@@ -14,6 +14,8 @@ IMPROVEMENTS
   BUG-47901. fix scalastyle check
   BUG-47814. ported ConfigCheck
   BUG-30990. Resolving symlinks in bin/spark-* scripts
+  HOTFIX-31 adding R to assembly descriptor, copying to /R/lib/SparkR
+  HOTFIX-25 disable mqtt assembly builds unless -Pmqtt-assembly set
 
 BUG FIXES
 

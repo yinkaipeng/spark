@@ -138,5 +138,11 @@
         <include>datanucleus*.jar</include>
       </includes>
     </fileSet>
-  </fileSets>
+    <fileSet>
+      <directory>
+        ${project.parent.basedir}/R/lib/SparkR
+      </directory>
+      <outputDirectory>/R/lib/SparkR</outputDirectory>
+    </fileSet>
+   </fileSets>
 </assembly>
