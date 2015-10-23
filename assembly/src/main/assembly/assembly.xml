@@ -142,7 +142,7 @@
       <directory>
         ${project.parent.basedir}/R/lib/SparkR
       </directory>
-      <outputDirectory>/R/lib</outputDirectory>
+      <outputDirectory>/R/lib/SparkR</outputDirectory>
     </fileSet>
    </fileSets>
 </assembly>
