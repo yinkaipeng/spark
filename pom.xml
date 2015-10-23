@@ -2535,5 +2535,8 @@
     <profile>
       <id>sparkr</id>
     </profile>
+    <profile>
+      <id>mqtt-assembly</id>
+    </profile>
   </profiles>
 </project>
