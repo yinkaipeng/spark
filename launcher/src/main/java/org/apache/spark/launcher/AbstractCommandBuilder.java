@@ -225,7 +225,7 @@ abstract class AbstractCommandBuilder {
     addToClassPath(cp, getenv("SPARK_DIST_CLASSPATH"));
 
     // Add Azure wasb paths only on linux sku
-    if (!isWindows()){
+    if (isHumboldt() && !isWindows()){
       try {
         String hadoopClientHome = "/usr/hdp/current/hadoop-client";
         File azureJar = new File(hadoopClientHome, "hadoop-azure.jar");
