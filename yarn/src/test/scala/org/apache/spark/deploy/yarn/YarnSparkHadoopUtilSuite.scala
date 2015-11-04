@@ -273,4 +273,31 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
       System.clearProperty("SPARK_YARN_MODE")
     }
   }
+
+  test("Obtain tokens For HiveMetastore") {
+    val hadoopConf = new Configuration()
+    hadoopConf.set("hive.metastore.kerberos.principal", "bob")
+    // thrift picks up on port 0 and bails out, without trying to talk to endpoint
+    hadoopConf.set("hive.metastore.uris", "http://localhost:0")
+    val util = new YarnSparkHadoopUtil
+    assertNestedHiveException(intercept[InvocationTargetException] {
+      util.obtainTokenForHiveMetastoreInner(hadoopConf, "alice")
+    })
+    // expect exception trapping code to unwind this hive-side exception
+    assertNestedHiveException(intercept[InvocationTargetException] {
+      util.obtainTokenForHiveMetastore(hadoopConf)
+    })
+  }
+
+  private def assertNestedHiveException(e: InvocationTargetException): Throwable = {
+    val inner = e.getCause
+    if (inner == null) {
+      fail("No inner cause", e)
+    }
+    if (!inner.isInstanceOf[HiveException]) {
+      fail("Not a hive exception", inner)
+    }
+    inner
+  }
+
 }
