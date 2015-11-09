@@ -111,6 +111,23 @@ abstract class AbstractCommandBuilder {
       }
     }
 
+    if (System.getenv("HDP_VERSION") != null) {
+      addOptionString(cmd, "-Dhdp.version=" + System.getenv("HDP_VERSION"));
+    }
+
+    boolean isHdpSet = false;
+    for (String c : cmd) {
+      if (c.contains("-Dhdp.version=") && c.length() > "-Dhdp.version=".length()) {
+        isHdpSet = true;
+        break;
+      }
+    }
+    if (!isHdpSet) {
+      throw new IllegalStateException("hdp.version is not set while running Spark under HDP, " +
+        "please set through HDP_VERSION in spark-env.sh or add a java-opts file in conf " +
+        "with -Dhdp.version=xxx added");
+    }
+
     cmd.add("-cp");
     cmd.add(join(File.pathSeparator, buildClassPath(extraClassPath)));
     return cmd;
