@@ -680,7 +680,7 @@ private[spark] class Client(
       }
 
       if (driverOpts.isDefined && driverOpts.get.contains("-Dhdp.version=")) {
-         logInfo("hdp.version is already set correctly through spark.driver.extraJavaOptions or " +
+         logDebug("hdp.version is already set correctly through spark.driver.extraJavaOptions or " +
            "SPARK_JAVA_OPTS")
       } else {
         sys.env.get("HDP_VERSION").map { version =>
@@ -721,7 +721,7 @@ private[spark] class Client(
       }
 
       if (amOpts.isDefined && amOpts.get.contains("-Dhdp.version=")) {
-        logInfo(s"hdp.version is already set correctly through spark.yarn.am.extraJavaOptions")
+        logDebug(s"hdp.version is already set correctly through spark.yarn.am.extraJavaOptions")
       } else {
         sys.env.get("HDP_VERSION").map { version =>
           javaOpts += s"-Dhdp.version=$version"

@@ -125,7 +125,7 @@ abstract class AbstractCommandBuilder {
     if (!isHdpSet) {
       throw new IllegalStateException("hdp.version is not set while running Spark under HDP, " +
         "please set through HDP_VERSION in spark-env.sh or add a java-opts file in conf " +
-        "with -Dhdp.version=xxx added");
+        "with -Dhdp.version=xxx");
     }
 
     cmd.add("-cp");
