@@ -678,6 +678,24 @@ private[spark] class Client(
       driverOpts.foreach { opts =>
         javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
       }
+
+      if (driverOpts.isDefined && driverOpts.get.contains("-Dhdp.version=")) {
+         logDebug("hdp.version is already set correctly through spark.driver.extraJavaOptions or " +
+           "SPARK_JAVA_OPTS")
+      } else {
+        sys.env.get("HDP_VERSION").map { version =>
+          javaOpts += s"-Dhdp.version=$version"
+        }.getOrElse {
+          throw new SparkException(
+            """
+              |Please set HDP_VERSION=xxx in spark-env.sh,
+              |or set -Dhdp.version=xxx in spark.driver.extraJavaOptions
+              |or set SPARK_JAVA_OPTS="-Dhdp.verion=xxx" in spark-env.sh
+              |If you're running Spark under HDP.
+            """.stripMargin)
+        }
+      }
+
       val libraryPaths = Seq(sys.props.get("spark.driver.extraLibraryPath"),
         sys.props.get("spark.driver.libraryPath")).flatten
       if (libraryPaths.nonEmpty) {
@@ -700,6 +718,21 @@ private[spark] class Client(
           throw new SparkException(msg)
         }
         javaOpts ++= Utils.splitCommandString(opts).map(YarnSparkHadoopUtil.escapeForShell)
+      }
+
+      if (amOpts.isDefined && amOpts.get.contains("-Dhdp.version=")) {
+        logDebug(s"hdp.version is already set correctly through spark.yarn.am.extraJavaOptions")
+      } else {
+        sys.env.get("HDP_VERSION").map { version =>
+          javaOpts += s"-Dhdp.version=$version"
+        }.getOrElse {
+          throw new SparkException(
+            """
+              |Please set HDP_VERSION=xxx in spark-env.sh,
+              |or set -Dhdp.version=xxx in spark.yarn.am.extraJavaOptions
+              |If you're running Spark under HDP.
+            """.stripMargin)
+        }
       }
 
       sparkConf.getOption("spark.yarn.am.extraLibraryPath").foreach { paths =>
