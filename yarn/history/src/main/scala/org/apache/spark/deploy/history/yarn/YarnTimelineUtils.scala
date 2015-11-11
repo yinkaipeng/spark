@@ -166,20 +166,28 @@ private[spark] object YarnTimelineUtils extends Logging {
   /**
    * Convert a spark event to a timeline event
    * @param event handled spark event
-   * @return a timeline event
+   * @return a timeline event if it could be marshalled
    */
-  def toTimelineEvent(event: SparkListenerEvent, timestamp: Long): TimelineEvent = {
-    val tlEvent = new TimelineEvent()
-    tlEvent.setEventType(Utils.getFormattedClassName(event)
-        + "-" + YarnTimelineUtils.uid.incrementAndGet.toString)
-    tlEvent.setTimestamp(timestamp)
-    val kvMap = new JHashMap[String, Object]()
-    val json = JsonProtocol.sparkEventToJson(event)
-    val jObject = json.asInstanceOf[JObject]
-    // the timeline event wants a map of java objects for Jackson to serialize
-    val hashMap = toJavaMap(jObject)
-    tlEvent.setEventInfo(hashMap)
-    tlEvent
+  def toTimelineEvent(event: SparkListenerEvent, timestamp: Long): Option[TimelineEvent] = {
+    try {
+      val tlEvent = new TimelineEvent()
+      tlEvent.setEventType(Utils.getFormattedClassName(event)
+          + "-" + YarnTimelineUtils.uid.incrementAndGet.toString)
+      tlEvent.setTimestamp(timestamp)
+      val kvMap = new JHashMap[String, Object]()
+      val json = JsonProtocol.sparkEventToJson(event)
+      val jObject = json.asInstanceOf[JObject]
+      // the timeline event wants a map of java objects for Jackson to serialize
+      val hashMap = toJavaMap(jObject)
+      tlEvent.setEventInfo(hashMap)
+      Some(tlEvent)
+    }
+    catch {
+      case e: MatchError =>
+        log.warn(s"Failed to convert $event to JSON: $e")
+        log.debug(s"Failed to convert $event to JSON: $e", e)
+        None
+    }
   }
 
   /**

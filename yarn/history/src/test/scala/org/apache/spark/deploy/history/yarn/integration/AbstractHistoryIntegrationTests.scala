@@ -183,7 +183,7 @@ abstract class AbstractHistoryIntegrationTests
    */
   protected def postEvent(sparkEvt: SparkListenerEvent, time: Long):
       (TimelineEvent, TimelineEntity, TimelinePutResponse) = {
-    val event = toTimelineEvent(sparkEvt, time)
+    val event = toTimelineEvent(sparkEvt, time).get
     val entity = newEntity(time)
     entity.addEvent(event)
     val response = putTimelineEntity(entity)

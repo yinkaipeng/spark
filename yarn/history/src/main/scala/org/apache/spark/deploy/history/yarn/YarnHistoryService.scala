@@ -843,8 +843,8 @@ private[spark] class YarnHistoryService extends YarnExtensionService with Loggin
     }
 
     val tlEvent = toTimelineEvent(event, timestamp)
-    val eventCount = if (canAddEvent(isLifecycleEvent)) {
-       addPendingEvent(tlEvent)
+    val eventCount = if (tlEvent.isDefined && canAddEvent(isLifecycleEvent)) {
+       addPendingEvent(tlEvent.get)
     } else {
       // discarding the event
       logWarning("Discarding event")

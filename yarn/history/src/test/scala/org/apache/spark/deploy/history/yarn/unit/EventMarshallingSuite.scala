@@ -27,7 +27,7 @@ import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.testtools.ExtraAssertions
 import org.apache.spark.deploy.history.yarn.testtools.YarnTestUtils._
 import org.apache.spark.deploy.history.yarn.YarnHistoryService
-import org.apache.spark.scheduler.{AccumulableInfo, JobSucceeded, SparkListenerEvent, SparkListenerJobEnd, SparkListenerStageCompleted, SparkListenerStageSubmitted, SparkListenerTaskGettingResult, SparkListenerTaskStart, StageInfo, TaskInfo, TaskLocality}
+import org.apache.spark.scheduler.{AccumulableInfo, JobSucceeded, SparkListenerBlockUpdated, SparkListenerEvent, SparkListenerJobEnd, SparkListenerStageCompleted, SparkListenerStageSubmitted, SparkListenerTaskGettingResult, SparkListenerTaskStart, StageInfo, TaskInfo, TaskLocality}
 
 /**
  * Test low-level marshalling, robustness and quality of exception messages
@@ -113,6 +113,10 @@ class EventMarshallingSuite extends FunSuite
     assert(result === dest.jobResult)
   }
 
+  test("SparkListenerBlockUpdated is ignored") {
+    assert(toTimelineEvent(new SparkListenerBlockUpdated(null), 0).isEmpty)
+  }
+
   def validateRoundTrip[T <: SparkListenerEvent](sparkEvt: T): T = {
     val trip = roundTrip(sparkEvt)
     assertResult(sparkEvt) {
@@ -128,7 +132,7 @@ class EventMarshallingSuite extends FunSuite
    * @return a new spark event built from the marshalled JSON value
    */
   private def roundTrip[T <: SparkListenerEvent ](src: T): T = {
-    val event = toSparkEvent(toTimelineEvent(src, 100))
+    val event = toSparkEvent(toTimelineEvent(src, 100).get)
     event.asInstanceOf[T]
   }
 
