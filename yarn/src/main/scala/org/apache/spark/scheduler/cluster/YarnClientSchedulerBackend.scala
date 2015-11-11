@@ -180,9 +180,9 @@ private[spark] class YarnClientSchedulerBackend(
       monitorThread.stopMonitor()
     }
     super.stop()
-    client.stop()
     YarnSparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
     services.stop()
+    client.stop()
     logInfo("Stopped")
   }
 
