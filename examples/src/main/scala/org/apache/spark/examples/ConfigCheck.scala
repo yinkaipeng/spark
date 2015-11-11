@@ -26,7 +26,9 @@ object ConfigCheck {
   /** Usage: HdfsTest [file] */
   def main(args: Array[String]) {
     if (args.length < 2) {
+      // scalastyle:off println
       System.err.println("Usage: ConfigCheck  <key> <value>")
+      // scalastyle:on println
       System.exit(1)
     }
     val sparkConf = new SparkConf().setAppName("ConfigCheck")
@@ -36,10 +38,14 @@ object ConfigCheck {
     if (rV == value) {
       val sc = new SparkContext(sparkConf)
       val rdd = sc.parallelize(List(1, 2, 3))
+      // scalastyle:off println
       rdd.collect.foreach(println)
+      // scalastyle:on println
       sc.stop()
     } else {
+      // scalastyle:off println
       System.err.println(s"Key: $key value: $rV expected $value")
+      // scalastyle:on println
       System.exit(1)
     }
 
