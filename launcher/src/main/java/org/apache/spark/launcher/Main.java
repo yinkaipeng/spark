@@ -85,6 +85,18 @@ class Main {
       System.err.println("========================================");
     }
 
+    // Check again here, since there're many other ways can set hdp.version, we should make sure
+    // HDP_VERSION always takes the priority.
+    if (System.getenv("HDP_VERSION") != null) {
+      for (int i = 0; i < cmd.size(); i++) {
+        if (cmd.get(i).startsWith("-Dhdp.version=")
+          && cmd.get(i).length() > "-Dhdp.version=".length()) {
+          // hdp.version is already set, so replace it
+          cmd.set(i, "-Dhdp.version=" + System.getenv("HDP_VERSION"));
+        }
+      }
+    }
+
     // Check if hdp.version is well set or not.
     HashSet<String> hdpConfs = new HashSet<String>();
     for (String c : cmd) {
