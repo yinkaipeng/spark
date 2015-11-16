@@ -25,12 +25,10 @@ import java.io.InputStreamReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.jar.JarFile;
 import java.util.regex.Pattern;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
@@ -112,20 +110,22 @@ abstract class AbstractCommandBuilder {
     }
 
     if (System.getenv("HDP_VERSION") != null) {
-      addOptionString(cmd, "-Dhdp.version=" + System.getenv("HDP_VERSION"));
-    }
-
-    boolean isHdpSet = false;
-    for (String c : cmd) {
-      if (c.contains("-Dhdp.version=") && c.length() > "-Dhdp.version=".length()) {
-        isHdpSet = true;
-        break;
+      // hdp.version could be set through java-opts file, if set we need to replace with
+      // HDP_VERSION one
+      boolean isHdpSet = false;
+      for (int i = 0; i < cmd.size(); i++) {
+        if (cmd.get(i).startsWith("-Dhdp.version=")
+          && cmd.get(i).length() > "-Dhdp.version=".length()) {
+          // hdp.version is already set, so replace it
+          cmd.set(i, "-Dhdp.version=" + System.getenv("HDP_VERSION"));
+          isHdpSet = true;
+        }
       }
-    }
-    if (!isHdpSet) {
-      throw new IllegalStateException("hdp.version is not set while running Spark under HDP, " +
-        "please set through HDP_VERSION in spark-env.sh or add a java-opts file in conf " +
-        "with -Dhdp.version=xxx");
+
+      // if hdp.version is not set, which means no java-opts set it.
+      if (!isHdpSet) {
+        addOptionString(cmd, "-Dhdp.version=" + System.getenv("HDP_VERSION"));
+      }
     }
 
     cmd.add("-cp");
