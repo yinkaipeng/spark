@@ -114,8 +114,7 @@ abstract class AbstractCommandBuilder {
       // HDP_VERSION one
       boolean isHdpSet = false;
       for (int i = 0; i < cmd.size(); i++) {
-        if (cmd.get(i).startsWith("-Dhdp.version=")
-          && cmd.get(i).length() > "-Dhdp.version=".length()) {
+        if (cmd.get(i).startsWith("-Dhdp.version=")) {
           // hdp.version is already set, so replace it
           cmd.set(i, "-Dhdp.version=" + System.getenv("HDP_VERSION"));
           isHdpSet = true;

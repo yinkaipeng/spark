@@ -85,10 +85,6 @@ class Main {
 
     Map<String, String> env = new HashMap<String, String>();
     List<String> cmd = builder.buildCommand(env);
-    if (printLaunchCommand) {
-      System.err.println("Spark Command: " + join(" ", cmd));
-      System.err.println("========================================");
-    }
 
     // Check again here, since there're many other ways can set hdp.version, we should make sure
     // HDP_VERSION always takes the priority.
@@ -103,8 +99,7 @@ class Main {
 
     if (System.getenv("HDP_VERSION") != null) {
       for (int i = 0; i < cmd.size(); i++) {
-        if (cmd.get(i).startsWith("-Dhdp.version=")
-          && cmd.get(i).length() > "-Dhdp.version=".length()) {
+        if (cmd.get(i).startsWith("-Dhdp.version=")) {
           // hdp.version is already set, so replace it
           cmd.set(i, "-Dhdp.version=" + System.getenv("HDP_VERSION"));
         }
@@ -127,6 +122,11 @@ class Main {
         throw new IllegalStateException("hdp.version is set more than once with different versions," +
           " please check your configurations and environments to remove redundancy.");
       }
+    }
+
+    if (printLaunchCommand) {
+      System.err.println("Spark Command: " + join(" ", cmd));
+      System.err.println("========================================");
     }
 
     if (isWindows()) {
