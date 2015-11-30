@@ -385,8 +385,10 @@ private[spark] class YarnHistoryService extends YarnExtensionService with Loggin
       domainId = createTimelineDomain()
       // declare that the processing is started
       stopped.set(false)
-      eventHandlingThread = Some(new Thread(new Dequeue(), "HistoryEventHandlingThread"))
-      eventHandlingThread.get.start()
+      val thread = new Thread(new Dequeue(), "HistoryEventHandlingThread")
+      eventHandlingThread = Some(thread)
+      thread.setDaemon(true)
+      thread.start()
     } else {
       logInfo("Timeline service is disabled")
     }
