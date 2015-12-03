@@ -243,6 +243,12 @@ abstract class AbstractCommandBuilder {
     addToClassPath(cp, getenv("YARN_CONF_DIR"));
     addToClassPath(cp, getenv("SPARK_DIST_CLASSPATH"));
 
+    // Add Hadoop lzo jar to classpath
+    String lzo = getenv("_HADOOP_LZO_JAR");
+    if (lzo != null) {
+      addToClassPath(cp, lzo);
+    }
+
     // Add Azure wasb paths only on linux sku
     if (isHumboldt() && !isWindows()){
       try {
