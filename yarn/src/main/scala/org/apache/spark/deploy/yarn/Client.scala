@@ -743,7 +743,7 @@ private[spark] class Client(
 
     val hdpConfs = javaOpts.filter(_.contains("-Dhdp.version=")).toSet
     if (hdpConfs.isEmpty) {
-      throw new SparkException(
+      logWarning(
         """
           |hdp.version is not found,
           |Please set HDP_VERSION=xxx in spark-env.sh,

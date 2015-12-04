@@ -115,7 +115,7 @@ class Main {
         }
       }
       if (hdpConfs.isEmpty()) {
-        throw new IllegalStateException("hdp.version is not set while running Spark under HDP, " +
+        System.err.println("hdp.version is not set while running Spark under HDP, " +
           "please set through HDP_VERSION in spark-env.sh or add a java-opts file in conf " +
           "with -Dhdp.version=xxx");
       } else if (hdpConfs.size() > 1) {
