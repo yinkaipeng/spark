@@ -1,0 +1,21 @@
+Changes only in Hortonworks github and not in Apache SPARK-1.5.2 and hence not covered by CHANGES.txt.
+
+INCOMPATIBLE CHANGES
+
+NEW FEATURES
+
+
+IMPROVEMENTS
+
+  BUG-48982. Add hadoop lzo jar to the classpath
+  BUG-47650. Spark streaming is not using internal kafka build
+  BUG-47901. fix scalastyle check
+  BUG-47814. ported ConfigCheck
+  BUG-30990. Resolving symlinks in bin/spark-* scripts
+
+BUG FIXES
+
+  BUG-48230. yarn-client app hangs on shutdown
+  BUG-47809. Application gets stuck with scala.MatchError
+  BUG-47316. spark.history.provider isn't resolving to the history provider class: reinstate original classes as subclasses of the moved ones
+
