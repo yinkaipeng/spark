@@ -276,6 +276,16 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
     inner
   }
 
+  test("Obtain tokens For HBase") {
+    val hadoopConf = new Configuration()
+    hadoopConf.set("hbase.security.authentication", "kerberos")
+    val util = new YarnSparkHadoopUtil
+    intercept[ClassNotFoundException] {
+      util.obtainTokenForHBaseInner(hadoopConf)
+    }
+    util.obtainTokenForHBase(hadoopConf) should be (None)
+  }
+
   // This test needs to live here because it depends on isYarnMode returning true, which can only
   // happen in the YARN module.
   test("security manager token generation") {
