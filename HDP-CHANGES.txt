@@ -1,4 +1,4 @@
-Changes only in Hortonworks github and not in Apache SPARK-1.5.2 and hence not covered by CHANGES.txt.
+Changes only in Hortonworks github and not in Apache SPARK-1.6.0 and hence not covered by CHANGES.txt.
 
 INCOMPATIBLE CHANGES
 
@@ -7,6 +7,8 @@ NEW FEATURES
 
 IMPROVEMENTS
 
+  Revert SPARK-2960 because it do the same as BUG-30990 but may still not work for HDP
+  also revert SPARK-11218 which is dependent on SPARK-2960
   BUG-48982. Add hadoop lzo jar to the classpath
   BUG-47650. Spark streaming is not using internal kafka build
   BUG-47901. fix scalastyle check
