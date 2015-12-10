@@ -31,7 +31,7 @@ import org.apache.hadoop.yarn.client.api.TimelineClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
-import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerBlockUpdated, SparkListenerEvent, SparkListenerExecutorMetricsUpdate}
 import org.apache.spark.scheduler.cluster.{YarnExtensionService, YarnExtensionServiceBinding}
 import org.apache.spark.util.{SystemClock, Utils}
 import org.apache.spark.{Logging, SparkContext}
@@ -655,6 +655,8 @@ private[spark] class YarnHistoryService extends YarnExtensionService with Loggin
       entity.setDomainId
     }
     val entityDescription = describeEntity(entity)
+    logInfo(s"About to POST entity ${entity.getEntityId} with ${entity.getEvents.size()} events" +
+        s" to timeline service $timelineWebappAddress")
     logDebug(s"About to POST $entityDescription")
     _entityPostAttempts.incrementAndGet()
     try {
@@ -794,8 +796,13 @@ private[spark] class YarnHistoryService extends YarnExtensionService with Loggin
    * @param event event. If null no event is queued, but the post-queue flush logic still applies
    */
   private def handleEvent(event: SparkListenerEvent): Unit = {
+    // publish events unless stated otherwise
+    var publish = true
+    // don't trigger a push to the ATS
     var push = false
-    var isLifecycleEvent = false;
+    // lifecycle events get special treatment: they are never discarded from the queues,
+    // even if the queues are full.
+    var isLifecycleEvent = false
     val timestamp = now()
     if (_eventsProcessed.incrementAndGet() % 1000 == 0) {
       logDebug(s"${_eventsProcessed} events are processed")
@@ -823,6 +830,7 @@ private[spark] class YarnHistoryService extends YarnExtensionService with Loggin
           push = true
         } else {
           logWarning(s"More than one application start event received -ignoring: $start")
+          publish = false
         }
 
       case end: SparkListenerApplicationEnd =>
@@ -839,27 +847,36 @@ private[spark] class YarnHistoryService extends YarnExtensionService with Loggin
           isLifecycleEvent = true
         } else {
           logInfo(s"Discarding duplicate application end event $end")
+          publish = false
         }
+
+      case update: SparkListenerBlockUpdated =>
+        publish = false
+
+      case update: SparkListenerExecutorMetricsUpdate =>
+        publish = false
 
       case _ =>
     }
 
-    val tlEvent = toTimelineEvent(event, timestamp)
-    val eventCount = if (tlEvent.isDefined && canAddEvent(isLifecycleEvent)) {
-       addPendingEvent(tlEvent.get)
-    } else {
-      // discarding the event
-      logWarning("Discarding event")
-      _eventsDropped.incrementAndGet()
-      0
-    }
-    // set the push flag if the batch limit is reached
-    push |= (eventCount >= _batchSize && appStartEventProcessed.get())
+    if (publish) {
+      val tlEvent = toTimelineEvent(event, timestamp)
+      val eventCount = if (tlEvent.isDefined && canAddEvent(isLifecycleEvent)) {
+        addPendingEvent(tlEvent.get)
+      } else {
+        // discarding the event
+        logWarning("Discarding event")
+        _eventsDropped.incrementAndGet()
+        0
+      }
+      // set the push flag if the batch limit is reached
+      push |= (eventCount >= _batchSize && appStartEventProcessed.get())
 
-    logDebug(s"current event num: $eventCount")
-    if (push) {
-      logDebug("Push triggered")
-      publishPendingEvents()
+      logDebug(s"current event num: $eventCount")
+      if (push) {
+        logDebug("Push triggered")
+        publishPendingEvents()
+      }
     }
   }
 
