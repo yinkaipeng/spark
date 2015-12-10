@@ -21,14 +21,14 @@
 #
 # Environment Variables
 #
-#   SPARK_WORKER_INSTANCES  The number of worker instances to run on this
+#   SPARK_WORKER_INSTANCES  The number of worker instances to run on this 
 #                           slave.  Default is 1.
-#   SPARK_WORKER_PORT       The base port number for the first worker. If set,
+#   SPARK_WORKER_PORT       The base port number for the first worker. If set, 
 #                           subsequent workers will increment this number.  If
 #                           unset, Spark will find a valid port number, but
 #                           with no guarantee of a predictable pattern.
 #   SPARK_WORKER_WEBUI_PORT The base port for the web interface of the first
-#                           worker.  Subsequent workers will increment this
+#                           worker.  Subsequent workers will increment this 
 #                           number.  Default is 8081.
 
 usage="Usage: start-slave.sh <spark-master-URL> where <spark-master-URL> is like spark://localhost:7077"
@@ -39,13 +39,12 @@ if [ $# -lt 1 ]; then
   exit 1
 fi
 
-if [ -z "${SPARK_HOME}" ]; then
-  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
-fi
+sbin="`dirname "$0"`"
+sbin="`cd "$sbin"; pwd`"
 
-. "${SPARK_HOME}/sbin/spark-config.sh"
+. "$sbin/spark-config.sh"
 
-. "${SPARK_HOME}/bin/load-spark-env.sh"
+. "$SPARK_PREFIX/bin/load-spark-env.sh"
 
 # First argument should be the master; we need to store it aside because we may
 # need to insert arguments between it and the other arguments
@@ -72,7 +71,7 @@ function start_instance {
   fi
   WEBUI_PORT=$(( $SPARK_WORKER_WEBUI_PORT + $WORKER_NUM - 1 ))
 
-  "${SPARK_HOME}/sbin"/spark-daemon.sh start org.apache.spark.deploy.worker.Worker $WORKER_NUM \
+  "$sbin"/spark-daemon.sh start org.apache.spark.deploy.worker.Worker $WORKER_NUM \
      --webui-port "$WEBUI_PORT" $PORT_FLAG $PORT_NUM $MASTER "$@"
 }
 
@@ -83,3 +82,4 @@ else
     start_instance $(( 1 + $i )) "$@"
   done
 fi
+
