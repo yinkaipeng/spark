@@ -289,15 +289,4 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
     })
   }
 
-  private def assertNestedHiveException(e: InvocationTargetException): Throwable = {
-    val inner = e.getCause
-    if (inner == null) {
-      fail("No inner cause", e)
-    }
-    if (!inner.isInstanceOf[HiveException]) {
-      fail("Not a hive exception", inner)
-    }
-    inner
-  }
-
 }
