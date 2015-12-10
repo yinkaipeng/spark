@@ -15,6 +15,15 @@ IMPROVEMENTS
 
 BUG FIXES
 
+  BUG-49675. SPARK-11652 Remote code execution with InvokerTransformer
+  BUG-49674. SPARK-11737 String may not be serialized correctly with Kyro
+  BUG-49673. SPARK-11555 spark on yarn spark-class --num-workers doesn't work
+  BUG-49672. SPARK-11595 "ADD JAR" doesn't work if the given path contains URL scheme like "file:/" and "hdfs:/"
+  BUG-49671. SPARK-10181 HiveContext is not used with keytab principal but with user principal/unix username
+  BUG-49670. SPARK-11265 YarnClient can't get tokens to talk to Hive 1.2.1 in a secure cluster
+  BUG-49669. SPARK-11311 spark cannot describe temporary functions
+  BUG-49668. SPARK-11191 [1.5] Can't create UDF's using hive thrift service
+  BUG-49667. SPARK-12030 Incorrect results when aggregate joined data
   BUG-48230. yarn-client app hangs on shutdown
   BUG-47809. Application gets stuck with scala.MatchError
   BUG-47316. spark.history.provider isn't resolving to the history provider class: reinstate original classes as subclasses of the moved ones
