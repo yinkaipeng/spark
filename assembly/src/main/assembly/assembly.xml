@@ -140,9 +140,9 @@
     </fileSet>
     <fileSet>
       <directory>
-        ${project.parent.basedir}/R/lib/SparkR
+        ${project.parent.basedir}/R/lib
       </directory>
-      <outputDirectory>/R/lib/SparkR</outputDirectory>
+      <outputDirectory>/R/lib</outputDirectory>
     </fileSet>
    </fileSets>
 </assembly>
