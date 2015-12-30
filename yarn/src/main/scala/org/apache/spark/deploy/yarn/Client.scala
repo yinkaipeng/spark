@@ -438,7 +438,7 @@ private[spark] class Client(
      *   (3) Spark property key to set if the scheme is not local
      */
     List(
-      (SPARK_JAR, sparkJar(sparkConf), CONF_SPARK_JAR),
+      (SPARK_JAR, sparkJar(sparkConf, hadoopConf), CONF_SPARK_JAR),
       (APP_JAR, args.userJar, CONF_SPARK_USER_JAR),
       ("log4j.properties", oldLog4jConf.orNull, null)
     ).foreach { case (destName, path, confKey) =>
@@ -1177,7 +1177,7 @@ object Client extends Logging {
    * This method first looks in the SparkConf object for the CONF_SPARK_JAR key, and in the
    * user environment if that is not found (for backwards compatibility).
    */
-  private def sparkJar(conf: SparkConf): String = {
+  private def sparkJar(conf: SparkConf, hadoopConf: Configuration): String = {
     if (conf.contains(CONF_SPARK_JAR)) {
       conf.get(CONF_SPARK_JAR)
     } else if (System.getenv(ENV_SPARK_JAR) != null) {
@@ -1185,6 +1185,25 @@ object Client extends Logging {
         s"$ENV_SPARK_JAR detected in the system environment. This variable has been deprecated " +
           s"in favor of the $CONF_SPARK_JAR configuration variable.")
       System.getenv(ENV_SPARK_JAR)
+    } else if (sys.env.get("HDP_VERSION").isDefined) {
+      // check the default spark assembly jar location in HDFS for HDP
+      val hdp_version = sys.env.get("HDP_VERSION").get
+      val fs = FileSystem.get(hadoopConf)
+      val defaultSparkJarLocation = new Path(
+        s"/hdp/apps/${hdp_version}/spark/spark-hdp-assembly.jar")
+        .makeQualified(fs.getUri, fs.getWorkingDirectory)
+      if (fs.exists(defaultSparkJarLocation)) {
+        logInfo("Using the spark assembly jar on HDFS because you are using HDP,"
+          + " defaultSparkAssembly:" + defaultSparkJarLocation)
+        defaultSparkJarLocation.toString
+      } else {
+        logWarning(s"No spark assembly jar for HDP on HDFS, defaultSparkAssembly:"
+          + defaultSparkJarLocation)
+        SparkContext.jarOfClass(this.getClass).getOrElse(throw new SparkException("Could not "
+          + "find jar containing Spark classes. The jar can be defined using the "
+          + "spark.yarn.jar configuration option. If testing Spark, either set that option or "
+          + "make sure SPARK_PREPEND_CLASSES is not set."))
+      }
     } else {
       SparkContext.jarOfClass(this.getClass).getOrElse(throw new SparkException("Could not "
         + "find jar containing Spark classes. The jar can be defined using the "
@@ -1311,7 +1330,7 @@ object Client extends Logging {
         addFileToClasspath(sparkConf, conf, x, null, env)
       }
     }
-    addFileToClasspath(sparkConf, conf, new URI(sparkJar(sparkConf)), SPARK_JAR, env)
+    addFileToClasspath(sparkConf, conf, new URI(sparkJar(sparkConf, conf)), SPARK_JAR, env)
     populateHadoopClasspath(conf, env)
     sys.env.get(ENV_DIST_CLASSPATH).foreach { cp =>
       addClasspathEntry(getClusterPath(sparkConf, cp), env)

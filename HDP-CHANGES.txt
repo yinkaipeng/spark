@@ -6,6 +6,7 @@ NEW FEATURES
 
 
 IMPROVEMENTS
+  RMP-5184. Upload spark assembly jar to HDFS
   BUG-50102. sparkr.zip is missing in the spark distribution
   Revert SPARK-2960 because it do the same as BUG-30990 but may still not work for HDP
   also revert SPARK-11218 which is dependent on SPARK-2960
