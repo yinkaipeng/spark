@@ -186,7 +186,7 @@ echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 
 # Copy jars
 cp "$SPARK_HOME"/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
-cp "$SPARK_HOME"/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/spark-hdp-assembly.jar"
+ln -s $DISTDIR/lib/*assembly*hadoop*.jar "$DISTDIR/lib/spark-hdp-assembly.jar"
 cp "$SPARK_HOME"/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
 
 # This will fail if the -Pyarn profile is not provided
