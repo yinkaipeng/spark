@@ -24,7 +24,7 @@
 set -o posix
 
 # Figure out where Spark is installed
-FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
+FWDIR="$(cd "`dirname $(readlink -nf "$0")`"/..; pwd -P)"
 
 # NOTE: This exact class name is matched downstream by SparkSubmit.
 # Any changes need to be reflected there.

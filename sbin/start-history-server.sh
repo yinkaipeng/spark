@@ -24,7 +24,7 @@
 # Use the SPARK_HISTORY_OPTS environment variable to set history server configuration.
 #
 
-sbin="`dirname "$0"`"
+sbin="$(cd "`dirname $(readlink -nf "$0")`"; pwd -P)"
 sbin="`cd "$sbin"; pwd`"
 
 . "$sbin/spark-config.sh"
