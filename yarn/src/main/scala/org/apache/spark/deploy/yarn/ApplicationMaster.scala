@@ -273,11 +273,15 @@ private[spark] class ApplicationMaster(
     val sc = sparkContextRef.get()
 
     val appId = client.getAttemptId().getApplicationId().toString()
-    val attemptId = client.getAttemptId().getAttemptId().toString()
+    val attemptIdOpt = if (isClusterMode) {
+      Some(client.getAttemptId().toString())
+    } else {
+      None
+    }
     val historyAddress =
       sparkConf.getOption("spark.yarn.historyServer.address")
         .map { text => SparkHadoopUtil.get.substituteHadoopVariables(text, yarnConf) }
-        .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}/${attemptId}" }
+        .map { address => address + HistoryServer.getAttemptURI(appId, attemptIdOpt) }
         .getOrElse("")
 
     val _sparkConf = if (sc != null) sc.getConf else sparkConf

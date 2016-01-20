@@ -19,11 +19,11 @@ IMPROVEMENTS
   HOTFIX-25 disable mqtt assembly builds unless -Pmqtt-assembly set
   SPARK-11314 Add service API and test service for Yarn Cluster schedulers
   SPARK-11315 Add YARN extension service to publish Spark events to YARN timeline service (part of SPARK-1537)
-  SPARK-11323 Add History Service Provider to service application histories from YARN timeline server (part of SPARK-1537)  
+  SPARK-11323 Add History Service Provider to service application histories from YARN timeline server (part of SPARK-1537)
 
 BUG FIXES
 
   BUG-48230. yarn-client app hangs on shutdown
   BUG-47809. Application gets stuck with scala.MatchError
   BUG-47316. spark.history.provider isn't resolving to the history provider class: reinstate original classes as subclasses of the moved ones
-
+  BUG-51094. RM redirects to incorrect URL in Spark HS for yarn-cluster mode
