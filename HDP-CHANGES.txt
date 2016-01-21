@@ -6,6 +6,8 @@ NEW FEATURES
 
 
 IMPROVEMENTS
+
+  BUG-51300. (SPARK-12925) Improve HiveInspectors.unwrap for StringObjectInspector.getPrimitiveWritableObject
   RMP-5184. Upload spark assembly jar to HDFS
   BUG-50102. sparkr.zip is missing in the spark distribution
   Revert SPARK-2960 because it do the same as BUG-30990 but may still not work for HDP
