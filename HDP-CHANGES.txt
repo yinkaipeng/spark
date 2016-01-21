@@ -7,6 +7,7 @@ NEW FEATURES
 
 IMPROVEMENTS
 
+  BUG-51301. (SPARK-12898) Consider having dummyCallSite for HiveTableScan
   BUG-51300. (SPARK-12925) Improve HiveInspectors.unwrap for StringObjectInspector.getPrimitiveWritableObject
   RMP-5184. Upload spark assembly jar to HDFS
   BUG-50102. sparkr.zip is missing in the spark distribution
