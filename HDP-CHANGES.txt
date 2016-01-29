@@ -3,6 +3,7 @@ Changes only in Hortonworks github and not in Apache SPARK-1.6.3 and hence not c
 INCOMPATIBLE CHANGES
 
 NEW FEATURES
+  RMP-7559.    Support virtualenv in PySpark (SPARK-13587)
 
 IMPROVEMENTS
   BUG-72325    Fix kerberos token expiry with long running STS while launching new livy sessions. Fix application name in BUG-70355

@@ -2265,6 +2265,15 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+    *
+    * @return whether it is local mode
+    */
+  def isLocalMaster(conf: SparkConf): Boolean = {
+    val master = conf.get("spark.master", "")
+    master == "local" || master.startsWith("local[")
+  }
+
+  /**
    * Return whether dynamic allocation is enabled in the given conf
    * Dynamic allocation and explicitly setting the number of executors are inherently
    * incompatible. In environments where dynamic allocation is turned on by default,

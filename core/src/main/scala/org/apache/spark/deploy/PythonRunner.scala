@@ -24,21 +24,29 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConverters._
 import scala.util.Try
 
-import org.apache.spark.SparkUserAppException
-import org.apache.spark.api.python.PythonUtils
+import org.apache.spark.{SparkConf, SparkUserAppException}
+import org.apache.spark.api.python.{PythonUtils, VirtualEnvFactory}
+import org.apache.spark.Logging
 import org.apache.spark.util.{RedirectThread, Utils}
 
 /**
  * A main class used to launch Python applications. It executes python as a
  * subprocess and then has it connect back to the JVM to access system properties, etc.
  */
-object PythonRunner {
+object PythonRunner extends Logging {
   def main(args: Array[String]) {
     val pythonFile = args(0)
     val pyFiles = args(1)
     val otherArgs = args.slice(2, args.length)
-    val pythonExec =
+    var pythonExec =
       sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", sys.env.getOrElse("PYSPARK_PYTHON", "python"))
+    val sparkConf = new SparkConf()
+    if (sparkConf.getBoolean("spark.pyspark.virtualenv.enabled", false)) {
+      logInfo("virtualenv is enabled, creating virtualenv...")
+      val virtualEnvFactory = new VirtualEnvFactory(pythonExec, sparkConf, true)
+      pythonExec = virtualEnvFactory.setupVirtualEnv()
+      logInfo(s"virtualenv is created at $pythonExec")
+    }
 
     // Format python file paths before adding them to the PYTHONPATH
     val formattedPythonFile = formatPath(pythonFile)
