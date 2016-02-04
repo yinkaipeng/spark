@@ -79,6 +79,7 @@ private[spark] class Client(
   private val isClusterMode = args.isClusterMode
 
   private var loginFromKeytab = false
+  private var credentialsFromEnvironment = false;
   private var principal: String = null
   private var keytab: String = null
 
@@ -341,15 +342,25 @@ private[spark] class Client(
     // and add them as local resources to the application master.
     val fs = FileSystem.get(hadoopConf)
     val dst = new Path(fs.getHomeDirectory(), appStagingDir)
-    val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + dst
-    YarnSparkHadoopUtil.get.obtainTokensForNamenodes(nns, hadoopConf, credentials)
+    if (!credentialsFromEnvironment) {
+      val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + dst
+      YarnSparkHadoopUtil.get.obtainTokensForNamenodes(nns, hadoopConf, credentials)
+      obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
+      obtainTokenForHBase(sparkConf, hadoopConf, credentials)
+      // list all credentials at debug; useful for diagnostics.
+      if (credentials != null) {
+        logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
+      }
+    } else {
+      // credentials coming from environment variables -do not attempt to obtain any
+      // more. Logging the current credentials helps identify Oozie setup problems here.
+      logInfo("Using credentials supplied in environment")
+      logInfo(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
+    }
     // Used to keep track of URIs added to the distributed cache. If the same URI is added
     // multiple times, YARN will fail to launch containers for the app with an internal
     // error.
     val distributedUris = new HashSet[String]
-    obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
-    obtainTokenForHBase(sparkConf, hadoopConf, credentials)
-
     val replication = sparkConf.getInt("spark.yarn.submit.file.replication",
       fs.getDefaultReplication(dst)).toShort
     val localResources = HashMap[String, LocalResource]()
@@ -953,6 +964,9 @@ private[spark] class Client(
       val keytabFileName = f.getName + "-" + UUID.randomUUID().toString
       sparkConf.set("spark.yarn.keytab", keytabFileName)
       sparkConf.set("spark.yarn.principal", principal)
+    } else {
+      // were the credentials from the environment?
+      credentialsFromEnvironment = YarnSparkHadoopUtil.get.environmentCredentialsFile().isDefined
     }
     credentials = UserGroupInformation.getCurrentUser.getCredentials
   }

@@ -17,11 +17,14 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.File
+import java.io.{File, IOException}
 import java.nio.charset.StandardCharsets.UTF_8
+import java.text.DateFormat
+import java.util.Date
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 import scala.reflect.runtime._
 import scala.util.Try
@@ -30,19 +33,20 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.mapred.{Master, JobConf}
+import org.apache.hadoop.mapred.{JobConf, Master}
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.security.token.Token
-import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.security.token.{Token, TokenIdentifier}
+import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.records.{ApplicationAccessType, ContainerId, Priority}
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
 
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.launcher.YarnCommandBuilderUtils
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.util.Utils
 
 /**
@@ -215,6 +219,66 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
       logDebug("HiveMetaStore configured in localmode")
       None
     }
+  }
+
+  /**
+   * Are the credentials supplied by the environment, rather than a TGT or keytab?
+   * This predicate will always return true in a YARN AM, as the relevant env var is
+   * always set (it is used to pass down the AM/RM token). In the client, if it is true
+   * it means that the application was launched in an Oozie workflow (or similar) with
+   * all tokens created in advance.
+   * @return the path to a credentials file if that is where the credentials came from
+   */
+  def environmentCredentialsFile() : Option[File] = {
+    val location = System.getenv(UserGroupInformation.HADOOP_TOKEN_FILE_LOCATION)
+    if (location != null) {
+      Some(new File(location))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Dump the credentials's tokens to string values.
+   * @param credentials credentials
+   * @return an iterator over the string values. If no credentials are passed in: an empty list
+   */
+  def dumpTokens(credentials: Credentials): Iterable[String] = {
+    if (credentials != null) {
+      credentials.getAllTokens.asScala.map(tokenToString)
+    } else {
+      Seq()
+    }
+  }
+
+  /**
+   * Convert a token to a string. If its an abstract delegation token,
+   * attempt to unmarshall it and then print more details, including
+   * timestamps in human-readable form.
+   * @param token token to convert to a string
+   * @return a printable string value.
+   */
+  def tokenToString(token: Token[_ <: TokenIdentifier]): String = {
+    val df = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+    val buffer = new StringBuilder(128)
+    buffer.append(token.toString)
+    try {
+      val ti = token.decodeIdentifier
+      buffer.append("; ").append(ti)
+      ti match {
+        case dt: AbstractDelegationTokenIdentifier =>
+          // include human times and the renewer, which the HDFS tokens toString omits
+          buffer.append(s"; Renewer: ${dt.getRenewer}")
+          buffer.append("; Issued: ").append(df.format(new Date(dt.getIssueDate)))
+          buffer.append("; Max Date: ").append(df.format(new Date(dt.getMaxDate)))
+        case _ =>
+      }
+    } catch {
+      case e: IOException => {
+        logDebug("Failed to decode $token: $e", e)
+      }
+    }
+    buffer.toString
   }
 }
 
