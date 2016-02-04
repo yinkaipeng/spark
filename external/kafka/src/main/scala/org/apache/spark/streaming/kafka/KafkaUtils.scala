@@ -21,6 +21,9 @@ import java.lang.{Integer => JInt, Long => JLong}
 import java.util.{List => JList, Map => JMap, Set => JSet}
 
 import scala.collection.JavaConversions._
+import org.apache.kafka.common.protocol.SecurityProtocol
+
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import kafka.common.TopicAndPartition
@@ -535,6 +538,10 @@ object KafkaUtils {
       Set(topics.toSeq: _*)
     )
   }
+
+  def securityProtocolConfig : String = "security.protocol"
+
+  def securityProtocolDefault: String = SecurityProtocol.PLAINTEXT.name
 }
 
 /**

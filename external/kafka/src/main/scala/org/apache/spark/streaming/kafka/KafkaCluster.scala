@@ -17,6 +17,8 @@
 
 package org.apache.spark.streaming.kafka
 
+import org.apache.kafka.common.protocol.SecurityProtocol
+
 import scala.util.control.NonFatal
 import scala.util.Random
 import scala.collection.mutable.ArrayBuffer
@@ -48,9 +50,12 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     _config
   }
 
-  def connect(host: String, port: Int): SimpleConsumer =
+  def connect(host: String, port: Int): SimpleConsumer = {
+    val secPol = SecurityProtocol.valueOf(
+      kafkaParams.getOrElse(KafkaUtils.securityProtocolConfig, KafkaUtils.securityProtocolDefault))
     new SimpleConsumer(host, port, config.socketTimeoutMs,
-      config.socketReceiveBufferBytes, config.clientId)
+      config.socketReceiveBufferBytes, config.clientId, secPol)
+  }
 
   def connectLeader(topic: String, partition: Int): Either[Err, SimpleConsumer] =
     findLeader(topic, partition).right.map(hp => connect(hp._1, hp._2))

@@ -27,8 +27,7 @@ import kafka.common.TopicAndPartition
 import kafka.consumer.{Consumer, ConsumerConfig, ConsumerConnector, KafkaStream}
 import kafka.message.MessageAndMetadata
 import kafka.serializer.Decoder
-import kafka.utils.{VerifiableProperties, ZKGroupTopicDirs, ZKStringSerializer, ZkUtils}
-import org.I0Itec.zkclient.ZkClient
+import kafka.utils.{VerifiableProperties, ZKGroupTopicDirs, ZkUtils}
 
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
@@ -65,8 +64,8 @@ class ReliableKafkaReceiver[
   /** High level consumer to connect to Kafka. */
   private var consumerConnector: ConsumerConnector = null
 
-  /** zkClient to connect to Zookeeper to commit the offsets. */
-  private var zkClient: ZkClient = null
+  /** zkUtils to connect to Zookeeper to commit the offsets. */
+  private var zkUtils: ZkUtils = null
 
   /**
    * A HashMap to manage the offset for each topic/partition, this HashMap is called in
@@ -118,8 +117,12 @@ class ReliableKafkaReceiver[
     consumerConnector = Consumer.create(consumerConfig)
     logInfo(s"Connected to Zookeeper: ${consumerConfig.zkConnect}")
 
-    zkClient = new ZkClient(consumerConfig.zkConnect, consumerConfig.zkSessionTimeoutMs,
-      consumerConfig.zkConnectionTimeoutMs, ZKStringSerializer)
+    val isSecure = !kafkaParams.getOrElse(
+      KafkaUtils.securityProtocolConfig, KafkaUtils.securityProtocolDefault).equals(
+        KafkaUtils.securityProtocolDefault)
+
+    zkUtils = ZkUtils(consumerConfig.zkConnect, consumerConfig.zkSessionTimeoutMs,
+      consumerConfig.zkConnectionTimeoutMs, isSecure)
 
     messageHandlerThreadPool = ThreadUtils.newDaemonFixedThreadPool(
       topics.values.sum, "KafkaMessageHandler")
@@ -155,9 +158,9 @@ class ReliableKafkaReceiver[
       consumerConnector = null
     }
 
-    if (zkClient != null) {
-      zkClient.close()
-      zkClient = null
+    if (zkUtils != null) {
+      zkUtils.close()
+      zkUtils = null
     }
 
     if (blockGenerator != null) {
@@ -233,7 +236,7 @@ class ReliableKafkaReceiver[
    * metadata schema in Zookeeper.
    */
   private def commitOffset(offsetMap: Map[TopicAndPartition, Long]): Unit = {
-    if (zkClient == null) {
+    if (zkUtils == null) {
       val thrown = new IllegalStateException("Zookeeper client is unexpectedly null")
       stop("Zookeeper client is not initialized before commit offsets to ZK", thrown)
       return
@@ -244,7 +247,7 @@ class ReliableKafkaReceiver[
         val topicDirs = new ZKGroupTopicDirs(groupId, topicAndPart.topic)
         val zkPath = s"${topicDirs.consumerOffsetDir}/${topicAndPart.partition}"
 
-        ZkUtils.updatePersistentPath(zkClient, zkPath, offset.toString)
+        zkUtils.updatePersistentPath(zkPath, offset.toString) // use default ACLs
       } catch {
         case e: Exception =>
           logWarning(s"Exception during commit offset $offset for topic" +
