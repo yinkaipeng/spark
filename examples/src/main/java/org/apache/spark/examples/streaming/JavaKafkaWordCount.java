@@ -22,6 +22,8 @@ import java.util.HashMap;
 import java.util.regex.Pattern;
 
 
+import kafka.serializer.StringDecoder;
+import org.apache.spark.storage.StorageLevel;
 import scala.Tuple2;
 
 import com.google.common.collect.Lists;
@@ -60,7 +62,9 @@ public final class JavaKafkaWordCount {
 
   public static void main(String[] args) {
     if (args.length < 4) {
-      System.err.println("Usage: JavaKafkaWordCount <zkQuorum> <group> <topics> <numThreads>");
+      System.err.println(
+              "Usage: JavaKafkaWordCount <zkQuorum> <group> <topics> <numThreads> " +
+                      "<securityProtocol>");
       System.exit(1);
     }
 
@@ -76,8 +80,16 @@ public final class JavaKafkaWordCount {
       topicMap.put(topic, numThreads);
     }
 
+    HashMap<String, String> kafkaParams = new HashMap<String, String>();
+    kafkaParams.put("zookeeper.connect", args[0]);
+    kafkaParams.put("group.id", args[1]);
+    if (args.length == 5) {
+      kafkaParams.put(KafkaUtils.securityProtocolConfig(), args[4]);
+    }
+
     JavaPairReceiverInputDStream<String, String> messages =
-            KafkaUtils.createStream(jssc, args[0], args[1], topicMap);
+            KafkaUtils.createStream(jssc, String.class, String.class, StringDecoder.class,
+                 StringDecoder.class, kafkaParams, topicMap, StorageLevel.MEMORY_AND_DISK_SER_2());
 
     JavaDStream<String> lines = messages.map(new Function<Tuple2<String, String>, String>() {
       @Override

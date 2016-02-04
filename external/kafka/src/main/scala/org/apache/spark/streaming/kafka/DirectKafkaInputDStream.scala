@@ -170,6 +170,8 @@ class DirectKafkaInputDStream[
   }
 
   override def start(): Unit = {
+    logInfo("Kafka security.protocol: " + kafkaParams.getOrElse(
+      KafkaUtils.securityProtocolConfig, "default"))
   }
 
   def stop(): Unit = {

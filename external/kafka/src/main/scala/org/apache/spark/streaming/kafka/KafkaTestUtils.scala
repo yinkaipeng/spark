@@ -57,7 +57,7 @@ private[kafka] class KafkaTestUtils extends Logging {
 
   private var zookeeper: EmbeddedZookeeper = _
 
-  private var zkClient: ZkClient = _
+  private var zkUtils: ZkUtils = _
 
   // Kafka broker related configurations
   private val brokerHost = "localhost"
@@ -84,10 +84,9 @@ private[kafka] class KafkaTestUtils extends Logging {
     s"$brokerHost:$brokerPort"
   }
 
-  def zookeeperClient: ZkClient = {
-    assert(zkReady, "Zookeeper not setup yet or already torn down, cannot get zookeeper client")
-    Option(zkClient).getOrElse(
-      throw new IllegalStateException("Zookeeper client is not yet initialized"))
+  def zkUtil: ZkUtils = {
+    Option(zkUtils).getOrElse(
+      throw new IllegalStateException("zkUtils is not yet initialized"))
   }
 
   // Set up the Embedded Zookeeper server and get the proper Zookeeper port
@@ -96,8 +95,7 @@ private[kafka] class KafkaTestUtils extends Logging {
     zookeeper = new EmbeddedZookeeper(s"$zkHost:$zkPort")
     // Get the actual zookeeper binding port
     zkPort = zookeeper.actualPort
-    zkClient = new ZkClient(s"$zkHost:$zkPort", zkSessionTimeout, zkConnectionTimeout,
-      ZKStringSerializer)
+    zkUtils = ZkUtils(s"$zkHost:$zkPort", zkSessionTimeout, zkConnectionTimeout, false)
     zkReady = true
   }
 
@@ -140,9 +138,9 @@ private[kafka] class KafkaTestUtils extends Logging {
 
     brokerConf.logDirs.foreach { f => Utils.deleteRecursively(new File(f)) }
 
-    if (zkClient != null) {
-      zkClient.close()
-      zkClient = null
+    if (zkUtils != null) {
+      zkUtils.close()
+      zkUtils = null
     }
 
     if (zookeeper != null) {
@@ -153,7 +151,7 @@ private[kafka] class KafkaTestUtils extends Logging {
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
   def createTopic(topic: String): Unit = {
-    AdminUtils.createTopic(zkClient, topic, 1, 1)
+    AdminUtils.createTopic(zkUtils, topic, 1, 1)
     // wait until metadata is propagated
     waitUntilMetadataIsPropagated(topic, 0)
   }
@@ -234,7 +232,7 @@ private[kafka] class KafkaTestUtils extends Logging {
       case Some(partitionState) =>
         val leaderAndInSyncReplicas = partitionState.leaderIsrAndControllerEpoch.leaderAndIsr
 
-        ZkUtils.getLeaderForPartition(zkClient, topic, partition).isDefined &&
+        zkUtils.getLeaderForPartition(topic, partition).isDefined &&
           Request.isValidBrokerId(leaderAndInSyncReplicas.leader) &&
           leaderAndInSyncReplicas.isr.size >= 1
 
