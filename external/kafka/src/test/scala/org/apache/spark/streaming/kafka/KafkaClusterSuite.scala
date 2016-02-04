@@ -67,7 +67,7 @@ class KafkaClusterSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(latest(topicAndPartition).offset === 1, "didn't get latest")
   }
 
-  test("consumer offset apis") {
+  ignore("consumer offset apis") {
     val group = "kcsuitegroup" + Random.nextInt(10000)
 
     val offset = Random.nextInt(10000)
