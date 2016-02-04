@@ -48,9 +48,10 @@ public final class JavaDirectKafkaWordCount {
 
   public static void main(String[] args) {
     if (args.length < 2) {
-      System.err.println("Usage: DirectKafkaWordCount <brokers> <topics>\n" +
+      System.err.println("Usage: JavaDirectKafkaWordCount <brokers> <topics> <securityProtocol>\n" +
           "  <brokers> is a list of one or more Kafka brokers\n" +
-          "  <topics> is a list of one or more kafka topics to consume from\n\n");
+          "  <topics> is a list of one or more kafka topics to consume from\n" +
+          "  <securityProtocol> is the Kafka cluster security protocol\n\n");
       System.exit(1);
     }
 
@@ -66,6 +67,9 @@ public final class JavaDirectKafkaWordCount {
     HashSet<String> topicsSet = new HashSet<String>(Arrays.asList(topics.split(",")));
     HashMap<String, String> kafkaParams = new HashMap<String, String>();
     kafkaParams.put("metadata.broker.list", brokers);
+    if (args.length == 3) {
+      kafkaParams.put(KafkaUtils.securityProtocolConfig(), args[2]);
+    }
 
     // Create direct kafka stream with brokers and topics
     JavaPairInputDStream<String, String> messages = KafkaUtils.createDirectStream(
