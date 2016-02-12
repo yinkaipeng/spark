@@ -212,6 +212,7 @@ crashes.
 explicitly (`sc.stop()`), or in Python using the `with SparkContext() as sc:` construct
 to handle the Spark Context setup and tear down.
 
+<<<<<<< HEAD
 ## Integration with the YARN Timeline Server
 
 Spark Applications can be configured to publish events to the YARN Timeline Server, from where
@@ -219,6 +220,8 @@ they can be picked up from the history server —once it has been configured to 
 there.
 
 The specifics of doing so are covered in [Hadoop YARN Timeline Service Integration](timeline.html).
+=======
+>>>>>>> 8e750b6... [SPARK-7889][WEBUI] HistoryServer updates UI for incomplete apps
 
 ## REST API
 
