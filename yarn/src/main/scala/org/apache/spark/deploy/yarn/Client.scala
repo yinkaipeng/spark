@@ -345,8 +345,8 @@ private[spark] class Client(
     if (!credentialsFromEnvironment) {
       val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + dst
       YarnSparkHadoopUtil.get.obtainTokensForNamenodes(nns, hadoopConf, credentials)
-      obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
-      obtainTokenForHBase(sparkConf, hadoopConf, credentials)
+      YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
+      YarnSparkHadoopUtil.get.obtainTokenForHBase(sparkConf, hadoopConf, credentials)
       // list all credentials at debug; useful for diagnostics.
       if (credentials != null) {
         logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
@@ -1445,35 +1445,6 @@ object Client extends Logging {
   }
 
   /**
-   * Obtains token for the Hive metastore and adds them to the credentials.
-   */
-  private def obtainTokenForHiveMetastore(
-      sparkConf: SparkConf,
-      conf: Configuration,
-      credentials: Credentials) {
-    if (shouldGetTokens(sparkConf, "hive") && UserGroupInformation.isSecurityEnabled) {
-      YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(conf).foreach {
-        credentials.addToken(new Text("hive.server2.delegation.token"), _)
-      }
-    }
-  }
-
-  /**
-   * Obtain security token for HBase.
-   */
-  def obtainTokenForHBase(
-      sparkConf: SparkConf,
-      conf: Configuration,
-      credentials: Credentials): Unit = {
-    if (shouldGetTokens(sparkConf, "hbase") && UserGroupInformation.isSecurityEnabled) {
-      YarnSparkHadoopUtil.get.obtainTokenForHBase(conf).foreach { token =>
-        credentials.addToken(token.getService, token)
-        logInfo("Added HBase security token to credentials.")
-      }
-    }
-  }
-
-  /**
    * Return whether the two file systems are the same.
    */
   private def compareFs(srcFs: FileSystem, destFs: FileSystem): Boolean = {
@@ -1536,14 +1507,4 @@ object Client extends Logging {
   def buildPath(components: String*): String = {
     components.mkString(Path.SEPARATOR)
   }
-
-  /**
-   * Return whether delegation tokens should be retrieved for the given service when security is
-   * enabled. By default, tokens are retrieved, but that behavior can be changed by setting
-   * a service-specific configuration.
-   */
-  def shouldGetTokens(conf: SparkConf, service: String): Boolean = {
-    conf.getBoolean(s"spark.yarn.security.tokens.${service}.enabled", true)
-  }
-
 }
