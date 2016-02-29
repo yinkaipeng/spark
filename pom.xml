@@ -15,9 +15,7 @@
   ~ See the License for the specific language governing permissions and
   ~ limitations under the License.
   -->
-
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache</groupId>
@@ -26,7 +24,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.10</artifactId>
-  <version>1.6.0</version>
+  <version>1.6.0.2.4.0.0-169</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.apache.org/</url>
@@ -134,14 +132,14 @@
     <mesos.classifier>shaded-protobuf</mesos.classifier>
     <slf4j.version>1.7.10</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
-    <hadoop.version>2.2.0</hadoop.version>
+    <hadoop.version>2.7.1.2.4.0.0-169</hadoop.version>
     <protobuf.version>2.5.0</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
-    <hbase.version>0.98.7-hadoop2</hbase.version>
+    <hbase.version>1.1.2.2.4.0.0-169</hbase.version>
     <hbase.artifact>hbase</hbase.artifact>
-    <flume.version>1.6.0</flume.version>
+    <flume.version>1.5.2.2.4.0.0-169</flume.version>
     <kafka.version>0.8.2.2.3.2.0-2950</kafka.version>
-    <zookeeper.version>3.4.5</zookeeper.version>
+    <zookeeper.version>3.4.6.2.4.0.0-169</zookeeper.version>
     <curator.version>2.4.0</curator.version>
     <hive.group>org.spark-project.hive</hive.group>
     <!-- Version used in Maven Hive dependency -->
@@ -195,7 +193,7 @@
     <libthrift.version>0.9.2</libthrift.version>
 
     <test.java.home>${java.home}</test.java.home>
-    <test.exclude.tags></test.exclude.tags>
+    <test.exclude.tags />
 
     <!--
       Dependency scopes that can be overridden by enabling certain profiles. These profiles are
@@ -2030,7 +2028,7 @@
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
             <argLine>-ea -Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
-            <stderr/>
+            <stderr />
             <environmentVariables>
               <!--
                 Setting SPARK_DIST_CLASSPATH is a simple way to make sure any child processes
@@ -2158,7 +2156,7 @@
                     </goals>
                   </pluginExecutionFilter>
                   <action>
-                    <ignore></ignore>
+                    <ignore />
                   </action>
                 </pluginExecution>
                 <pluginExecution>
@@ -2171,7 +2169,7 @@
                     </goals>
                   </pluginExecutionFilter>
                   <action>
-                    <ignore></ignore>
+                    <ignore />
                   </action>
                 </pluginExecution>
                 <pluginExecution>
@@ -2184,7 +2182,7 @@
                     </goals>
                   </pluginExecutionFilter>
                   <action>
-                    <ignore></ignore>
+                    <ignore />
                   </action>
                 </pluginExecution>
               </pluginExecutions>
@@ -2467,9 +2465,9 @@
     <profile>
       <id>hadoop-1</id>
       <properties>
-        <hadoop.version>1.2.1</hadoop.version>
-        <protobuf.version>2.4.1</protobuf.version>
-        <hbase.version>0.98.7-hadoop1</hbase.version>
+        <hadoop.version>2.7.1.2.4.0.0-169</hadoop.version>
+        <protobuf.version>2.5.0</protobuf.version>
+        <hbase.version>1.1.2.2.4.0.0-169</hbase.version>
         <avro.mapred.classifier>hadoop1</avro.mapred.classifier>
         <codehaus.jackson.version>1.8.8</codehaus.jackson.version>
         <akka.group>org.spark-project.akka</akka.group>
@@ -2485,7 +2483,7 @@
     <profile>
       <id>hadoop-2.3</id>
       <properties>
-        <hadoop.version>2.3.0</hadoop.version>
+        <hadoop.version>2.7.1.2.4.0.0-169</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
       </properties>
     </profile>
@@ -2493,7 +2491,7 @@
     <profile>
       <id>hadoop-2.4</id>
       <properties>
-        <hadoop.version>2.4.0</hadoop.version>
+        <hadoop.version>2.7.1.2.4.0.0-169</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
       </properties>
     </profile>
@@ -2501,9 +2499,9 @@
     <profile>
       <id>hadoop-2.6</id>
       <properties>
-        <hadoop.version>2.6.0</hadoop.version>
+        <hadoop.version>2.7.1.2.4.0.0-169</hadoop.version>
         <jets3t.version>0.9.3</jets3t.version>
-        <zookeeper.version>3.4.6</zookeeper.version>
+        <zookeeper.version>3.4.6.2.4.0.0-169</zookeeper.version>
         <curator.version>2.6.0</curator.version>
       </properties>
     </profile>

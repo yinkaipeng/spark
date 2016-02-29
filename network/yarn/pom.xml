@@ -15,14 +15,12 @@
   ~ See the License for the specific language governing permissions and
   ~ limitations under the License.
   -->
-
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.10</artifactId>
-    <version>1.6.0</version>
+    <version>1.6.0.2.4.0.0-169</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
@@ -123,8 +121,7 @@
                   <condition>
                     <not>
                       <resourceexists>
-                        <zipentry zipfile="${shuffle.jar}"
-                          name="${shaded.jackson}/core/JsonParser.class"/>
+                        <zipentry name="${shaded.jackson}/core/JsonParser.class" zipfile="${shuffle.jar}" />
                       </resourceexists>
                     </not>
                   </condition>
@@ -133,8 +130,7 @@
                   <condition>
                     <not>
                       <resourceexists>
-                        <zipentry zipfile="${shuffle.jar}"
-                          name="${shaded.jackson}/annotation/JacksonAnnotation.class"/>
+                        <zipentry name="${shaded.jackson}/annotation/JacksonAnnotation.class" zipfile="${shuffle.jar}" />
                       </resourceexists>
                     </not>
                   </condition>
@@ -143,8 +139,7 @@
                   <condition>
                     <not>
                       <resourceexists>
-                        <zipentry zipfile="${shuffle.jar}"
-                          name="${shaded.jackson}/databind/JsonSerializer.class"/>
+                        <zipentry name="${shaded.jackson}/databind/JsonSerializer.class" zipfile="${shuffle.jar}" />
                       </resourceexists>
                     </not>
                   </condition>
