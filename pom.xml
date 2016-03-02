@@ -1433,6 +1433,10 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.groovy</groupId>
+            <artifactId>groovy-all</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
       <dependency>
@@ -1503,6 +1507,10 @@
           <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.groovy</groupId>
+            <artifactId>groovy-all</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1598,6 +1606,10 @@
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.groovy</groupId>
+            <artifactId>groovy-all</artifactId>
+          </exclusion>
         </exclusions>
       </dependency>
 
@@ -1642,6 +1654,10 @@
           <exclusion>
             <groupId>org.apache.thrift</groupId>
             <artifactId>libthrift</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.groovy</groupId>
+            <artifactId>groovy-all</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -1690,6 +1706,10 @@
           <exclusion>
             <groupId>commons-logging</groupId>
             <artifactId>commons-logging</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.codehaus.groovy</groupId>
+            <artifactId>groovy-all</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
