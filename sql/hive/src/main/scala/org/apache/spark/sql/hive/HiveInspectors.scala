@@ -29,7 +29,7 @@ import org.apache.hadoop.{io => hadoopIo}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{ArrayBasedMapData => _, _}
 import org.apache.spark.sql.{AnalysisException, types}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -319,7 +319,10 @@ private[hive] trait HiveInspectors {
       case hvoi: HiveCharObjectInspector =>
         UTF8String.fromString(hvoi.getPrimitiveJavaObject(data).getValue)
       case x: StringObjectInspector if x.preferWritable() =>
-        UTF8String.fromString(x.getPrimitiveWritableObject(data).toString)
+        // Text is in UTF-8 already. No need to convert again via fromString. Copy bytes
+        val wObj = x.getPrimitiveWritableObject(data)
+        val result = wObj.copyBytes()
+        UTF8String.fromBytes(result, 0, result.length)
       case x: StringObjectInspector =>
         UTF8String.fromString(x.getPrimitiveJavaObject(data))
       case x: IntObjectInspector if x.preferWritable() => x.get(data)
