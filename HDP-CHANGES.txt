@@ -32,3 +32,19 @@ BUG FIXES
   BUG-47316. spark.history.provider isn't resolving to the history provider class: reinstate original classes as subclasses of the moved ones
   BUG-51094. RM redirects to incorrect URL in Spark HS for yarn-cluster mode
   SPARK-13599. Groovy-all ends up in spark-assembly if hive profile set
+  (Spark 2.0 backport)
+  SPARK-6847    Stack overflow on updateStateByKey which followed by a stream with checkpoint set
+  SPARK-10582   using dynamic-executor-allocation, if AM failed, the new AM will be started. But the new AM does not allocate executors to driver
+  SPARK-11137   Make StreamingContext.stop() exception-safe
+  SPARK-11627   Spark Streaming backpressure mechanism has no initial rate limit, receivers receive data at the maximum speed , it might cause OOM exception
+  SPARK-12001   StreamingContext cannot be completely stopped if the stop() is interrupted
+  SPARK-12009   Avoid re-allocate yarn container while driver want to stop all executors
+  SPARK-12142   Can't request executor when container allocator us bit ready
+  SPARK-12353   wrong output for countByValue and countByValueAndWIndow
+  SPARK-12513   SocketReceiver hang in Netcat example
+  SPARK-13021   Fail fast when custom RDD's violate RDD.partition's API contract
+  SPARK-13117   WebUI should use the local ip not 0.0.0.0
+  SPARK-13308   ManagedBuffers passed to OneToOneStreamManager need to be freed in non error cases
+  SPARK-13468   Fix a corner case where the page UI should show DAG but it doesn't show
+  SPARK-11969   SQL UI does not work with PySpark
+  SPARK-13360   pyspark related enviroment variable is not propagated to driver in yarn-cluster mode
