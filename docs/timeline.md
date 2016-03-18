@@ -1,3 +1,9 @@
+---
+layout: global
+title: Hadoop YARN Timeline Service Integration
+description: How to use the YARN Timeline Service to store application histories.
+---
+
 <!---
    Licensed to the Apache Software Foundation (ASF) under one or more
    contributor license agreements.  See the NOTICE file distributed with
