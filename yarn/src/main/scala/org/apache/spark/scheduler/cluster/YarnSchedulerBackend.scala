@@ -99,7 +99,7 @@ private[spark] abstract class YarnSchedulerBackend(
    * @return The application attempt id, if available.
    */
   override def applicationAttemptId(): Option[String] = {
-    attemptId.map(_.toString)
+    attemptId.map(_.getAttemptId.toString)
   }
 
   /**

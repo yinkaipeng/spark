@@ -52,3 +52,4 @@ BUG FIXES
   SPARK-13478   Use real user when fetching delegation tokens
   SPARK-12523   Support long-running of the Spark on HBase and hive metastore
   SPARK-12241   Improve failure reporting in Yarn client obtainTokenForHBase()
+  SPARK-13885   Fix attempt id regression for Spark running on Yarn
