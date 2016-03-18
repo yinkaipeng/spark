@@ -2487,6 +2487,9 @@
       <activation>
         <activeByDefault>true</activeByDefault>
       </activation>
+      <properties>
+        <hadoop.version>2.8.0-SNAPSHOT</hadoop.version>
+      </properties>
       <dependencyManagement>
         <dependencies>
           <dependency>
