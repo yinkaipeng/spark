@@ -49,3 +49,6 @@ BUG FIXES
   SPARK-13468   Fix a corner case where the page UI should show DAG but it doesn't show
   SPARK-11969   SQL UI does not work with PySpark
   SPARK-13360   pyspark related enviroment variable is not propagated to driver in yarn-cluster mode
+  SPARK-13478   Use real user when fetching delegation tokens
+  SPARK-12523   Support long-running of the Spark on HBase and hive metastore
+  SPARK-12241   Improve failure reporting in Yarn client obtainTokenForHBase()
