@@ -133,6 +133,10 @@ private[spark] class ApplicationMaster(
     Seq("TERM", "INT", "HUP").foreach { sig => new AMSignalHandler(sig) }
   }
 
+  def getAttemptId(): ApplicationAttemptId = {
+    client.getAttemptId()
+  }
+
   final def run(): Int = {
     try {
       val appAttemptId = client.getAttemptId()
