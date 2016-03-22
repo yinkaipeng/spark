@@ -7,9 +7,9 @@ NEW FEATURES
 
 IMPROVEMENTS
 
-  BUG-50516. OrcRelation uses HadoopRDD which can broadcast conf objects frequently.
-  BUG-50246. Fix high CPU usage in Spark thrift server with concurrent users.
-  BUG-50397. Enable OrcRelation even when connecting via spark thrift server
+  SPARK-12948 OrcRelation uses HadoopRDD which can broadcast conf objects frequently.
+  SPARK-12920 Fix high CPU usage in Spark thrift server with concurrent users.
+  SPARK-12998 Enable OrcRelation even when connecting via spark thrift server.
   BUG-51300. (SPARK-12925) Improve HiveInspectors.unwrap for StringObjectInspector.getPrimitiveWritableObject
   BUG-51395. (SPARK-12417) support to have ORC bloom filters during write code path
   BUG-51301. (SPARK-12898) Consider having dummyCallSite for HiveTableScan
