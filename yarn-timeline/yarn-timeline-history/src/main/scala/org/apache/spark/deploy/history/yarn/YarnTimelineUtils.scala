@@ -369,7 +369,8 @@ private[yarn] object YarnTimelineUtils extends Logging {
     val address = getTimelineWebappAddress(conf, isHttps)
     val protocol = if (isHttps) "https://" else "http://"
     require(address != null, s"No timeline service defined")
-    validateEndpoint(URI.create(s"$protocol$address$TIMELINE_REST_PATH"))
+    validateEndpoint(URI.create(s"$protocol$address$TIMELINE_REST_PATH"),
+      "Timeline web application address")
   }
 
   def getTimelineWebappAddress(conf: Configuration, isHttps: Boolean): String = {
@@ -801,15 +802,15 @@ private[yarn] object YarnTimelineUtils extends Logging {
    * @param endpoint address of service to talk to
    * @return the URL passed in
    */
-  def validateEndpoint(endpoint: URI): URI = {
+  def validateEndpoint(endpoint: URI, detail: String = ""): URI = {
     val host = endpoint.getHost
     if (host == null || host == "0.0.0.0") {
-      throw new NoRouteToHostException(s"Invalid host in $endpoint" +
+      throw new NoRouteToHostException(s"$detail: Invalid host in $endpoint" +
           s" - see https://wiki.apache.org/hadoop/UnsetHostnameOrPort")
     }
     val port = endpoint.getPort
     if (port == 0) {
-      throw new NoRouteToHostException(s"Invalid Port in $endpoint" +
+      throw new NoRouteToHostException(s"$detail: Invalid Port in $endpoint" +
           s" - see https://wiki.apache.org/hadoop/UnsetHostnameOrPort")
     }
     // get the address; will trigger a hostname lookup failure if the

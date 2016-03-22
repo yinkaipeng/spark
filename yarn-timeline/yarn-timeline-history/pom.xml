@@ -128,6 +128,11 @@
       <classifier>tests</classifier>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-yarn-server-timeline-pluginstorage</artifactId>
+      <scope>test</scope>
+    </dependency>
 
     <!-- This is the version of Netty which HDFS MiniDFS server depends on-->
     <dependency>
