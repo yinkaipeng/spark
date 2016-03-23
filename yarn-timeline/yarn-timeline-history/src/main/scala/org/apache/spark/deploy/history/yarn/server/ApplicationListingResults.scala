@@ -98,18 +98,13 @@ private[spark] class ApplicationListingResults(
       return (foundApp, None, attempts)
     }
     // henceforth attempts is always non-empty.
-    // look to see if there's an attempt ID
+    // look up on attempt ID, or head entry if none
 
-    if (attemptId.isEmpty) {
-      return (foundApp, Some(attempts.head), attempts)
+    attemptId match {
+      case None =>
+        (foundApp, Some(attempts.head), attempts)
+      case Some(entityId) =>
+        (foundApp, attempts.find(_.attemptId.get == entityId), attempts)
     }
-
-    // here there i
-    val entityId = attemptId.get
-
-    // scan the list of app attempts to ensure that the attempt is associated
-    // with the app; return no match if it is not
-    val attemptInfo = attempts.find( _.attemptId.get == entityId)
-    (foundApp, attemptInfo, attempts)
   }
 }

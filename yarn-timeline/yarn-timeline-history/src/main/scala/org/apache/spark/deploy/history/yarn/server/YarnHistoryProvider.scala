@@ -276,8 +276,11 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       logInfo(KEY_SERVICE_URL + ": " + timelineEndpoint)
       logDebug(sparkConf.toDebugString)
       // get the thread time
-      logInfo(s"Manual refresh interval $manualRefreshInterval milliseconds")
-      validateInterval(OPTION_MANUAL_REFRESH_INTERVAL, manualRefreshInterval, 0)
+      if (manualRefreshInterval >= 0) {
+        logInfo(s"Minimum Manual refresh interval $manualRefreshInterval milliseconds")
+      } else {
+        logInfo(s"No manual refreshing; background refreshes only")
+      }
       // check the background refresh interval if there is one
       if (backgroundRefreshInterval > 0) {
         validateInterval(OPTION_BACKGROUND_REFRESH_INTERVAL, backgroundRefreshInterval,
@@ -285,6 +288,9 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
         logInfo(s"Background refresh interval $backgroundRefreshInterval milliseconds")
       } else {
         logInfo(s"Background refresh interval=0: manual refreshes only")
+      }
+      if (backgroundRefreshInterval < 0 && manualRefreshInterval < 0) {
+        logError("Refreshing of application listings is completely disabled")
       }
       initYarnClient()
       startRefreshThread()
@@ -668,8 +674,10 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   override def getListing(): Seq[TimelineApplicationHistoryInfo] = {
     // get the current list
     val listing = getApplications.applications
-    // and queue another refresh
-    triggerRefresh()
+    // and queue another refresh if it is manual
+    if (manualRefreshInterval >= 0) {
+      triggerRefresh()
+    }
     listing
   }
 
@@ -796,8 +804,10 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
         val latestState = toApplicationHistoryInfo(attemptEntity).attempts.head
         Some(LoadedAppUI(ui,
           if (attemptInfo.completed) {
+            logDebug("Application is complete: returning 'completed' application probe")
             completedAppProbe
           } else {
+            logDebug("Incomplete app -probe will trigger after $updateProbeWindowMs")
             yarnUpdateProbe(appId, attemptId, latestState.version, latestState.lastUpdated,
               now() + updateProbeWindowMs)
           }
@@ -994,14 +1004,21 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       version: Long,
       updated: Long,
       checkTime: Long)(): Boolean = {
-    val (foundApp, attempt, attempts) = getApplications.lookupAttempt(appId, attemptId)
+    val time = now()
+    val (_, attempt, _) = getApplications.lookupAttempt(appId, attemptId)
     attempt match {
       case None =>
         logDebug(s"Application Attempt $appId/$attemptId not found")
         false
+      case Some(a) if a.version > version && time > checkTime =>
+        logDebug(s"Attempt version=${a.version} > version after check time: $a")
+        true
+      case Some(a) if a.version > version && a.completed =>
+        logDebug(s"Updated application is now complete: $a")
+        true
       case Some(a) =>
-        logDebug(s"attempt version=${a.version} in $a")
-        a.completed || (a.version > version && now() > checkTime)
+        logDebug(s"Probe conditions were not met")
+        false
     }
   }
 
@@ -1010,6 +1027,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @return false
    */
   def completedAppProbe(): Boolean = {
+    logDebug("completedAppProbe(): no-op")
     false
   }
 
@@ -1164,7 +1182,8 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       val t = now()
       if (manualRefreshInterval == 0
           || background
-          || ((t - _lastRefreshAttemptTime.get) >= manualRefreshInterval )) {
+          || (manualRefreshInterval > 0 &&
+             (t - _lastRefreshAttemptTime.get) >= manualRefreshInterval )) {
         logDebug(s"refresh triggered at $t")
         listAndCacheApplications(startup)
         // set refresh time to after the operation, so that even if the operation
@@ -1367,11 +1386,14 @@ private[spark] object YarnHistoryProvider {
   val SPARK_YARN_APPLICATION_TYPE = "SPARK"
 
   /**
-   * Option for the interval for listing timeline refreshes. Bigger: less chatty.
+   * Option for the interval for manually triggered listing timeline refreshes.
+   * This must be zero or higher if there is no background refresh interval set
+   * Bigger: less load on ATS
    * Smaller: history more responsive.
+   * Negative: manual refresh disabled (default).
    */
   val OPTION_MANUAL_REFRESH_INTERVAL = "spark.history.yarn.manual.refresh.interval"
-  val DEFAULT_MANUAL_REFRESH_INTERVAL_SECONDS = 30
+  val DEFAULT_MANUAL_REFRESH_INTERVAL_SECONDS = -1
 
   /**
    * Interval for background refreshes.

@@ -534,7 +534,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    */
   private def setContextAppAndAttemptInfo(appId: Option[String],
       attemptId: Option[String]): Unit = {
-    logDebug(s"Setting application ID to $appId; attempt ID to $attemptId")
+    logDebug(s"Setting Spark application ID to $appId; attempt ID to $attemptId")
     sparkApplicationId = appId
     sparkApplicationAttemptId = attemptId
   }

@@ -282,8 +282,10 @@ private[history] class ApplicationCache(
           val completed = ui.getApplicationInfoList.exists(_.attempts.last.completed)
           if (completed) {
             // completed spark UIs are attached directly
+            logDebug("Application is complete: not adding update probes")
             operations.attachSparkUI(appId, attemptId, ui, completed)
           } else {
+            logDebug("Application is incomplete: adding filter to check for updates")
             // incomplete UIs have the cache-check filter put in front of them.
             ApplicationCacheCheckFilterRelay.registerFilter(ui, appId, attemptId)
             operations.attachSparkUI(appId, attemptId, ui, completed)

@@ -221,7 +221,7 @@ at the extremes and some more balanced
 #### Background refresh only; updated every minute
 
       spark.history.yarn.backround.refresh.interval = 300s
-      spark.history.yarn.manual.refresh.interval = 0s
+      spark.history.yarn.manual.refresh.interval = -1
 
 The history is updated in the background, once a minute. The smaller
 the refresh interval, the higher the load on the timeline server.
@@ -241,15 +241,6 @@ is no user of the Spark History Service, at the cost of a slightly less
 intuitive UI: because two refreshes are needed to get the updated information,
 the state of the system will not be immediately obvious.
 
-
-#### Manual and background refresh: responsive
-
-      spark.history.yarn.backround.refresh.interval = 60s
-      spark.history.yarn.manual.refresh.interval = 20s
-
-Here the background refresh interval is 60s, but a page refresh will trigger
-an update if the last refresh was more than 20 seconds ago.
-
 #### Manual and background refresh: low-load
 
       spark.history.yarn.backround.refresh.interval = 300s
@@ -258,9 +249,10 @@ an update if the last refresh was more than 20 seconds ago.
 Here a background update takes place every five minutes; a refresh is
 also triggered on a page refresh if there has not been one in the last minute.
 
-What makes for the best configuration? It depends on cluster size. The smaller the cluster,
-the smaller the background refresh interval can be -and the manual refresh interval then set to zero,
-to disable that option entirely.
+What makes for the best configuration? If there are no load problems on the ATS service,
+a configuration with a background refresh only is simple and works well. It is only
+if the load on the YARN ATS server is high from use across the cluster that the manual
+options merit investigation.
 
 #### YARN History Provider Configuration Options:
 
@@ -286,11 +278,11 @@ to disable that option entirely.
   </tr>
   <tr>
     <td><code>spark.history.yarn.manual.refresh.interval</code></td>
-    <td>30s</td>
+    <td>-1</td>
     <td>
       Minimum interval between manual refreshes of the history data; refreshing the
       page before this limit will not trigger an update.
-      A value of 0s means "page refreshes do not trigger updates of the application list"
+      A negative value means "page refreshes do not trigger updates of the application list"
     </td>
   </tr>
   <tr>

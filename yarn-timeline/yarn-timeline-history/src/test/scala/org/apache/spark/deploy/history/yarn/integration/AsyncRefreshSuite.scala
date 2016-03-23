@@ -30,7 +30,7 @@ class AsyncRefreshSuite extends AbstractHistoryIntegrationTests {
 
   val SLEEP_INTERVAL = 100
   val EVENT_PROCESSED_TIMEOUT = 5000
-  val WINDOW_SECONDS = YarnHistoryProvider.DEFAULT_MANUAL_REFRESH_INTERVAL_SECONDS
+  val WINDOW_SECONDS = 30
   val WINDOW_MILLIS = WINDOW_SECONDS * 1000
 
   override def setupConfiguration(sparkConf: SparkConf): SparkConf = {
