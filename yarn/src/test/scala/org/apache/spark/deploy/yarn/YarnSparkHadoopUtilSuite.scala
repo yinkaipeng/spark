@@ -257,7 +257,7 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
     hadoopConf.set("hive.metastore.uris", "http://localhost:0")
     val util = new YarnSparkHadoopUtil
     assertNestedHiveException(intercept[InvocationTargetException] {
-      util.obtainTokenForHiveMetastoreInner(hadoopConf, "alice")
+      util.obtainTokenForHiveMetastoreInner(hadoopConf)
     })
     // expect exception trapping code to unwind this hive-side exception
     assertNestedHiveException(intercept[InvocationTargetException] {
@@ -274,6 +274,16 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging 
       fail("Not a hive exception", inner)
     }
     inner
+  }
+
+  test("Obtain tokens For HBase") {
+    val hadoopConf = new Configuration()
+    hadoopConf.set("hbase.security.authentication", "kerberos")
+    val util = new YarnSparkHadoopUtil
+    intercept[ClassNotFoundException] {
+      util.obtainTokenForHBaseInner(hadoopConf)
+    }
+    util.obtainTokenForHBase(hadoopConf) should be (None)
   }
 
   // This test needs to live here because it depends on isYarnMode returning true, which can only

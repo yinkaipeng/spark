@@ -345,8 +345,8 @@ private[spark] class Client(
     if (!credentialsFromEnvironment) {
       val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + dst
       YarnSparkHadoopUtil.get.obtainTokensForNamenodes(nns, hadoopConf, credentials)
-      obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
-      obtainTokenForHBase(sparkConf, hadoopConf, credentials)
+      YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
+      YarnSparkHadoopUtil.get.obtainTokenForHBase(sparkConf, hadoopConf, credentials)
       // list all credentials at debug; useful for diagnostics.
       if (credentials != null) {
         logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
@@ -710,6 +710,9 @@ private[spark] class Client(
         }
         env("SPARK_JAVA_OPTS") = value
       }
+      // propagate PYSPARK_DRIVER_PYTHON and PYSPARK_PYTHON to driver in cluster mode
+      sys.env.get("PYSPARK_DRIVER_PYTHON").foreach(env("PYSPARK_DRIVER_PYTHON") = _)
+      sys.env.get("PYSPARK_PYTHON").foreach(env("PYSPARK_PYTHON") = _)
     }
 
     sys.env.get(ENV_DIST_CLASSPATH).foreach { dcp =>
@@ -1442,59 +1445,6 @@ object Client extends Logging {
   }
 
   /**
-   * Obtains token for the Hive metastore and adds them to the credentials.
-   */
-  private def obtainTokenForHiveMetastore(
-      sparkConf: SparkConf,
-      conf: Configuration,
-      credentials: Credentials) {
-    if (shouldGetTokens(sparkConf, "hive") && UserGroupInformation.isSecurityEnabled) {
-      YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(conf).foreach {
-        credentials.addToken(new Text("hive.server2.delegation.token"), _)
-      }
-    }
-  }
-
-  /**
-   * Obtain security token for HBase.
-   */
-  def obtainTokenForHBase(
-      sparkConf: SparkConf,
-      conf: Configuration,
-      credentials: Credentials): Unit = {
-    if (shouldGetTokens(sparkConf, "hbase") && UserGroupInformation.isSecurityEnabled) {
-      val mirror = universe.runtimeMirror(getClass.getClassLoader)
-
-      try {
-        val confCreate = mirror.classLoader.
-          loadClass("org.apache.hadoop.hbase.HBaseConfiguration").
-          getMethod("create", classOf[Configuration])
-        val obtainToken = mirror.classLoader.
-          loadClass("org.apache.hadoop.hbase.security.token.TokenUtil").
-          getMethod("obtainToken", classOf[Configuration])
-
-        logDebug("Attempting to fetch HBase security token.")
-
-        val hbaseConf = confCreate.invoke(null, conf).asInstanceOf[Configuration]
-        if ("kerberos" == hbaseConf.get("hbase.security.authentication")) {
-          val token = obtainToken.invoke(null, hbaseConf).asInstanceOf[Token[TokenIdentifier]]
-          credentials.addToken(token.getService, token)
-          logInfo("Added HBase security token to credentials.")
-        }
-      } catch {
-        case e: java.lang.NoSuchMethodException =>
-          logInfo("HBase Method not found: " + e)
-        case e: java.lang.ClassNotFoundException =>
-          logDebug("HBase Class not found: " + e)
-        case e: java.lang.NoClassDefFoundError =>
-          logDebug("HBase Class not found: " + e)
-        case e: Exception =>
-          logError("Exception when obtaining HBase security token: " + e)
-      }
-    }
-  }
-
-  /**
    * Return whether the two file systems are the same.
    */
   private def compareFs(srcFs: FileSystem, destFs: FileSystem): Boolean = {
@@ -1557,14 +1507,4 @@ object Client extends Logging {
   def buildPath(components: String*): String = {
     components.mkString(Path.SEPARATOR)
   }
-
-  /**
-   * Return whether delegation tokens should be retrieved for the given service when security is
-   * enabled. By default, tokens are retrieved, but that behavior can be changed by setting
-   * a service-specific configuration.
-   */
-  def shouldGetTokens(conf: SparkConf, service: String): Boolean = {
-    conf.getBoolean(s"spark.yarn.security.tokens.${service}.enabled", true)
-  }
-
 }

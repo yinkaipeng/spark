@@ -17,17 +17,19 @@
 
 package org.apache.spark.deploy.yarn
 
-import scala.util.control.NonFatal
-
 import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{Socket, URL}
 import java.util.concurrent.atomic.AtomicReference
 
+import scala.util.control.NonFatal
+
+import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import sun.misc.{Signal, SignalHandler}
 
 import org.apache.spark.rpc._
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv,
@@ -117,6 +119,20 @@ private[spark] class ApplicationMaster(
 
   private var delegationTokenRenewerOption: Option[AMDelegationTokenRenewer] = None
 
+  if (SystemUtils.IS_OS_UNIX) {
+    // Register signal handler for signal "TERM", "INT" and "HUP". For the cases where AM receive a
+    // signal and stop, from RM's aspect this application needs to be reattempted, rather than mark
+    // as success.
+    class AMSignalHandler(name: String) extends SignalHandler {
+      val prevHandler = Signal.handle(new Signal(name), this)
+      override def handle(sig: Signal): Unit = {
+        finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_SIGNAL)
+        prevHandler.handle(sig)
+      }
+    }
+    Seq("TERM", "INT", "HUP").foreach { sig => new AMSignalHandler(sig) }
+  }
+
   def getAttemptId(): ApplicationAttemptId = {
     client.getAttemptId()
   }
@@ -133,12 +149,9 @@ private[spark] class ApplicationMaster(
         // Set the master property to match the requested mode.
         System.setProperty("spark.master", "yarn-cluster")
 
-        // Propagate the application ID so that YarnClusterSchedulerBackend can pick it up.
+        // Set this internal configuration if it is running on cluster mode, this
+        // configuration will be checked in SparkContext to avoid misuse of yarn cluster mode.
         System.setProperty("spark.yarn.app.id", appAttemptId.getApplicationId().toString())
-
-        // Propagate the attempt if, so that in case of event logging,
-        // different attempt's logs gets created in different directory
-        System.setProperty("spark.yarn.app.attemptId", appAttemptId.getAttemptId().toString())
       }
 
       logInfo("ApplicationAttemptId: " + appAttemptId)
@@ -273,15 +286,11 @@ private[spark] class ApplicationMaster(
     val sc = sparkContextRef.get()
 
     val appId = client.getAttemptId().getApplicationId().toString()
-    val attemptIdOpt = if (isClusterMode) {
-      Some(client.getAttemptId().toString())
-    } else {
-      None
-    }
+    val attemptId = client.getAttemptId().getAttemptId().toString()
     val historyAddress =
       sparkConf.getOption("spark.yarn.historyServer.address")
         .map { text => SparkHadoopUtil.get.substituteHadoopVariables(text, yarnConf) }
-        .map { address => address + HistoryServer.getAttemptURI(appId, attemptIdOpt) }
+        .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}/${attemptId}" }
         .getOrElse("")
 
     val _sparkConf = if (sc != null) sc.getConf else sparkConf
@@ -604,11 +613,12 @@ private[spark] class ApplicationMaster(
               localityAwareTasks, hostToLocalTaskCount)) {
               resetAllocatorInterval()
             }
+            context.reply(true)
 
           case None =>
             logWarning("Container allocator is not ready to request executors yet.")
+            context.reply(false)
         }
-        context.reply(true)
 
       case KillExecutors(executorIds) =>
         logInfo(s"Driver requested to kill executor(s) ${executorIds.mkString(", ")}.")
@@ -650,6 +660,7 @@ object ApplicationMaster extends Logging {
   private val EXIT_SC_NOT_INITED = 13
   private val EXIT_SECURITY = 14
   private val EXIT_EXCEPTION_USER_CLASS = 15
+  private val EXIT_SIGNAL = 16
 
   private var master: ApplicationMaster = _
 
