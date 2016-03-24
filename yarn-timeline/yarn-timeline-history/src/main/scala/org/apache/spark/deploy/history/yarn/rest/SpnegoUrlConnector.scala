@@ -24,6 +24,7 @@ import javax.servlet.http.HttpServletResponse
 
 import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.net.NetUtils
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.security.authentication.client.{AuthenticatedURL, AuthenticationException, Authenticator, ConnectionConfigurator, KerberosAuthenticator, PseudoAuthenticator}
 import org.apache.hadoop.security.ssl.SSLFactory
@@ -134,9 +135,14 @@ private[spark] class SpnegoUrlConnector(
             // auth failure
             throw new UnauthorizedRequestException(url.toString,
               s"Authentication failure as $callerUGI against $url: $ex", ex)
-          case other: Throwable =>
-            // anything else is rethrown
-            throw other
+          case ioe: IOException =>
+            // IOEs are wrapped with exception specific details, preserving type where possible.
+            val port = if (url.getPort > 0) url.getPort else url.getDefaultPort
+            throw NetUtils.wrapException(s"YARN Timeline service at $url port", port,
+              "Spark History Server", 0, ioe)
+          case e: Throwable =>
+            // anything else is wrapped into a simple IOE
+            throw new IOException(s"Failed to connect to $url: $e", e)
         }
       }))
     conn.setUseCaches(false)
