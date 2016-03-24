@@ -80,6 +80,27 @@ Examples:
   <name>yarn.timeline-service.entity-group-fs-store.group-id-plugin-classes</name>
   <value>org.apache.spark.deploy.history.yarn.plugin.SparkATSPlugin</value>
 </property>
+
+<property>
+  <name>yarn.timeline-service.entity-group-fs-store.entity-file.fs-support-append</name>
+  <description>For HDFS and other fileystems which support append (file: does not),
+  set this flag to true.</description>
+  <value>true</value>
+</property>
+
+
+<property>
+  <name>yarn.timeline-service.entity-group-fs-store.active-dir</name>
+  <value>${fs.defaultFS}/tmp/entity-file-history/active</value>
+  <description>HDFS path to store active application’s timeline data</description>
+</property>
+
+<property>
+  <name>yarn.timeline-service.entity-group-fs-store.done-dir</name>
+  <value>${fs.defaultFS}/tmp/entity-file-history/done/</value>
+  <description>HDFS path to store done application’s timeline data</description>
+</property>
+
 ```
 
 The root web page of the timeline service can be verified with a web browser,
@@ -361,6 +382,22 @@ logs to see if this is the case.
 
 - The Spark History Server cannot authenticate with the timeline service: check the
 logs to see if this is the case.
+
+- A misconfiguration between the history
+
+### An application is not appearing in the history
+
+- The application has not been configured to use the timeline service for its history, so
+ its history is not being found.
+
+- The application is configured to use the timeline service, but the URL to publish events
+to (ATS v1 protocol) is wrong or not accessible. This should be noted in the application's
+logs.
+
+- The application is publishing using the ATS v1.5 protocol —via HDFS— and the YARN timeline
+service is either not configured to use this protocol, looking at different directories, or
+simply not polling frequently enough.
+
 
 ### List of applications is not updating
 
