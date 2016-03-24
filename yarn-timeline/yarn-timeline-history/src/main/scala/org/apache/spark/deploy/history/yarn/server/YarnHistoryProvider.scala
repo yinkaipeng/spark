@@ -145,7 +145,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
 
   /**
    * Are liveness checks enabled?
-   * That is, is the option [[OPTION_YARN_LIVENESS_CHECKS]] set?
+   * That is, is the option `OPTION_YARN_LIVENESS_CHECKS` set?
    */
   val _livenessChecksEnabled = sparkConf.getBoolean(OPTION_YARN_LIVENESS_CHECKS, true)
 
@@ -160,7 +160,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   protected val timelineEndpoint = createTimelineEndpoint()
 
   /**
-   * Create a [[TimelineQueryClient]] instance to talk to the timeline service running
+   * Create a `TimelineQueryClient` instance to talk to the timeline service running
    * at [[timelineEndpoint]].
    *
    */

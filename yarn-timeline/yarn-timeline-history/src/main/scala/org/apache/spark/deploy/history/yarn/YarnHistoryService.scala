@@ -756,8 +756,8 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
 
   /**
    * A `StopQueueAction` action has a size of 0
-    *
-    * @param currentTime time when action was queued.
+   *
+   * @param currentTime time when action was queued.
    * @param waitTime time for shutdown to wait
    */
   private def pushQueueStop(currentTime: Long, waitTime: Long): Unit = {
@@ -767,9 +767,9 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
 
   /**
    * Queue an entity for posting; also increases
-   * [[_postQueueEventSize]] by the size of the entity.
-    *
-    * @param timelineEntity entity to push
+   * `_postQueueEventSize` by the size of the entity.
+   *
+   * @param timelineEntity entity to push
    */
   def queueForPosting(timelineEntity: TimelineEntity): Unit = {
     // queue the entity for posting
@@ -781,9 +781,9 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
 
   /**
    * Push a `PostQueueAction` to the start of the queue; also increments
-   * [[_postQueueEventSize]] by the size of the action.
-    *
-    * @param action action to push
+   * `_postQueueEventSize` by the size of the action.
+   *
+   * @param action action to push
    */
   private def pushToFrontOfQueue(action: PostQueueAction): Unit = {
     postingQueue.push(action)
@@ -791,7 +791,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   }
 
   /**
-    * Take from the posting queue; decrements  [[_postQueueEventSize]] by the size
+    * Take from the posting queue; decrements `_postQueueEventSize` by the size
     * of the action.
     *
     * @return the action
@@ -819,8 +819,8 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    *
    * This is just a safety check to catch regressions in the code which
    * publish data that cannot be parsed at the far end.
-    *
-    * @param entity timeline entity to review.
+   *
+   * @param entity timeline entity to review.
    */
   private def preflightCheck(entity: TimelineEntity): Unit = {
     require(entity.getStartTime != null,
@@ -831,16 +831,16 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   private sealed trait PostQueueAction {
     /**
      * Number of events in this entry
-      *
-      * @return a natural number
+     *
+     * @return a natural number
      */
     def size: Int
   }
 
   /**
    * A `StopQueueAction` action has a size of 0
-    *
-    * @param currentTime time when action was queued.
+   *
+   * @param currentTime time when action was queued.
    * @param waitTime time for shutdown to wait
    */
   private case class StopQueueAction(currentTime: Long, waitTime: Long) extends PostQueueAction {
@@ -1131,8 +1131,8 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
 
   /**
    * Return the current time in milliseconds.
-    *
-    * @return system time in milliseconds
+   *
+   * @return system time in milliseconds
    */
   private def now(): Long = {
     clock.getTimeMillis()
