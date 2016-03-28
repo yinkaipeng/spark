@@ -368,14 +368,6 @@ private[spark] class Client(
 
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
 
-    val oldLog4jConf = Option(System.getenv("SPARK_LOG4J_CONF"))
-    if (oldLog4jConf.isDefined) {
-      logWarning(
-        "SPARK_LOG4J_CONF detected in the system environment. This variable has been " +
-          "deprecated. Please refer to the \"Launching Spark on YARN\" documentation " +
-          "for alternatives.")
-    }
-
     def addDistributedUri(uri: URI): Boolean = {
       val uriStr = uri.toString()
       if (distributedUris.contains(uriStr)) {
@@ -450,8 +442,7 @@ private[spark] class Client(
      */
     List(
       (SPARK_JAR, sparkJar(sparkConf, hadoopConf), CONF_SPARK_JAR),
-      (APP_JAR, args.userJar, CONF_SPARK_USER_JAR),
-      ("log4j.properties", oldLog4jConf.orNull, null)
+      (APP_JAR, args.userJar, CONF_SPARK_USER_JAR)
     ).foreach { case (destName, path, confKey) =>
       if (path != null && !path.trim().isEmpty()) {
         val (isLocal, localizedPath) = distribute(path, destName = Some(destName))
@@ -507,8 +498,7 @@ private[spark] class Client(
     // Distribute an archive with Hadoop and Spark configuration for the AM.
     val (_, confLocalizedPath) = distribute(createConfArchive().toURI().getPath(),
       resType = LocalResourceType.ARCHIVE,
-      destName = Some(LOCALIZED_CONF_DIR),
-      appMasterOnly = true)
+      destName = Some(LOCALIZED_CONF_DIR))
     require(confLocalizedPath != null)
 
     localResources
@@ -539,11 +529,13 @@ private[spark] class Client(
     // required when user changes log4j.properties directly to set the log configurations. If
     // configuration file is provided through --files then executors will be taking configurations
     // from --files instead of $SPARK_CONF_DIR/log4j.properties.
-    val log4jFileName = "log4j.properties"
-    Option(Utils.getContextOrSparkClassLoader.getResource(log4jFileName)).foreach { url =>
-      if (url.getProtocol == "file") {
-        hadoopConfFiles(log4jFileName) = new File(url.getPath)
-      }
+
+    // Also uploading metrics.properties to distributed cache if exists in classpath.
+    // If user specify this file using --files then executors will use the one from --files instead.
+    for { prop <- Seq("log4j.properties", "metrics.properties")
+          url <- Option(Utils.getContextOrSparkClassLoader.getResource(prop))
+          if url.getProtocol == "file" } {
+      hadoopConfFiles(prop) = new File(url.getPath)
     }
 
     Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR").foreach { envKey =>
@@ -623,7 +615,7 @@ private[spark] class Client(
     logInfo("Setting up the launch environment for our AM container")
     val env = new HashMap[String, String]()
     val extraCp = sparkConf.getOption("spark.driver.extraClassPath")
-    populateClasspath(args, yarnConf, sparkConf, env, true, extraCp)
+    populateClasspath(args, yarnConf, sparkConf, env, extraCp)
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDir
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
@@ -1317,18 +1309,15 @@ object Client extends Logging {
       conf: Configuration,
       sparkConf: SparkConf,
       env: HashMap[String, String],
-      isAM: Boolean,
       extraClassPath: Option[String] = None): Unit = {
     extraClassPath.foreach { cp =>
       addClasspathEntry(getClusterPath(sparkConf, cp), env)
     }
     addClasspathEntry(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), env)
 
-    if (isAM) {
-      addClasspathEntry(
-        YarnSparkHadoopUtil.expandEnvironment(Environment.PWD) + Path.SEPARATOR +
-          LOCALIZED_CONF_DIR, env)
-    }
+    addClasspathEntry(
+      YarnSparkHadoopUtil.expandEnvironment(Environment.PWD) + Path.SEPARATOR +
+        LOCALIZED_CONF_DIR, env)
 
     if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
       // in order to properly add the app jar when user classpath is first
