@@ -119,7 +119,7 @@ public class YarnShuffleService extends AuxiliaryService {
     // an application was stopped while the NM was down, we expect yarn to call stopApplication()
     // when it comes back
     registeredExecutorFile =
-      findRegisteredExecutorFile(conf.getStrings("yarn.nodemanager.local-dirs"));
+      findRegisteredExecutorFile(conf.getTrimmedStrings("yarn.nodemanager.local-dirs"));
 
     TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
     // If authentication is enabled, set up the shuffle server to use a
