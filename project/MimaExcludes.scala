@@ -163,7 +163,10 @@ object MimaExcludes {
         // SPARK-12591 Register OpenHashMapBasedStateMap for Kryo
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.serializer.KryoInputDataInputBridge"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.serializer.KryoOutputDataOutputBridge")
-      )
+      ) ++
+      // SPARK-11314: YARN backend moved to yarn sub-module and MiMA complains even though it's a
+      // private class.
+      MimaBuild.excludeSparkClass("scheduler.cluster.YarnSchedulerBackend$YarnSchedulerEndpoint")
     case v if v.startsWith("1.5") =>
       Seq(
         MimaBuild.excludeSparkPackage("network"),
