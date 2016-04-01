@@ -27,4 +27,4 @@ BUG FIXES
   BUG-48230. yarn-client app hangs on shutdown
   BUG-47809. Application gets stuck with scala.MatchError
   BUG-47316. spark.history.provider isn't resolving to the history provider class: reinstate original classes as subclasses of the moved ones
-
+  SPARK-11182   HDFS Delegation Token will be expired when calling "UserGroupInformation.getCurrentUser.addCredentials" in HA mode
