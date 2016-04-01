@@ -56,3 +56,4 @@ BUG FIXES
   SPARK-13885   Fix attempt id regression for Spark running on Yarn
   SPARK-13642   Properly handle signal kill in ApplicationMaster
   SPARK-14062   Fix log4j and upload metrics.properties automatically with distributed cache
+  SPARK-11182   HDFS Delegation Token will be expired when calling "UserGroupInformation.getCurrentUser.addCredentials" in HA mode
