@@ -181,6 +181,7 @@ echo -e "\$ ${BUILD_COMMAND[@]}\n"
 # Make directories
 rm -rf "$DISTDIR"
 mkdir -p "$DISTDIR/lib"
+mkdir -p "$DISTDIR/hdpLib"
 echo "Spark $VERSION$GITREVSTRING built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE"
 echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 
@@ -192,6 +193,9 @@ cp "$SPARK_HOME"/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
 # This will fail if the -Pyarn profile is not provided
 # In this case, silence the error and ignore the return code of this command
 cp "$SPARK_HOME"/network/yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/lib/" &> /dev/null || :
+
+# add hdp deployment jars into hdpLib
+cp "$SPARK_HOME"/yarn-timeline/yarn-timeline-ats-plugin/target/spark-yarn-timeline-ats-plugin_$SCALA_VERSION-$VERSION.jar "$DISTDIR/hdpLib/"
 
 # Copy example sources (needed for python and SQL)
 mkdir -p "$DISTDIR/examples/src/main"

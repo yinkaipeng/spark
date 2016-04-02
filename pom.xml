@@ -2501,7 +2501,7 @@
           </dependency>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-yarn-server-timeline-pluginstorage</artifactId>
+            <artifactId>hadoop-yarn-server-timeline-plugins</artifactId>
             <version>${hadoop.version}</version>
             <scope>${hadoop.deps.scope}</scope>
           </dependency>
