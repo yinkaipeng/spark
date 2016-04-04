@@ -21,10 +21,9 @@ import org.scalatest.Matchers
 
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
-import org.apache.spark.deploy.history.yarn.server.{TimelineApplicationHistoryInfo, TimelineApplicationAttemptInfo}
+import org.apache.spark.deploy.history.yarn.server.{TimelineApplicationAttemptInfo, TimelineApplicationHistoryInfo}
 import org.apache.spark.deploy.history.yarn.server.YarnProviderUtils._
-import org.apache.spark.deploy.history.yarn.testtools.ExtraAssertions
-import org.apache.spark.scheduler.cluster.{StubApplicationAttemptId, StubApplicationId}
+import org.apache.spark.deploy.history.yarn.testtools.{ExtraAssertions, YarnTestUtils}
 import org.apache.spark.SparkFunSuite
 
 /**
@@ -60,8 +59,8 @@ class YarnProviderUtilsSuite extends SparkFunSuite
     new TimelineApplicationHistoryInfo(old.id, old.name, attempts)
   }
 
-  val yarnAppId = new StubApplicationId(5, 0)
-  val yarnAttemptId = new StubApplicationAttemptId(yarnAppId, 5555)
+  val yarnAppId = YarnTestUtils.newApplicationId(5, 0)
+  val yarnAttemptId = YarnTestUtils.newAttemptId(yarnAppId, 5555)
 
   val h12 = historyInfo("h12", 1, 2, true)
   val h22 = historyInfo("h22", 2, 2, true)

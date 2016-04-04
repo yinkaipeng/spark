@@ -78,13 +78,13 @@ private[yarn] trait IntegrationTestUtils {
       state: YarnApplicationState,
       startTime: Long,
       finishTime: Long = 0): ApplicationReport = {
-    val yarnId = new StubApplicationId(id, clusterTimestamp)
+    val yarnId = newApplicationId(clusterTimestamp, id)
     // this is tagged as hadoop private. The alternate tactic: create your own implementation,
     // is brittle against Hadoop versions, as new fields are added. Using this
     // class does at least ensure that it is current.
     val report = new ApplicationReportPBImpl()
     report.setApplicationId(yarnId)
-    report.setCurrentApplicationAttemptId(new StubApplicationAttemptId(yarnId, attempt))
+    report.setCurrentApplicationAttemptId(newAttemptId(yarnId, attempt))
     report.setYarnApplicationState(state)
     report.setStartTime(startTime)
     report.setFinishTime(finishTime)

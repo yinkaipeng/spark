@@ -21,20 +21,19 @@ import java.io.{InputStream, IOException}
 import java.net.URL
 import java.text.SimpleDateFormat
 
-import com.fasterxml.jackson.databind. ObjectMapper
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.apache.hadoop.yarn.api.records.ApplicationAttemptId
+import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.timeline.MemoryTimelineStore
-import org.json4s.JsonAST.{JString, JBool, JArray, JNothing}
+import org.json4s.JsonAST.{JArray, JBool, JNothing, JString}
 import org.json4s._
 import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.deploy.history.yarn.{YarnHistoryService, YarnTimelineUtils}
-import org.apache.spark.scheduler.cluster.{StubApplicationAttemptId, StubApplicationId}
 import org.apache.spark.scheduler.{JobFailed, JobSucceeded, SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerEnvironmentUpdate, SparkListenerEvent, SparkListenerJobEnd, SparkListenerJobStart}
 import org.apache.spark.util.Utils
 
@@ -46,11 +45,11 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
     "System Properties" -> Seq(("Username", "guest"), ("Password", "guest")),
     "Classpath Entries" -> Seq(("Super library", "/tmp/super_library"))))
 
-  val applicationId = new StubApplicationId(0, 1111L)
-  val attemptId = new StubApplicationAttemptId(applicationId, 0)
-  val attemptId1 = new StubApplicationAttemptId(applicationId, 111)
-  val attemptId2 = new StubApplicationAttemptId(applicationId, 222)
-  val attemptId3 = new StubApplicationAttemptId(applicationId, 333)
+  val applicationId = newApplicationId(1111L, 0)
+  val attemptId = newAttemptId(applicationId, 0)
+  val attemptId1 = newAttemptId(applicationId, 111)
+  val attemptId2 = newAttemptId(applicationId, 222)
+  val attemptId3 = newAttemptId(applicationId, 333)
 
   /**
    * Application name used in the app start event and tests
@@ -93,6 +92,14 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    * Time to wait for timeline scans before failing
    */
   val TIMELINE_SCAN_DELAY = 2000
+
+  def newApplicationId(clusterTimestamp: Long, id: Int): ApplicationId = {
+    ApplicationId.newInstance(clusterTimestamp, id)
+  }
+
+  def newAttemptId(appId: ApplicationId, attemptId: Int): ApplicationAttemptId = {
+    ApplicationAttemptId.newInstance(appId, attemptId)
+  }
 
   /**
    * Cancel a test if the network isn't there.

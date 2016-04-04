@@ -49,7 +49,7 @@ class TimelineStoreSuite extends AbstractHistoryIntegrationTests {
     put(applicationId, true)
     requiredState(AppState.ACTIVE)
 
-    store.getAppState(new StubApplicationId(0, 1111L)) should be(AppState.ACTIVE)
+    store.getAppState(newApplicationId(1111L, 0)) should be(AppState.ACTIVE)
 
   }
 
