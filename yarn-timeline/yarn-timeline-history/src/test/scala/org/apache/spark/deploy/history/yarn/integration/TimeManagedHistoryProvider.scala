@@ -92,9 +92,9 @@ class TimeManagedHistoryProvider(
    * List spark applications
    * @return the list of running spark applications, which can then be filtered against
    */
-  override def listYarnSparkApplications(): Map[String, ApplicationReport] = {
+  override def listYarnSparkApplications(): Option[Map[String, ApplicationReport]] = {
     synchronized {
-      reportsToMap(runningApps)
+      Some(reportsToMap(runningApps))
     }
   }
 

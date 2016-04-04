@@ -198,6 +198,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   /**
    * List of applications. Initial result is empty.
    */
+  @volatile
   private var applications: ApplicationListingResults = EmptyListing
 
   /**
@@ -431,9 +432,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @return a list of applications
    */
   def getApplications: ApplicationListingResults = {
-    synchronized {
-      applications
-    }
+    applications
   }
 
   /**
@@ -442,9 +441,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * @param newVal new value
    */
   private def setApplications(newVal: ApplicationListingResults): Unit = {
-    synchronized {
-      applications = newVal
-    }
+    applications = newVal
   }
 
   /**
@@ -632,29 +629,27 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
           }
         }
         val results = listApplications(windowStart = nextWindowStart)
-        synchronized {
-          if (results.succeeded) {
-            // on a success, the existing application list is merged
-            // creating a new aggregate application list
-            logDebug(s"Listed application count: ${results.size}")
-            val merged = combineResults(history, results.applications)
-            logDebug(s"Existing count: ${history.size}; merged = ${merged.size} ")
-            val updated = if (livenessChecksEnabled) {
-              updateAppsFromYARN(merged)
-            } else {
-              merged
-            }
-            val sorted = sortApplicationsByStartTime(updated)
-            // and a final result
-            setApplications(new ApplicationListingResults(results.timestamp, sorted, None))
-            resetLastFailure()
-            metrics.refreshLastSuccessTime.time = refreshStartTime
-          } else {
-            // on a failure, the failure cause is updated
-            setLastFailure(results.failureCause.get, results.timestamp)
-            // and the failure counter
-            metrics.refreshFailedCount.inc()
-          }
+        val yarnApps = if (livenessChecksEnabled) {
+          listYarnSparkApplications()
+        } else {
+          None
+        }
+        if (results.succeeded) {
+          // on a success, the existing application list is merged
+          // creating a new aggregate application list
+          logDebug(s"Listed application count: ${results.size}")
+          val merged = combineResults(history, results.applications)
+          logDebug(s"Existing count: ${history.size}; merged = ${merged.size} ")
+          val sorted = sortApplicationsByStartTime(updateAppsFromYARN(merged, yarnApps))
+          // and a final result
+          setApplications(new ApplicationListingResults(results.timestamp, sorted, None))
+          resetLastFailure()
+          metrics.refreshLastSuccessTime.time = refreshStartTime
+        } else {
+          // on a failure, the failure cause is updated
+          setLastFailure(results.failureCause.get, results.timestamp)
+          // and the failure counter
+          metrics.refreshFailedCount.inc()
         }
         results
       } finally {
@@ -947,12 +942,18 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    *
    * @return the list of running spark applications, which can then be filtered against
    */
-  private[yarn] def listYarnSparkApplications(): Map[String, ApplicationReport] = {
+  private[yarn] def listYarnSparkApplications(): Option[Map[String, ApplicationReport]] = {
     if (isYarnClientRunning) {
-      val reports = yarnClient.getApplications(Set(SPARK_YARN_APPLICATION_TYPE).asJava).asScala
-      reportsToMap(reports)
+      try {
+        val reports = yarnClient.getApplications(Set(SPARK_YARN_APPLICATION_TYPE).asJava).asScala
+        Some(reportsToMap(reports))
+      } catch {
+        case e: Exception =>
+          logDebug("Failed to communicate with RM", e)
+          None
+      }
     } else {
-      Map()
+      None
     }
   }
 
@@ -967,19 +968,21 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
 
   /**
    * Filter out all incomplete applications that are not in the list of running YARN applications.
-   *
+   * If no list is provided, all applications are returned.
    * This filters out apps which have failed without any notification event.
    *
    * @param apps list of applications
+   * @param yarnApps optional list of yarn applications.
    * @return list of apps which are marked as incomplete but no longer running
    */
-  private[yarn] def updateAppsFromYARN(apps: Seq[TimelineApplicationHistoryInfo])
+  private[yarn] def updateAppsFromYARN(apps: Seq[TimelineApplicationHistoryInfo],
+      yarnApps: Option[Map[String, ApplicationReport]])
     : Seq[TimelineApplicationHistoryInfo] = {
 
-    if (isYarnClientRunning) {
-      completeAppsFromYARN(apps, listYarnSparkApplications(), now(), DEFAULT_LIVENESS_WINDOW_I)
-    } else {
-      apps
+    yarnApps match {
+      case Some(yarnAppList) =>
+        completeAppsFromYARN(apps, yarnAppList, now(), DEFAULT_LIVENESS_WINDOW_I)
+      case None => apps
     }
   }
 
