@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.hadoop.yarn.api.records.{ApplicationReport, YarnApplicationState}
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
@@ -98,7 +99,6 @@ private[spark] object YarnProviderUtils extends Logging {
     if (info.attempts.isEmpty) {
       s"$core : no attempts"
     } else {
-      val attempt = info.attempts.head
       s"$core : " + info.attempts.map(describeAttempt).mkString("[{", "}, {", "}]")
     }
   }
@@ -502,7 +502,7 @@ private[spark] object YarnProviderUtils extends Logging {
             // briefly unlisted.
             val updated = lastUpdated(app)
             val humanTime = humanDateCurrentTZ(updated, "(never)")
-            logDebug(s"Incomplete app $id updated at ${humanTime}is not in list of running apps")
+            logDebug(s"Incomplete app $id updated at $humanTime is not in list of running apps")
             if ((currentTime - updated) > livenessWindow) {
               complete(app, None)
             } else {
@@ -514,4 +514,14 @@ private[spark] object YarnProviderUtils extends Logging {
     )
   }
 
+  /**
+   * Patch the YARN RM connection properties for the client running in the history
+   * server.
+   * - Disable history and timeline clients
+   * @param conf configuration to patch
+   */
+  def prepareRMClientOptions(conf: YarnConfiguration): Unit = {
+    conf.setBoolean(YarnConfiguration.APPLICATION_HISTORY_ENABLED, false)
+    conf.setBoolean(YarnConfiguration.TIMELINE_SERVICE_ENABLED, false)
+  }
 }

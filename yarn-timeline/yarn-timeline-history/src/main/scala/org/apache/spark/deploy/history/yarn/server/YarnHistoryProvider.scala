@@ -150,6 +150,18 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
   val _livenessChecksEnabled = sparkConf.getBoolean(OPTION_YARN_LIVENESS_CHECKS, true)
 
   /**
+   * Is the refresh thread executing its first listing?
+   * If so, skip the Resource Manager status check.
+   *
+   * This ensures that a newly started Spark History Server will
+   * rapidly generate the list of applications, even if the RM is
+   * down. If liveness checks are enabled, later refreshes will,
+   * query the RM, at the risk of blocking for 30 seconds or more
+   * if the RM is unreachable.
+   */
+  private var firstApplicationListing = new AtomicBoolean(true)
+
+  /**
    * Start time in milliseconds.
    */
   val serviceStartTime = clock.getTimeMillis()
@@ -628,8 +640,12 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
             Math.max(earliestWindow, inclusiveWindow)
           }
         }
+        // list the applications on the ATS server
         val results = listApplications(windowStart = nextWindowStart)
-        val yarnApps = if (livenessChecksEnabled) {
+
+        // query the Yarn application on all but the first listing attempt
+        // (if liveness checks are disabled, no listing will be returned)
+        val yarnApps = if (!firstApplicationListing.getAndSet(false)) {
           listYarnSparkApplications()
         } else {
           None
@@ -927,6 +943,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
     if (livenessChecksEnabled) {
       logDebug("Creating YARN Client")
       yarnClient = YarnClient.createYarnClient()
+      prepareRMClientOptions(yarnConf)
       yarnClient.init(yarnConf)
       yarnClient.start()
     } else {
@@ -1422,7 +1439,7 @@ private[spark] object YarnHistoryProvider {
    * its state mixed up on a listing operation.
    */
   val OPTION_EXPIRY_AGE = "spark.history.yarn.liveness.window"
-  val DEFAULT_LIVENESS_WINDOW_I = 10 * 60
+  val DEFAULT_LIVENESS_WINDOW_I = 30 * 60 * 1000
   val DEFAULT_LIVENESS_WINDOW = s"${DEFAULT_LIVENESS_WINDOW_I}s"
 
   /**
