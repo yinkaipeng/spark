@@ -37,6 +37,22 @@ private[spark] object YarnProviderUtils extends Logging {
    */
   val UNSET_TIME_VALUE = 0L
 
+  val ENTITY_ID_IS_SPARK_ATTEMPT_ID = false
+
+  /**
+   * Implement policy as to what to use in the spark history web Ui for attempts
+   * @param entityId the YARN history entity ID
+   * @param sparkAttemptId the spark attempt ID field
+   * @return
+   */
+  def toUIAttemptId(entityId: String, sparkAttemptId: Option[String]): Option[String] = {
+    if (!YarnProviderUtils.ENTITY_ID_IS_SPARK_ATTEMPT_ID && sparkAttemptId.isDefined) {
+      sparkAttemptId
+    } else {
+      Some(entityId)
+    }
+  }
+
   /**
    * Build an [[TimelineApplicationHistoryInfo]] instance from a [[TimelineEntity]].
    *
@@ -65,13 +81,9 @@ private[spark] object YarnProviderUtils extends Logging {
     val version = numberField(en, FIELD_ENTITY_VERSION, 0).longValue
 
     // the spark attempt ID; only unique amongst entities
-    val sparkAttemptId = stringFieldOption(en, FIELD_ATTEMPT_ID)
+   val sparkAttemptId = stringFieldOption(en, FIELD_ATTEMPT_ID)
 
-    val attemptId = if (sparkAttemptId.isDefined) {
-      sparkAttemptId
-    } else {
-      Some(entityId)
-    }
+   val attemptId = toUIAttemptId(entityId, sparkAttemptId)
 
     val attempt = new TimelineApplicationAttemptInfo(
       attemptId,

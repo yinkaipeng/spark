@@ -21,7 +21,7 @@ import java.net.URL
 
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
-import org.apache.spark.deploy.history.yarn.server.YarnHistoryProvider
+import org.apache.spark.deploy.history.yarn.server.{YarnHistoryProvider, YarnProviderUtils}
 import org.apache.spark.deploy.history.yarn.server.YarnProviderUtils._
 import org.apache.spark.deploy.history.yarn.testtools.YarnTestUtils._
 
@@ -53,6 +53,9 @@ class MultiAttemptWebSuite extends AbstractHistoryIntegrationTests {
       queryClient.getEntity(SPARK_EVENT_ENTITY_TYPE, attempt1)
       queryClient.getEntity(SPARK_EVENT_ENTITY_TYPE, attempt2)
 
+      val uiAttempt1 = YarnProviderUtils.toUIAttemptId(attempt1, Some(attempt1SparkId))
+      val uiAttempt2 = YarnProviderUtils.toUIAttemptId(attempt1, Some(attempt2SparkId))
+
       // at this point the ATS REST API is happy. Check the provider level
 
       // listing must eventually contain two attempts
@@ -62,8 +65,9 @@ class MultiAttemptWebSuite extends AbstractHistoryIntegrationTests {
       assert(isCompleted(appHistory), s"App is not completed $historyDescription")
 
       // resolve to entries
-      getAppUI(provider, expectedAppId, Some(attempt1SparkId))
-      getAppUI(provider, expectedAppId, Some(attempt2SparkId))
+
+      getAppUI(provider, expectedAppId, uiAttempt1)
+      getAppUI(provider, expectedAppId, uiAttempt2)
 
       // then look for the complete app on the web
       awaitURL(webUI, TEST_STARTUP_DELAY)
@@ -71,21 +75,36 @@ class MultiAttemptWebSuite extends AbstractHistoryIntegrationTests {
       describe("Awaiting REST UI to show app")
       val connector = createUrlConnector(conf)
       awaitHistoryRestUIListSize(connector, webUI, 1, true, TEST_STARTUP_DELAY)
-      val appPath = s"/history/$expectedAppId/$attempt1SparkId"
-      // GET the app
-      val appURL = new URL(webUI, appPath)
-      val appUI = connector.execHttpOperation("GET", appURL, null, "")
-      val appUIBody = appUI.responseBody
-      logInfo(s"Application\n$appUIBody")
-      assertContains(appUIBody, APP_NAME)
-      connector.execHttpOperation("GET", new URL(appURL, s"$appPath/jobs"), null, "")
-      connector.execHttpOperation("GET", new URL(appURL, s"$appPath/stages"), null, "")
-      connector.execHttpOperation("GET", new URL(appURL, s"$appPath/storage"), null, "")
-      connector.execHttpOperation("GET", new URL(appURL, s"$appPath/environment"), null, "")
-      connector.execHttpOperation("GET", new URL(appURL, s"$appPath/executors"), null, "")
+     // val appPath = s"/history/$expectedAppId/$attempt1SparkId"
+      // GET the attempt
+      def loadAttempt(appPath: String) = {
+        val appURL = new URL(webUI, appPath)
+        val appUI = connector.execHttpOperation("GET", appURL, null, "")
+        val appUIBody = appUI.responseBody
+        logInfo(s"Application\n$appUIBody")
+        assertContains(appUIBody, APP_NAME)
+        connector.execHttpOperation("GET", new URL(appURL, s"$appPath/jobs"), null, "")
+        connector.execHttpOperation("GET", new URL(appURL, s"$appPath/stages"), null, "")
+        connector.execHttpOperation("GET", new URL(appURL, s"$appPath/storage"), null, "")
+        connector.execHttpOperation("GET", new URL(appURL, s"$appPath/environment"), null, "")
+        connector.execHttpOperation("GET", new URL(appURL, s"$appPath/executors"), null, "")
+      }
 
+      loadAttempt(s"/history/$expectedAppId/${uiAttempt1.get}")
+      loadAttempt(s"/history/$expectedAppId/${uiAttempt2.get}")
       describe("looking at REST UI")
       awaitHistoryRestUIContainsApp(connector, webUI, expectedAppId, true, TEST_STARTUP_DELAY)
+
+      awaitURL(webUI, TEST_STARTUP_DELAY)
+
+      val completeBody = awaitURLDoesNotContainText(connector, webUI,
+        no_completed_applications, TEST_STARTUP_DELAY)
+      logInfo(s"GET /\n$completeBody")
+      // look for the link
+      assertContains(completeBody, s"${uiAttempt1.get}</a>")
+      assertContains(completeBody, s"$expectedAppId/${uiAttempt1.get}")
+      assertContains(completeBody, s"${uiAttempt2.get}</a>")
+      assertContains(completeBody, s"$expectedAppId/${uiAttempt2.get}")
     }
 
     webUITest("submit and check", submitAndCheck)
