@@ -35,101 +35,34 @@ import java.util.SortedSet;
  * This class is designed to be loaded in the YARN application timeline server.
  * <i>Important:</i> this must not include any dependencies which aren't already on the ATS
  * classpath. No references to Spark classes, use of Scala etc.
- * This is why it is in Java
+ * This is why it is in Java, and in its own package.
  */
 public class SparkATSPlugin extends TimelineEntityGroupPlugin {
 
   private static final Logger LOG =
       LoggerFactory.getLogger(SparkATSPlugin.class);
 
+  /**
+   * Name of the entity type used to declare summary
+   * data of an application.
+   */
+  private static final String SPARK_SUMMARY_ENTITY_TYPE = "spark_event_v01";
 
   /**
-   * Name of the entity type used to declare spark Applications.
+   * Name of the entity type used to publish full
+   * application details.
    */
-  public static final String SPARK_EVENT_ENTITY_TYPE = "spark_event_v01";
-
-  /**
-   * Name of the entity type used to declare spark Applications.
-   */
-  public static final String SPARK_EVENT_GROUP_TYPE = "spark_event_group_v01";
-
-  /**
-   * Domain ID.
-   */
-  public static final String DOMAIN_ID_PREFIX = "Spark_ATS_";
-
-  /**
-   * Primary key used for events
-   */
-  public static final String PRIMARY_KEY = "spark_application_entity";
-
-  /**
-   *  Entity `OTHER_INFO` field: start time
-   */
-  public static final String FIELD_START_TIME = "startTime";
-
-  /**
-   * Entity `OTHER_INFO` field: last updated time.
-   */
-  public static final String FIELD_LAST_UPDATED = "lastUpdated";
-
-  /**
-   * Entity `OTHER_INFO` field: end time. Not present if the app is running.
-   */
-  public static final String FIELD_END_TIME = "endTime";
-
-  /**
-   * Entity `OTHER_INFO` field: application name from context.
-   */
-  public static final String FIELD_APP_NAME = "appName";
-
-  /**
-   * Entity `OTHER_INFO` field: user.
-   */
-  public static final String FIELD_APP_USER = "appUser";
+  private static final String SPARK_DETAIL_ENTITY_TYPE = "spark_event_v01_detail";
 
   /**
    * Entity `OTHER_INFO` field: YARN application ID.
    */
-  public static final String FIELD_APPLICATION_ID = "applicationId";
+  private static final String FIELD_APPLICATION_ID = "applicationId";
 
   /**
    * Entity `OTHER_INFO` field: attempt ID from spark start event.
    */
-  public static final String FIELD_ATTEMPT_ID = "attemptId";
-
-  /**
-   * Entity `OTHER_INFO` field: a counter which is incremented whenever a new timeline entity
-   * is created in this JVM (hence, attempt). It can be used to compare versions of the
-   * current entity with any cached copy -it is less brittle than using timestamps.
-   */
-  public static final String FIELD_ENTITY_VERSION = "entityVersion";
-
-  /**
-   * Entity `OTHER_INFO` field: Spark version.
-   */
-  public static final String FIELD_SPARK_VERSION = "sparkVersion";
-
-  /**
-   * Entity filter field: to search for entities that have started.
-   */
-  public static final String FILTER_APP_START = "startApp";
-
-  /**
-   * Value of the `startApp` filter field.
-   */
-  public static final String FILTER_APP_START_VALUE = "SparkListenerApplicationStart";
-
-  /**
-   * Entity filter field: to search for entities that have ended.
-   */
-  public static final String FILTER_APP_END = "endApp";
-
-  /**
-   * Value of the `endApp`filter field.
-   */
-  public static final String FILTER_APP_END_VALUE = "SparkListenerApplicationEnd";
-
+  private static final String FIELD_ATTEMPT_ID = "attemptId";
 
   public SparkATSPlugin() {
     LOG.info("SparkATSPlugin");
@@ -142,18 +75,17 @@ public class SparkATSPlugin extends TimelineEntityGroupPlugin {
 
     Set<TimelineEntityGroupId> result = null;
     try {
-      if (entityType.equals(SPARK_EVENT_ENTITY_TYPE) && filter != null) {
+      if (entityType.equals(SPARK_DETAIL_ENTITY_TYPE) && filter != null) {
         String value = filter.getValue().toString();
         switch (filter.getName()) {
           case FIELD_APPLICATION_ID:
-            result = toEntityGroupId(value);
+            result = toGroupId(value);
             break;
           case FIELD_ATTEMPT_ID:
-            result = toGroupId(entityToApplicationId(value));
+            result = toGroupId(value);
             break;
           default:
             // no-op
-
         }
       }
     } catch (Exception e) {
@@ -167,12 +99,39 @@ public class SparkATSPlugin extends TimelineEntityGroupPlugin {
   @Override
   public Set<TimelineEntityGroupId> getTimelineEntityGroupId(String entityId,
       String entityType) {
-    LOG.debug("getTimelineEntityGroupId({}}, {}})", entityId, entityType );
+    LOG.debug("getTimelineEntityGroupId({}}, {}})", entityId, entityType);
 
-    if (entityType.equals(SPARK_EVENT_ENTITY_TYPE)) {
-      return toGroupId(entityToApplicationId(entityId));
-    } else {
+    switch (entityType) {
+      case SPARK_SUMMARY_ENTITY_TYPE:
+        // return null for summary data
+        return null;
+      case SPARK_DETAIL_ENTITY_TYPE:
+        // extract the ID
+        return toGroupId(entityId);
+      default:
       return null;
+    }
+  }
+
+  @Override
+  public Set<TimelineEntityGroupId> getTimelineEntityGroupId(String entityType,
+      SortedSet<String> entityIds, Set<String> eventTypes) {
+    LOG.debug("getTimelineEntityGroupId({}", entityType);
+    switch (entityType) {
+      case SPARK_SUMMARY_ENTITY_TYPE:
+        // return null for summary data
+        return null;
+
+      case SPARK_DETAIL_ENTITY_TYPE:
+        // return the groups, ignore event types
+        Set<TimelineEntityGroupId> result = new HashSet<>();
+        for (String entityId : entityIds) {
+          result.addAll(toGroupId(entityId));
+        }
+        return result;
+
+      default:
+        return null;
     }
   }
 
@@ -192,25 +151,20 @@ public class SparkATSPlugin extends TimelineEntityGroupPlugin {
     }
   }
 
-  @Override
-  public Set<TimelineEntityGroupId> getTimelineEntityGroupId(String entityType,
-      SortedSet<String> entityIds, Set<String> eventTypes) {
-    LOG.debug("getTimelineEntityGroupId($entityType)");
-
-    return null;
-  }
-
-  private Set<TimelineEntityGroupId> toEntityGroupId(String applicationId) {
-    return toGroupId(ConverterUtils.toApplicationId(applicationId));
-  }
-
   private Set<TimelineEntityGroupId> toGroupId(ApplicationId applicationId) {
     TimelineEntityGroupId groupId = TimelineEntityGroupId.newInstance(
         applicationId,
-        SPARK_EVENT_GROUP_TYPE);
+        applicationId.toString());
     LOG.debug("mapped {} to {}, ", applicationId, groupId);
     Set<TimelineEntityGroupId> result = new HashSet<>();
     result.add(groupId);
     return result;
   }
+
+  private Set<TimelineEntityGroupId> toGroupId(String entityId) {
+    ApplicationId applicationId = entityToApplicationId(entityId);
+    LOG.debug("Entity {} -> application {}", entityId, applicationId);
+    return toGroupId(applicationId);
+  }
+
 }

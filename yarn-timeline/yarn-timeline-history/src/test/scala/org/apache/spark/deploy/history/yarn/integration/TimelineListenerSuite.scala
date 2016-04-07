@@ -109,7 +109,7 @@ class TimelineListenerSuite extends AbstractHistoryIntegrationTests {
     provider.getAppUI(info.id, None)
 
     // hit the underlying attempt
-    val timelineEntity = queryClient.getEntity(SPARK_SUMMARY_ENTITY_TYPE, attempt.entityId)
+    val timelineEntity = queryClient.getEntity(SPARK_DETAIL_ENTITY_TYPE, attempt.entityId)
     val events = timelineEntity.getEvents.asScala.toList
     assertResult(2, s"number of events in ${describeEntity(timelineEntity)}") {
       events.size

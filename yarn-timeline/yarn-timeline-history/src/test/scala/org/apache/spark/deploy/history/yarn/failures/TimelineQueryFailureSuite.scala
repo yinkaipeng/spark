@@ -85,7 +85,7 @@ class TimelineQueryFailureSuite extends AbstractHistoryIntegrationTests {
     try {
       provider = createHistoryProvider(new SparkConf()).asInstanceOf[FailingYarnHistoryProvider]
       provider.setEndpointChecked(true)
-      val entity = provider.getTimelineEntity("app1")
+      val entity = provider.getTimelineEntity("app1", false)
       fail(s"Expected failure, got $entity")
     } catch {
       case ioe: NoRouteToHostException =>

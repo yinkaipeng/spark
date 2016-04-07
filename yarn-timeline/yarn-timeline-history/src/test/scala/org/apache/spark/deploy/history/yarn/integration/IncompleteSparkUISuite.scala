@@ -89,9 +89,6 @@ class IncompleteSparkUISuite extends AbstractHistoryIntegrationTests with Eventu
       awaitHistoryRestUIContainsApp(connector, webUI, webAppId, true, TEST_STARTUP_DELAY)
       awaitHistoryRestUIListSize(connector, webUI, 0, false, TEST_STARTUP_DELAY)
 
-      // the underlying timeline entity
-      val entity = provider.getTimelineEntity(yarnAttemptId)
-
       val history = awaitApplicationListingSize(provider, 1, TEST_STARTUP_DELAY).head
 
       val historyDescription = describeApplicationHistoryInfo(history)

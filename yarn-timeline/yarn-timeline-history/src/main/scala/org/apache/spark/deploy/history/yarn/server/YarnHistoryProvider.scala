@@ -721,14 +721,20 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * Look up the timeline entity.
    *
    * @param entityId application ID
+   * @param useDetailType request ATS 1.5 detail
    * @return the entity associated with the given application
    * @throws FileNotFoundException if no entry was found
    */
-  def getTimelineEntity(entityId: String): TimelineEntity = {
-    logDebug(s"GetTimelineEntity $entityId")
+  def getTimelineEntity(entityId: String, useDetailType: Boolean): TimelineEntity = {
+    logDebug(s"GetTimelineEntity $entityId detail=$useDetailType")
+    val etype = if (useDetailType) {
+      SPARK_DETAIL_ENTITY_TYPE
+    } else {
+      SPARK_SUMMARY_ENTITY_TYPE
+    }
     metrics.time(metrics.attemptFetchDuration) {
       maybeCheckEndpoint()
-      getTimelineQueryClient.getEntity(SPARK_SUMMARY_ENTITY_TYPE, entityId)
+      getTimelineQueryClient.getEntity(etype, entityId)
     }
   }
 
@@ -774,10 +780,11 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
 
     val entityId = attemptInfo.entityId
     val appInfo = foundApp.get
+    val useDetailType = attemptInfo.groupId.isDefined
 
     metrics.time(metrics.attemptLoadDuration) {
       try {
-        val attemptEntity = getTimelineEntity(entityId)
+        val attemptEntity = getTimelineEntity(entityId, useDetailType)
         if (log.isDebugEnabled) {
           logDebug(describeEntity(attemptEntity))
         }

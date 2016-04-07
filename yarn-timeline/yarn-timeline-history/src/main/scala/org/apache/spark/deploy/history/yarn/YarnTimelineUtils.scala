@@ -341,7 +341,9 @@ private[yarn] object YarnTimelineUtils extends Logging {
    * @return
    */
   def createYarnTimelineClient(hadoopConfiguration: Configuration): TimelineClient = {
-    val client = TimelineClient.createTimelineClient
+    val client = TimelineClient.createTimelineClient()
+    hadoopConfiguration.set("yarn.timeline-service.entity-group-fs-store.summary-entity-types",
+      YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
     client.init(hadoopConfiguration)
     client.start()
     client

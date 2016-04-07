@@ -444,8 +444,8 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       + s" API version=$version; domain ID = $domainId; client=${_timelineClient.toString}")
     if (timelineVersion1_5) {
       groupInstanceId = Some(applicationId.toString)
-      groupId = Some(TimelineEntityGroupId.newInstance(applicationId, groupInstanceId.get ))
-      logInfo(s"GroupID=$groupId")
+      groupId = Some(TimelineEntityGroupId.newInstance(applicationId, groupInstanceId.get))
+      logDebug(s"GroupID=$groupId")
     }
     // declare that the processing is started
     postingQueueStopped.set(false)
@@ -475,6 +475,8 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
        | state=$serviceState;
        | endpoint=$timelineWebappAddress;
        | bonded to ATS=$bondedToATS;
+       | ATS v1.5=$timelineVersion1_5
+       | groupId=$groupId
        | listening=$listening;
        | batchSize=$batchSize;
        | postQueueLimit=$postQueueLimit;
@@ -714,10 +716,6 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    * Publish next set of pending events if there are events to publish,
    * and the application has been recorded as started.
    *
-   * Builds the next event to push onto [[postingQueue]]; resets
-   * the current [[pendingEvents]] list and then adds a [[PostEntity]]
-   * operation to the queue.
-   *
    * @return true if another entity was queued
    */
   private def publishPendingEvents(): Boolean = {
@@ -730,18 +728,31 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       // -as the app name is needed for the the publishing.
       metrics.flushCount.inc()
       val t = now()
-      val timelineEntity = createTimelineEntity(true, t)
-
-
+      val detail = createTimelineEntity(false, t)
       // copy in pending events and then reset the list
       pendingEvents.synchronized {
-        pendingEvents.foreach(timelineEntity.addEvent)
+        pendingEvents.foreach(detail.addEvent)
         pendingEvents = new mutable.MutableList[TimelineEvent]()
       }
-      queueForPosting(timelineEntity)
+      queueForPosting(detail)
+
+      if (timelineVersion1_5) {
+        //v1.5: add the summary
+        val summary = createTimelineEntity(true, t)
+        queueForPosting(summary)
+      }
       true
     } else {
       false
+    }
+  }
+
+
+  def createEntityType(isSummaryEntity: Boolean): String = {
+    if (!timelineVersion1_5 || isSummaryEntity) {
+      SPARK_SUMMARY_ENTITY_TYPE
+    } else {
+      SPARK_DETAIL_ENTITY_TYPE
     }
   }
 
@@ -752,13 +763,8 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    * @return
    */
   def createTimelineEntity(isSummaryEntity: Boolean, timestamp: Long): TimelineEntity = {
-    val entityType = if (isSummaryEntity) {
-      SPARK_SUMMARY_ENTITY_TYPE
-    } else {
-      SPARK_DETAIL_ENTITY_TYPE
-    }
     YarnTimelineUtils.createTimelineEntity(
-      entityType,
+      createEntityType(isSummaryEntity),
       applicationId,
       attemptId,
       sparkApplicationId,
@@ -899,9 +905,10 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   private def postOneEntity(entity: TimelineEntity): Option[Exception] = {
     domainId.foreach(entity.setDomainId)
     val entityDescription = describeEntity(entity)
-    logInfo(s"About to POST entity ${entity.getEntityId} with ${entity.getEvents.size()} events" +
+    logInfo(s"About to publish entity ${entity.getEntityType}/${entity.getEntityId}" +
+        s" with ${entity.getEvents.size()} events" +
         s" to timeline service $timelineWebappAddress")
-    logDebug(s"About to POST $entityDescription")
+    logDebug(s"About to publish $entityDescription")
     val timeContext = metrics.postOperationTimer.time()
     metrics.entityPostAttempts.inc()
     try {
@@ -912,7 +919,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       }
       val errors = response.getErrors
       if (errors.isEmpty) {
-        logDebug(s"entity successfully posted")
+        logDebug(s"entity successfully published")
         metrics.entityPostSuccesses.inc()
         metrics.eventsSuccessfullyPosted.inc(entity.getEvents.size())
         // and flush the timeline
@@ -921,7 +928,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
         // The ATS service rejected the request at the API level.
         // this is something we assume cannot be re-tried
         metrics.entityPostRejections.inc()
-        logError(s"Failed to post $entityDescription")
+        logError(s"Failed to publish $entityDescription")
         errors.asScala.foreach { err =>
           logError(describeError(err))
         }
@@ -1295,14 +1302,16 @@ private[yarn] class HistoryMetrics(owner: YarnHistoryService) extends ExtendedMe
 private[spark] object YarnHistoryService {
 
   /**
-   * Name of the entity type used to declare spark Applications.
+   * Name of the entity type used to declare summary
+   * data of an application.
    */
   val SPARK_SUMMARY_ENTITY_TYPE = "spark_event_v01"
 
   /**
-   * Name of the entity type used to declare spark Applications.
+   * Name of the entity type used to publish full
+   * application details.
    */
-  val SPARK_DETAIL_ENTITY_TYPE = "spark_event_detail_v01"
+  val SPARK_DETAIL_ENTITY_TYPE = "spark_event_v01_detail"
 
   /**
    * Domain ID.
@@ -1492,7 +1501,7 @@ private[spark] object YarnHistoryService {
    * This is a flag for testing: disables metric registration and so avoids stack traces
    * from the registration code if there is more than one service instance trying to register.
    *
-   * @param enabled
+   * @param enabled new value
    */
   private[yarn] def enableMetricRegistration(enabled: Boolean): Unit = {
    metricsEnabled = enabled
