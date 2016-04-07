@@ -103,7 +103,7 @@ class ScaleSuite extends AbstractHistoryIntegrationTests
       // validate ATS has it
       val queryClient = createTimelineQueryClient()
       val timelineEntities = awaitSequenceSize(1, "applications on ATS", TIMELINE_SCAN_DELAY,
-        () => queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE))
+        () => queryClient.listEntities(SPARK_SUMMARY_ENTITY_TYPE))
       val entry = timelineEntities.head
       assert(expectedAttemptId === entry.getEntityId,
         s"head entry id!=$expectedAttemptId: ${describeEntity(entry)} ")

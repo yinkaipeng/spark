@@ -267,7 +267,7 @@ abstract class AbstractHistoryIntegrationTests
 
   def dumpTimelineEntities(queryClient: TimelineQueryClient)(): Unit = {
     logError("-- Dumping timeline entities --")
-    val entities = queryClient.listEntities(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
+    val entities = queryClient.listEntities(YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
     entities.foreach { e =>
       logError(describeEntity(e))
     }
@@ -695,7 +695,7 @@ abstract class AbstractHistoryIntegrationTests
   }
 
   def listEntities(qc: TimelineQueryClient) = {
-    qc.listEntities(SPARK_EVENT_ENTITY_TYPE,
+    qc.listEntities(SPARK_SUMMARY_ENTITY_TYPE,
       fields = Seq(PRIMARY_FILTERS, OTHER_INFO))
   }
 
@@ -880,7 +880,7 @@ abstract class AbstractHistoryIntegrationTests
 
     conf.set(TIMELINE_SERVICE_ENTITYGROUP_FS_STORE_SUMMARY_ENTITY_TYPES,
       "YARN_APPLICATION,YARN_APPLICATION_ATTEMPT,YARN_CONTAINER,"
-          + YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
+          + YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
     // reset current app map
     FSTimelineStoreForTesting.reset()
   }

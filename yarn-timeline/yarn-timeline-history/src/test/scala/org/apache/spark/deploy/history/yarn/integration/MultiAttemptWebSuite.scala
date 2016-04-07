@@ -50,8 +50,8 @@ class MultiAttemptWebSuite extends AbstractHistoryIntegrationTests {
       assert(attempt1 === head.getEntityId || attempt2 === head.getEntityId,
         s"wrong entity id in ${describeEntity(head)}")
 
-      queryClient.getEntity(SPARK_EVENT_ENTITY_TYPE, attempt1)
-      queryClient.getEntity(SPARK_EVENT_ENTITY_TYPE, attempt2)
+      queryClient.getEntity(SPARK_SUMMARY_ENTITY_TYPE, attempt1)
+      queryClient.getEntity(SPARK_SUMMARY_ENTITY_TYPE, attempt2)
 
       val uiAttempt1 = YarnProviderUtils.toUIAttemptId(attempt1, Some(attempt1SparkId))
       val uiAttempt2 = YarnProviderUtils.toUIAttemptId(attempt1, Some(attempt2SparkId))

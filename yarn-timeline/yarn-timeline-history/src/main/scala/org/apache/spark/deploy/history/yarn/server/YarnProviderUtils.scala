@@ -81,9 +81,10 @@ private[spark] object YarnProviderUtils extends Logging {
     val version = numberField(en, FIELD_ENTITY_VERSION, 0).longValue
 
     // the spark attempt ID; only unique amongst entities
-   val sparkAttemptId = stringFieldOption(en, FIELD_ATTEMPT_ID)
+    val sparkAttemptId = stringFieldOption(en, FIELD_ATTEMPT_ID)
+    val groupId = stringFieldOption(en, FIELD_GROUP_INSTANCE_ID)
 
-   val attemptId = toUIAttemptId(entityId, sparkAttemptId)
+    val attemptId = toUIAttemptId(entityId, sparkAttemptId)
 
     val attempt = new TimelineApplicationAttemptInfo(
       attemptId,
@@ -94,7 +95,8 @@ private[spark] object YarnProviderUtils extends Logging {
       completed,
       entityId,
       sparkAttemptId,
-      version)
+      version,
+      groupId)
 
     // return the single attempt which can be built from this entity
     new TimelineApplicationHistoryInfo(appId, name, attempt :: Nil)
@@ -141,7 +143,8 @@ private[spark] object YarnProviderUtils extends Logging {
    */
   def combineResults(
       original: Seq[TimelineApplicationHistoryInfo],
-      latest: Seq[TimelineApplicationHistoryInfo]): Seq[TimelineApplicationHistoryInfo] = {
+      latest: Seq[TimelineApplicationHistoryInfo])
+      : Seq[TimelineApplicationHistoryInfo] = {
     // build map of original
     val results = new scala.collection.mutable.HashMap[String, TimelineApplicationHistoryInfo]
     original.map((elt) => results.put(elt.id, elt))
@@ -224,8 +227,8 @@ private[spark] object YarnProviderUtils extends Logging {
    * @param attempt2 attempt 2
    * @return the preferred outcome
    */
-  def mostRecentAttempt
-  (attempt1: TimelineApplicationAttemptInfo,
+  def mostRecentAttempt(
+      attempt1: TimelineApplicationAttemptInfo,
       attempt2: TimelineApplicationAttemptInfo): TimelineApplicationAttemptInfo = {
     (attempt1, attempt2) match {
       case (a1, a2) if a1.version > 0 && a2.version > 0 =>
@@ -477,7 +480,9 @@ private[spark] object YarnProviderUtils extends Logging {
         incomplete.sparkUser,
         true,
         incomplete.entityId,
-        incomplete.sparkAttemptId)
+        incomplete.sparkAttemptId,
+        incomplete.version,
+        incomplete.groupId)
       logDebug(s"Marking application ${appInfo.id} completed: ${describeAttempt(incomplete)}")
       new TimelineApplicationHistoryInfo(appInfo.id, appInfo.name, updated :: appInfo.attempts.tail)
     }

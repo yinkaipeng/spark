@@ -278,7 +278,7 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
     val entity = new TimelineEntity
     entity.setStartTime(time)
     entity.setEntityId(APP_ID)
-    entity.setEntityType(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
+    entity.setEntityType(YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
     entity
   }
 

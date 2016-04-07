@@ -56,17 +56,17 @@ class TimelineListenerSuite extends AbstractHistoryIntegrationTests {
     awaitSequenceSize(1,
       s"entities listed by timeline client $queryClient",
       TEST_STARTUP_DELAY,
-      () => queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE))
-    assertListSize(queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE,
+      () => queryClient.listEntities(SPARK_SUMMARY_ENTITY_TYPE))
+    assertListSize(queryClient.listEntities(SPARK_SUMMARY_ENTITY_TYPE,
       primaryFilter = appStartFilter),
       1,
       "entities listed by app start filter")
-    assertListSize(queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE,
+    assertListSize(queryClient.listEntities(SPARK_SUMMARY_ENTITY_TYPE,
       primaryFilter = appEndFilter),
       1,
       "entities listed by app end filter")
 
-    val timelineEntities = queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE,
+    val timelineEntities = queryClient.listEntities(SPARK_SUMMARY_ENTITY_TYPE,
                                 primaryFilter = appEndFilter)
     assertListSize(timelineEntities, 1, "entities listed by app end filter")
     val expectedAppId = historyService.applicationId.toString
@@ -77,7 +77,7 @@ class TimelineListenerSuite extends AbstractHistoryIntegrationTests {
       s"no entity of id $expectedEntityId - found $entryDetails") {
       entry.getEntityId
     }
-    queryClient.getEntity(SPARK_EVENT_ENTITY_TYPE, expectedEntityId)
+    queryClient.getEntity(SPARK_SUMMARY_ENTITY_TYPE, expectedEntityId)
 
     // here the events should be in the system
     val provider = new YarnHistoryProvider(sc.conf)
@@ -109,7 +109,7 @@ class TimelineListenerSuite extends AbstractHistoryIntegrationTests {
     provider.getAppUI(info.id, None)
 
     // hit the underlying attempt
-    val timelineEntity = queryClient.getEntity(SPARK_EVENT_ENTITY_TYPE, attempt.entityId)
+    val timelineEntity = queryClient.getEntity(SPARK_SUMMARY_ENTITY_TYPE, attempt.entityId)
     val events = timelineEntity.getEvents.asScala.toList
     assertResult(2, s"number of events in ${describeEntity(timelineEntity)}") {
       events.size
@@ -121,7 +121,7 @@ class TimelineListenerSuite extends AbstractHistoryIntegrationTests {
     assert(started.time === fetchedStartEvent.time, "start time")
 
     // direct retrieval using Spark context attempt
-    queryClient.getEntity(SPARK_EVENT_ENTITY_TYPE, expectedEntityId)
+    queryClient.getEntity(SPARK_SUMMARY_ENTITY_TYPE, expectedEntityId)
 
   }
 

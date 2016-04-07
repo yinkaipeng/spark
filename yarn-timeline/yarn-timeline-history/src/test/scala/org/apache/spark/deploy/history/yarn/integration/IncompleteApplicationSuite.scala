@@ -89,7 +89,7 @@ class IncompleteApplicationSuite extends AbstractHistoryIntegrationTests {
       assert(attemptId === timelineEntities.head.getEntityId,
         "attemptId === timelineEntities.head.getEntityId")
 
-      queryClient.getEntity(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE, attemptId)
+      queryClient.getEntity(YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE, attemptId)
 
       // at this point the REST UI is happy. Check the provider level
 

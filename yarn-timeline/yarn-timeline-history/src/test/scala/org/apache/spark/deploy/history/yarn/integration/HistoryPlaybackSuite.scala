@@ -64,13 +64,13 @@ class HistoryPlaybackSuite extends AbstractHistoryIntegrationTests {
 
       val connector = createUrlConnector()
       val queryClient = historyProvider.getTimelineQueryClient
- val timelineEntities = queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE)
+      val timelineEntities = queryClient.listEntities(SPARK_SUMMARY_ENTITY_TYPE)
       assert(EntityCount === timelineEntities.size,
         s"entities listed count = ${timelineEntities.size}")
       val yarnAppId = "application_1443668830514_0008"
 
       assertNotNull(yarnAppId, s"Null entityId from $yarnAppId")
-      val entity = queryClient.getEntity(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE, yarnAppId)
+      val entity = queryClient.getEntity(YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE, yarnAppId)
       assertNotNull(entity, s"Null entity from $yarnAppId")
 
       // listing

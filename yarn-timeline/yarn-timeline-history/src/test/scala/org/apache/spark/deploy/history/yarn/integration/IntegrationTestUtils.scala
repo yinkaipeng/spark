@@ -336,7 +336,7 @@ private[yarn] trait IntegrationTestUtils {
     def eventCount = if (entity == null) -1 else entity.getEvents.size ()
     def listingProbe(): Outcome = {
       entity = queryClient
-          .getEntity(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE, attemptId)
+          .getEntity(YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE, attemptId)
       outcomeFromBool(eventCount == size)
     }
     def failure(outcome: Outcome, i: Int, b: Boolean): Unit = {

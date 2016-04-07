@@ -401,7 +401,7 @@ private[yarn] object YarnTimelineUtils extends Logging {
    * @return
    */
   def timelineWebappUri(conf: Configuration): URI = {
-    timelineWebappUri(conf, YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
+    timelineWebappUri(conf, YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
   }
 
   /**
@@ -698,7 +698,7 @@ private[yarn] object YarnTimelineUtils extends Logging {
   /**
    * Generate the entity ID from the application and attempt ID.
    * Current policy is to use the attemptId, falling back to the YARN application ID.
-   *
+   * @param entityType the entity type to declare the entity as
    * @param appId yarn application ID as passed in during creation
    * @param attemptId yarn application ID
    * @param sparkApplicationId application ID as submitted in the application start event
@@ -711,22 +711,26 @@ private[yarn] object YarnTimelineUtils extends Logging {
    * @return the timeline entity
    */
   def createTimelineEntity(
+      entityType: String,
       appId: ApplicationId,
       attemptId: Option[ApplicationAttemptId],
       sparkApplicationId: Option[String],
       sparkApplicationAttemptId: Option[String],
       appName: String,
       userName: String,
-      startTime: Long, endTime: Long,
-      lastUpdated: Long): TimelineEntity = {
+      startTime: Long,
+      endTime: Long,
+      lastUpdated: Long,
+      groupId: Option[String]): TimelineEntity = {
+    require(entityType != null, "no entityType Id")
     require(appId != null, "no application Id")
     require(appName != null, "no application name")
     require(startTime > 0, "no start time")
 
-    val entity: TimelineEntity = new TimelineEntity()
+    val entity = new TimelineEntity()
     val entityId = buildEntityId(appId, attemptId)
     val appIdField = buildApplicationIdField(appId)
-    entity.setEntityType(SPARK_EVENT_ENTITY_TYPE)
+    entity.setEntityType(entityType)
     entity.setEntityId(entityId)
     // add app/attempt ID information
     addFilterAndField(entity, FIELD_APPLICATION_ID, appIdField)
@@ -735,6 +739,9 @@ private[yarn] object YarnTimelineUtils extends Logging {
     entity.addOtherInfo(FIELD_ATTEMPT_ID,
       buildApplicationAttemptIdField(sparkApplicationAttemptId))
     entity.addOtherInfo(FIELD_APP_NAME, appName)
+    groupId.foreach { id =>
+      entity.addOtherInfo(FIELD_GROUP_INSTANCE_ID, id)
+    }
     entity.addOtherInfo(FIELD_SPARK_VERSION, org.apache.spark.SPARK_VERSION)
     entity.addOtherInfo(FIELD_ENTITY_VERSION, entityVersionCounter.getAndIncrement())
     started(entity, startTime)

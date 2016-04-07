@@ -53,33 +53,33 @@ class TimelineQueryClientSuite extends AbstractHistoryIntegrationTests {
   }
 
   test("ListNoEntityTypes") {
-    assertNilQuery(SPARK_EVENT_ENTITY_TYPE)
+    assertNilQuery(SPARK_SUMMARY_ENTITY_TYPE)
   }
 
   test("List LAST_EVENT_ONLY") {
-    assertNilQuery(SPARK_EVENT_ENTITY_TYPE, Seq(LAST_EVENT_ONLY))
+    assertNilQuery(SPARK_SUMMARY_ENTITY_TYPE, Seq(LAST_EVENT_ONLY))
   }
 
   test("List RELATED_ENTITIES") {
-    assertNilQuery(SPARK_EVENT_ENTITY_TYPE, Seq(RELATED_ENTITIES))
+    assertNilQuery(SPARK_SUMMARY_ENTITY_TYPE, Seq(RELATED_ENTITIES))
   }
 
   test("List LAST_EVENT_ONLY | PRIMARY_FILTERS") {
-    assertNil(queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE,
+    assertNil(queryClient.listEntities(SPARK_SUMMARY_ENTITY_TYPE,
         fields = Seq(LAST_EVENT_ONLY, TimelineQueryClient.PRIMARY_FILTERS)),
       "List LAST_EVENT_ONLY | PRIMARY_FILTERS")
   }
 
   test("List OTHER_INFO") {
-    assertNilQuery(SPARK_EVENT_ENTITY_TYPE, Seq(OTHER_INFO))
+    assertNilQuery(SPARK_SUMMARY_ENTITY_TYPE, Seq(OTHER_INFO))
   }
 
   test("List PRIMARY_FILTERS") {
-    assertNilQuery(SPARK_EVENT_ENTITY_TYPE, Seq(PRIMARY_FILTERS))
+    assertNilQuery(SPARK_SUMMARY_ENTITY_TYPE, Seq(PRIMARY_FILTERS))
   }
 
   test("List EVENTS") {
-    assertNilQuery(SPARK_EVENT_ENTITY_TYPE, Seq(EVENTS))
+    assertNilQuery(SPARK_SUMMARY_ENTITY_TYPE, Seq(EVENTS))
   }
 
   test("Ls command") {
@@ -95,20 +95,20 @@ class TimelineQueryClientSuite extends AbstractHistoryIntegrationTests {
     val te = new TimelineEntity
     te.setStartTime(now())
     te.setEntityId(applicationId.toString)
-    te.setEntityType(SPARK_EVENT_ENTITY_TYPE)
+    te.setEntityType(SPARK_SUMMARY_ENTITY_TYPE)
     te.addPrimaryFilter(FILTER_APP_START, FILTER_APP_START_VALUE)
     completed(applicationId)
 
     val timelineClient = historyService.timelineClient
     timelineClient.putEntities(te)
     val timelineEntities = awaitSequenceSize(1, "applications on ATS", TIMELINE_SCAN_DELAY,
-      () => queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE))
+      () => queryClient.listEntities(SPARK_SUMMARY_ENTITY_TYPE))
     assertEntitiesEqual(te, timelineEntities.head)
 
-    val entity2 = queryClient.getEntity(SPARK_EVENT_ENTITY_TYPE, te.getEntityId() )
+    val entity2 = queryClient.getEntity(SPARK_SUMMARY_ENTITY_TYPE, te.getEntityId() )
     assertEntitiesEqual(te, entity2)
 
-    val listing2 = queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE,
+    val listing2 = queryClient.listEntities(SPARK_SUMMARY_ENTITY_TYPE,
         primaryFilter = Some((FILTER_APP_START, FILTER_APP_START_VALUE)))
     assert(1 === listing2.size, s"filtering on $FILTER_APP_START:$FILTER_APP_START_VALUE")
     // filtered query

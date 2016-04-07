@@ -60,7 +60,7 @@ class TimelineQueryFailureSuite extends AbstractHistoryIntegrationTests {
   test("ClientListFails") {
     val failingClient = FailingYarnHistoryProvider.createQueryClient()
     intercept[NoRouteToHostException] {
-      failingClient.listEntities(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
+      failingClient.listEntities(YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
     }
   }
 
@@ -72,7 +72,7 @@ class TimelineQueryFailureSuite extends AbstractHistoryIntegrationTests {
       JerseyBinding.createClientConfig())
 
     intercept[UnauthorizedRequestException] {
-      failingClient.listEntities(YarnHistoryService.SPARK_EVENT_ENTITY_TYPE)
+      failingClient.listEntities(YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
     }
   }
 

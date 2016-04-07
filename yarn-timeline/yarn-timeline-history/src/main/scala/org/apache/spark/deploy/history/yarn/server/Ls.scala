@@ -75,14 +75,14 @@ class Ls extends Configured with Tool with Logging {
       client = new TimelineQueryClient(timelineEndpoint, yarnConf,
         JerseyBinding.createClientConfig())
       if (args.isEmpty) {
-        client.listEntities(SPARK_EVENT_ENTITY_TYPE,
+        client.listEntities(SPARK_SUMMARY_ENTITY_TYPE,
           fields = Seq(PRIMARY_FILTERS, OTHER_INFO))
             .foreach(e => logInfo(describeEntity(e)))
       } else {
         args.foreach { entity =>
           logInfo(entity)
           try {
-            val tle = client.getEntity(SPARK_EVENT_ENTITY_TYPE, entity)
+            val tle = client.getEntity(SPARK_SUMMARY_ENTITY_TYPE, entity)
             logInfo(describeEntity(tle))
           } catch {
             // these inner failures can be caught and swallowed without stopping

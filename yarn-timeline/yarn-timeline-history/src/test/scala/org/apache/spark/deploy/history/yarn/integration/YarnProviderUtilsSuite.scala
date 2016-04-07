@@ -204,20 +204,14 @@ class YarnProviderUtilsSuite extends SparkFunSuite
     val yarnAppStr = yarnAppId.toString
     val attemptId = Some(yarnAttemptId)
     val attemptIdStr = yarnAttemptId.toString
-    assert(attemptIdStr === buildEntityId(yarnAppId, attemptId),
-      "all fields")
-    assert(attemptIdStr === buildEntityId(yarnAppId, attemptId),
-      "no attempt ID")
+    assert(attemptIdStr === buildEntityId(yarnAppId, attemptId), "all fields")
     assert(yarnAppStr === buildEntityId(yarnAppId, None), "yarnAppId only")
   }
 
   test("buildApplicationAttemptIdField") {
-    val sparkAppId = "spark_app_id_2"
     val attempt = "attempt_id"
-    assert(attempt === buildApplicationAttemptIdField(Some(attempt)),
-      "all fields")
-    assert(SINGLE_ATTEMPT === buildApplicationAttemptIdField(None),
-      "attempt = None")
+    assert(attempt === buildApplicationAttemptIdField(Some(attempt)), "all fields")
+    assert(SINGLE_ATTEMPT === buildApplicationAttemptIdField(None), "attempt = None")
   }
 
   test("EntityAndBack") {
@@ -226,13 +220,16 @@ class YarnProviderUtilsSuite extends SparkFunSuite
     val sparkAttemptId = Some("spark-attempt-id")
     val yarnAttemptIdStr = yarnAttemptId.toString
 
-    val entity = createTimelineEntity(yarnAppId,
+    val entity = createTimelineEntity(
+      SPARK_DETAIL_ENTITY_TYPE,
+      yarnAppId,
       Some(yarnAttemptId),
       sparkAppId,
       sparkAttemptId,
       "app",
       "user",
-      1000, 0, 1000)
+      1000, 0, 1000,
+      Some("groupId"))
     val entityDescription = describeEntity(entity)
     val ev1 = entity.getOtherInfo.get(FIELD_ENTITY_VERSION)
     val version = numberField(entity, FIELD_ENTITY_VERSION, -1).longValue()
@@ -245,6 +242,7 @@ class YarnProviderUtilsSuite extends SparkFunSuite
     assert(sparkAttemptId === attempt.attemptId, s"attempt.attemptId in $attempt")
     assert(yarnAttemptIdStr === attempt.entityId, s"attempt.entityId in $attempt")
     assert(version === attempt.version, s"version in $attempt")
+    assert(Some("groupId") === attempt.groupId)
   }
 
   test("EntityWithoutAttempt") {
@@ -252,13 +250,16 @@ class YarnProviderUtilsSuite extends SparkFunSuite
     val yarnAppStr = yarnAppId.toString
     val yarnAttemptIdStr = yarnAttemptId.toString
 
-    val entity = createTimelineEntity(yarnAppId,
+    val entity = createTimelineEntity(
+      SPARK_SUMMARY_ENTITY_TYPE,
+      yarnAppId,
       None,
       sparkAppId,
       None,
       "app",
       "user",
-      1000, 0, 1000)
+      1000, 0, 1000,
+      None)
     val info = toApplicationHistoryInfo(entity)
     assert(yarnAppStr === info.id)
 
@@ -273,11 +274,10 @@ class YarnProviderUtilsSuite extends SparkFunSuite
     val one_0 = new TimelineApplicationHistoryInfo("app1", "one", Nil)
 
     val merge_12 = mergeAttempts(one_1, one_2)
-    assertListSize( merge_12.attempts, 2, "merged attempt list")
+    assertListSize(merge_12.attempts, 2, "merged attempt list")
     assert(List(attempt_1_2, attempt_1_1) === merge_12.attempts)
 
-    val merge_10 = mergeAttempts(one_1, one_0)
-    assert(1 === merge_10.attempts.size)
+    assert(1 === mergeAttempts(one_1, one_0).attempts.size)
     assert(one_1 === mergeAttempts(one_1, one_1))
   }
 
@@ -294,8 +294,8 @@ class YarnProviderUtilsSuite extends SparkFunSuite
 
   test("merge-results-None-attemptId-incomplete-second") {
     // and in the other order
-    assert(List(none_completed) === mergeAttemptInfoLists(List(none_completed),
-      List(none_incomplete)))
+    assert(List(none_completed) ===
+        mergeAttemptInfoLists(List(none_completed), List(none_incomplete)))
   }
 
   test("MergeAttemptOrdering-1") {

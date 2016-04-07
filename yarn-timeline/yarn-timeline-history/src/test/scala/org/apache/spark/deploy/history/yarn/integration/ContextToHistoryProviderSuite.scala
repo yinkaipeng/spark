@@ -56,7 +56,7 @@ class ContextToHistoryProviderSuite
       val queryClient = createTimelineQueryClient()
 
       val entities = awaitSequenceSize(1, "applications on ATS", TIMELINE_SCAN_DELAY,
-        () => queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE))
+        () => queryClient.listEntities(SPARK_SUMMARY_ENTITY_TYPE))
       logInfo(s"Entity listing returned ${entities.size} entities")
       entities.foreach { en =>
         logInfo(describeEntityVerbose(en))
@@ -65,12 +65,12 @@ class ContextToHistoryProviderSuite
         entities.size
       }
       assertResult(1, "entities listed by app end filter") {
-        queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE,
+        queryClient.listEntities(SPARK_SUMMARY_ENTITY_TYPE,
             primaryFilter = Some((FILTER_APP_END, FILTER_APP_END_VALUE))).size
       }
 
       assertResult(1, "entities listed by app start filter") {
-        queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE,
+        queryClient.listEntities(SPARK_SUMMARY_ENTITY_TYPE,
           primaryFilter = Some((FILTER_APP_START, FILTER_APP_START_VALUE))).size
       }
 

@@ -573,7 +573,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       // get the timestamp after any endpoint check
       val timestamp = now()
       // list the entities, excluding the events -this is critical for performance reasons
-      val timelineEntities = client.listEntities(SPARK_EVENT_ENTITY_TYPE,
+      val timelineEntities = client.listEntities(SPARK_SUMMARY_ENTITY_TYPE,
           windowStart = windowStart,
           windowEnd = windowEnd,
           limit = limit,
@@ -728,7 +728,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
     logDebug(s"GetTimelineEntity $entityId")
     metrics.time(metrics.attemptFetchDuration) {
       maybeCheckEndpoint()
-      getTimelineQueryClient.getEntity(SPARK_EVENT_ENTITY_TYPE, entityId)
+      getTimelineQueryClient.getEntity(SPARK_SUMMARY_ENTITY_TYPE, entityId)
     }
   }
 
@@ -882,7 +882,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
           KEY_X_BACKGROUND_REFRESH_INTERVAL -> s"$backgroundRefreshInterval mS",
           KEY_X_EVENT_FETCH_LIMIT -> eventFetchLimit.toString,
           KEY_X_ENTITY_LISTING ->
-              (timelineQueryClient.entityResource(SPARK_EVENT_ENTITY_TYPE).getURI.toString +
+              (timelineQueryClient.entityResource(SPARK_SUMMARY_ENTITY_TYPE).getURI.toString +
                s"?fields=$PRIMARY_FILTERS,$OTHER_INFO"),
           KEY_X_REFRESH_IN_PROGRESS -> refreshInProgress.toString,
           KEY_X_LAST_REFRESH_DURATION -> s"$lastRefreshDuration ms"

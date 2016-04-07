@@ -44,7 +44,8 @@ private[spark] class TimelineApplicationAttemptInfo(
     completed: Boolean,
     val entityId: String,
     val sparkAttemptId: Option[String],
-    val version: Long = 0)
+    val version: Long = 0,
+    val groupId: Option[String] = None)
     extends ApplicationAttemptInfo(attemptId,
       startTime,
       endTime,
@@ -67,6 +68,7 @@ private[spark] class TimelineApplicationAttemptInfo(
        | updated ${timeShort(lastUpdated, never)},
        | sparkUser = $sparkUser,
        | version = $version,
+       | groupId = $groupId
      """.stripMargin
   }
 

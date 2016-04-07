@@ -114,6 +114,12 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   /** ATS v 1.5 group ID. */
   private var groupId: Option[TimelineEntityGroupId] = None
 
+  /**
+   * ATS v 1.5 group instance ID; used with the AppId to build
+   * the `TimelineEntityGroupId`.
+   * */
+  private var groupInstanceId: Option[String] = None
+
   /** Does the the timeline server support v 1.5 APIs? */
   private var timelineVersion1_5 = false
 
@@ -437,7 +443,8 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     logInfo(s"Spark events will be published to $timelineWebappAddress"
       + s" API version=$version; domain ID = $domainId; client=${_timelineClient.toString}")
     if (timelineVersion1_5) {
-      groupId = Some(TimelineEntityGroupId.newInstance(applicationId, SPARK_EVENT_GROUP_TYPE))
+      groupInstanceId = Some(applicationId.toString)
+      groupId = Some(TimelineEntityGroupId.newInstance(applicationId, groupInstanceId.get ))
       logInfo(s"GroupID=$groupId")
     }
     // declare that the processing is started
@@ -722,16 +729,9 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       // push if there are events *and* the app is recorded as having started.
       // -as the app name is needed for the the publishing.
       metrics.flushCount.inc()
-      val timelineEntity = createTimelineEntity(
-        applicationId,
-        attemptId,
-        sparkApplicationId,
-        sparkApplicationAttemptId,
-        applicationName,
-        userName,
-        startTime,
-        endTime,
-        now())
+      val t = now()
+      val timelineEntity = createTimelineEntity(true, t)
+
 
       // copy in pending events and then reset the list
       pendingEvents.synchronized {
@@ -743,6 +743,32 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     } else {
       false
     }
+  }
+
+  /**
+   * Create a timeline entity populated with the state of this history service
+   * @param isSummaryEntity entity type: summary or full
+   * @param timestamp timestamp
+   * @return
+   */
+  def createTimelineEntity(isSummaryEntity: Boolean, timestamp: Long): TimelineEntity = {
+    val entityType = if (isSummaryEntity) {
+      SPARK_SUMMARY_ENTITY_TYPE
+    } else {
+      SPARK_DETAIL_ENTITY_TYPE
+    }
+    YarnTimelineUtils.createTimelineEntity(
+      entityType,
+      applicationId,
+      attemptId,
+      sparkApplicationId,
+      sparkApplicationAttemptId,
+      applicationName,
+      userName,
+      startTime,
+      endTime,
+      timestamp,
+      groupInstanceId)
   }
 
   /**
@@ -1271,12 +1297,12 @@ private[spark] object YarnHistoryService {
   /**
    * Name of the entity type used to declare spark Applications.
    */
-  val SPARK_EVENT_ENTITY_TYPE = "spark_event_v01"
+  val SPARK_SUMMARY_ENTITY_TYPE = "spark_event_v01"
 
   /**
    * Name of the entity type used to declare spark Applications.
    */
-  val SPARK_EVENT_GROUP_TYPE = "spark_event_group_v01"
+  val SPARK_DETAIL_ENTITY_TYPE = "spark_event_detail_v01"
 
   /**
    * Domain ID.
@@ -1390,6 +1416,13 @@ private[spark] object YarnHistoryService {
    * Entity `OTHER_INFO` field: attempt ID from spark start event.
    */
   val FIELD_ATTEMPT_ID = "attemptId"
+
+  /**
+   * For ATS1.5+: the group instance Id under which events are stored.
+   * If this field is absent, it means that the API/dataset are 1.0 events, so
+   * there is no split between summary and non-summary data.
+   */
+  val FIELD_GROUP_INSTANCE_ID = "groupInstanceId"
 
   /**
    * Entity `OTHER_INFO` field: a counter which is incremented whenever a new timeline entity

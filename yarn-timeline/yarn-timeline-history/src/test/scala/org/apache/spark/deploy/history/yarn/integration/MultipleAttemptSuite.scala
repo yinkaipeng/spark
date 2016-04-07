@@ -57,9 +57,9 @@ class MultipleAttemptSuite
     describe("Querying history service via REST API")
 
     eventually(stdTimeout, stdInterval) {
-      val entities = assertListSize(queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE),
+      val entities = assertListSize(queryClient.listEntities(SPARK_SUMMARY_ENTITY_TYPE),
         2,
-        s"number of entities of type $SPARK_EVENT_ENTITY_TYPE")
+        s"number of entities of type $SPARK_SUMMARY_ENTITY_TYPE")
 
       // now expect/require there to be > 1 job attempt in there
       val timelineEntity = entities.head
@@ -69,9 +69,9 @@ class MultipleAttemptSuite
         s"Number of timeline events in $timelineEntityDescription")
     }
     val entities = awaitSequenceSize(2,
-      s"number of entities of type $SPARK_EVENT_ENTITY_TYPE",
+      s"number of entities of type $SPARK_SUMMARY_ENTITY_TYPE",
       TEST_STARTUP_DELAY,
-      () => queryClient.listEntities(SPARK_EVENT_ENTITY_TYPE))
+      () => queryClient.listEntities(SPARK_SUMMARY_ENTITY_TYPE))
 
     // now expect/require there to be > 1 job attempt in there
     val timelineEntity = entities.head
