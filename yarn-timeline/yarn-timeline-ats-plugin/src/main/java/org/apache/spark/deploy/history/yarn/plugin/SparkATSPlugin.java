@@ -71,7 +71,7 @@ public class SparkATSPlugin extends TimelineEntityGroupPlugin {
   @Override
   public Set<TimelineEntityGroupId> getTimelineEntityGroupId(String entityType,
       NameValuePair filter, Collection<NameValuePair> secondaryFilters) {
-    LOG.debug("getTimelineEntityGroupId({},[{}]", entityType, filter);
+    LOG.debug("getTimelineEntityGroupId({}, [{}]", entityType, filter);
 
     Set<TimelineEntityGroupId> result = null;
     try {
@@ -116,14 +116,19 @@ public class SparkATSPlugin extends TimelineEntityGroupPlugin {
   @Override
   public Set<TimelineEntityGroupId> getTimelineEntityGroupId(String entityType,
       SortedSet<String> entityIds, Set<String> eventTypes) {
-    LOG.debug("getTimelineEntityGroupId({}", entityType);
+    LOG.debug("getTimelineEntityGroupId({}, [{}], [{}]", entityType,
+        entityIds.size(), eventTypes.size());
+
     switch (entityType) {
       case SPARK_SUMMARY_ENTITY_TYPE:
         // return null for summary data
+        LOG.debug("{} -> summary", entityType);
         return null;
 
       case SPARK_DETAIL_ENTITY_TYPE:
         // return the groups, ignore event types
+        LOG.debug("{} -> group", entityType);
+
         Set<TimelineEntityGroupId> result = new HashSet<>();
         for (String entityId : entityIds) {
           result.addAll(toGroupId(entityId));

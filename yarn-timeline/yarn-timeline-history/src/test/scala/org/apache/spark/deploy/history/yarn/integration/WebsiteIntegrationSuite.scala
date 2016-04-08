@@ -24,8 +24,7 @@ import javax.ws.rs.core.MediaType
 import scala.language.postfixOps
 
 import org.apache.spark.deploy.history.HistoryServer
-import org.apache.spark.deploy.history.yarn.{YarnEventListener, YarnHistoryService}
-import org.apache.spark.deploy.history.yarn.YarnHistoryService._
+import org.apache.spark.deploy.history.yarn.YarnEventListener
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.rest.HttpOperationResponse
 import org.apache.spark.deploy.history.yarn.server.YarnHistoryProvider
@@ -69,12 +68,12 @@ class WebsiteIntegrationSuite extends AbstractHistoryIntegrationTests
       val queryClient = createTimelineQueryClient()
       val timelineEntities = awaitSequenceSize(
         1, "applications on ATS", TIMELINE_SCAN_DELAY,
-        () => queryClient.listEntities(SPARK_SUMMARY_ENTITY_TYPE))
+        () => listEntities(queryClient))
       val entry = timelineEntities.head
       assert(expectedAttemptId === entry.getEntityId,
         s"head entry id!=$expectedAttemptId: ${describeEntity(entry)} ")
 
-      queryClient.getEntity(YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE, expectedAttemptId)
+      queryClient.getEntity(detailEntityType, expectedAttemptId)
 
       // at this point the REST UI is happy. Check the provider level
 

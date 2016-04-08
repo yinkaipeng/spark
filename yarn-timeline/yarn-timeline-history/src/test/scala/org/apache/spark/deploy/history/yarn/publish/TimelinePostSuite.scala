@@ -25,7 +25,7 @@ class TimelinePostSuite extends AbstractHistoryIntegrationTests {
 
   test("Round Trip App Stop") {
     historyService = startHistoryService(sc)
-    val outcome = postEvent(appStartEvent(), now())
+    postEvent(appStartEvent(), now(), true)
     historyService.stop()
     awaitEmptyQueue(historyService, TEST_STARTUP_DELAY)
   }

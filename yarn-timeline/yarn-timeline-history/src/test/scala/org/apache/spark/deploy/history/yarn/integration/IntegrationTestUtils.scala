@@ -319,24 +319,27 @@ private[yarn] trait IntegrationTestUtils {
   }
 
   /**
-   * Wait for the listing size to match that desired.
+   * Wait for the listing event count to match that desired.
    *
-   * @param provider provider
+   * @param queryClient client
+   * @param attemptId attempt ID
    * @param size size to require
    * @param timeout timeout
+   * @param entityType entity type to probe for
    * @return the successful listing
+   * @return
    */
   def awaitEntityEventCount(
       queryClient: TimelineQueryClient,
       attemptId: String,
       size: Long,
-      timeout: Long)
+      timeout: Long,
+      entityType: String)
   : TimelineEntity = {
     var entity: TimelineEntity = null
     def eventCount = if (entity == null) -1 else entity.getEvents.size ()
     def listingProbe(): Outcome = {
-      entity = queryClient
-          .getEntity(YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE, attemptId)
+      entity = queryClient.getEntity(entityType, attemptId)
       outcomeFromBool(eventCount == size)
     }
     def failure(outcome: Outcome, i: Int, b: Boolean): Unit = {

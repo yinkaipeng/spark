@@ -343,12 +343,14 @@ abstract class AbstractHistoryIntegrationTests
    *
    * @param sparkEvt event
    * @param time event time
+   * @param summary is this a summary or detail entity type?
    * @return a triple of the wrapped event, marshalled entity and the response
    */
-  protected def postEvent(sparkEvt: SparkListenerEvent, time: Long):
+  protected def postEvent(sparkEvt: SparkListenerEvent, time: Long,
+      summary: Boolean = true):
       (TimelineEvent, TimelineEntity, TimelinePutResponse) = {
     val event = toTimelineEvent(sparkEvt, time).get
-    val entity = newEntity(time)
+    val entity = newEntity(time, summary)
     entity.addEvent(event)
     val response = putTimelineEntity(entity)
     val description = describePutResponse(response)
@@ -694,7 +696,12 @@ abstract class AbstractHistoryIntegrationTests
     list()
   }
 
-  def listEntities(qc: TimelineQueryClient) = {
+  /**
+   * List summary entities: always
+   * @param qc query client
+   * @return the entity list
+   */
+  def listEntities(qc: TimelineQueryClient): List[TimelineEntity] = {
     qc.listEntities(SPARK_SUMMARY_ENTITY_TYPE,
       fields = Seq(PRIMARY_FILTERS, OTHER_INFO))
   }
@@ -850,7 +857,7 @@ abstract class AbstractHistoryIntegrationTests
     conf.setInt(TIMELINE_SERVICE_CLIENT_FD_RETAIN_SECS, 1)
 
     val fs = fileSystem
-    var atsPath: Path  = if (useMiniHDFS) {
+    var atsPath = if (useMiniHDFS) {
       fs.makeQualified(new Path("/history"))
     } else {
       fs.makeQualified(new Path(new File(integrationDir, "ats").toURI))
@@ -903,5 +910,17 @@ abstract class AbstractHistoryIntegrationTests
     started(history.applicationId)
   }
 
+  /**
+   * The entity type which contains details
+   * @return the type to query with the timeline API
+   *         if the full list of events is neeeded.
+   */
+  def detailEntityType: String = {
+    if (enableATSv15) {
+      SPARK_DETAIL_ENTITY_TYPE
+    } else {
+      SPARK_SUMMARY_ENTITY_TYPE
+    }
+  }
 }
 

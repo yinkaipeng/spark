@@ -97,16 +97,15 @@ class IncompleteSparkUISuite extends AbstractHistoryIntegrationTests with Eventu
       assert(attempt1.completed,
         s"application attempt considered incomplete: $historyDescription")
 
-      // get the final app UI
-      val finalAppUIPage = connector.execHttpOperation("GET", attemptURL, null, "").responseBody
-      assertContains(finalAppUIPage, APP_NAME, s"Application name $APP_NAME not found" +
-          s" at $attemptURL")
 
       eventually(stdTimeout, stdInterval) {
+        // get the final app UI
+        val finalAppUIPage = connector.execHttpOperation("GET", attemptURL, null, "").responseBody
+        assertContains(finalAppUIPage, APP_NAME, s"Application name $APP_NAME not found" +
+            s" at $attemptURL")
         // the active jobs section must no longer exist
         assertDoesNotContain(finalAppUIPage, activeJobsMarker,
           s"Web UI $attemptURL still declared active in $sparkHistoryServer")
-
         // look for the completed job
         assertContains(finalAppUIPage, completedJobsMarker,
           s"Web UI $attemptURL does not declare completed jobs in $sparkHistoryServer")

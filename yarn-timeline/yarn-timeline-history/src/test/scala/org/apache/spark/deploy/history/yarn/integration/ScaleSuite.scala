@@ -103,12 +103,13 @@ class ScaleSuite extends AbstractHistoryIntegrationTests
       // validate ATS has it
       val queryClient = createTimelineQueryClient()
       val timelineEntities = awaitSequenceSize(1, "applications on ATS", TIMELINE_SCAN_DELAY,
-        () => queryClient.listEntities(SPARK_SUMMARY_ENTITY_TYPE))
+        () => listEntities(queryClient))
       val entry = timelineEntities.head
       assert(expectedAttemptId === entry.getEntityId,
         s"head entry id!=$expectedAttemptId: ${describeEntity(entry)} ")
 
-      awaitEntityEventCount(queryClient, expectedAttemptId, posted, spinTimeout)
+      awaitEntityEventCount(queryClient, expectedAttemptId, posted, spinTimeout,
+        detailEntityType)
 
       // at this point the REST UI is happy. Check the provider level
 

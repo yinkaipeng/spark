@@ -274,11 +274,11 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
   val applicationStart = appStartEventWithAttempt(now(), applicationId.toString, "bob", attemptId)
   val applicationEnd = SparkListenerApplicationEnd(now() + 60000)
 
-  def newEntity(time: Long): TimelineEntity = {
+  def newEntity(time: Long, summary: Boolean = true): TimelineEntity = {
     val entity = new TimelineEntity
     entity.setStartTime(time)
     entity.setEntityId(APP_ID)
-    entity.setEntityType(YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
+    entity.setEntityType(if (summary) SPARK_SUMMARY_ENTITY_TYPE else SPARK_DETAIL_ENTITY_TYPE)
     entity
   }
 
