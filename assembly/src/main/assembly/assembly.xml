@@ -135,7 +135,7 @@
       </directory>
       <outputDirectory>/hdpLib</outputDirectory>
       <includes>
-        <include>spark-yarn-timeline-ats-plugin_*.jar</include>
+        <include>spark-yarn-timeline-ats-plugin*${project.version}.jar</include>
       </includes>
     </fileSet>
     <fileSet>
