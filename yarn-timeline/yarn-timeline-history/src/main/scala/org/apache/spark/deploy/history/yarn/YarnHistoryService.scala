@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history.yarn
 
-import java.io.InterruptedIOException
+import java.io.{Flushable, InterruptedIOException}
 import java.net.{ConnectException, URI}
 import java.util.concurrent.{LinkedBlockingDeque, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
@@ -102,11 +102,21 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   /** YARN configuration from the spark context. */
   private var config: YarnConfiguration = _
 
+  private[yarn] var applicationInfo: Option[AppAttemptTuple] = None
+
   /** Application ID. */
-  private[yarn] var applicationId: ApplicationId = _
+  private[yarn] def applicationId: ApplicationId = {
+    if (applicationInfo.isDefined) {
+      applicationInfo.get.appId
+    } else {
+      null
+    }
+  }
 
   /** Attempt ID -this will be null if the service is started in yarn-client mode. */
-  private var attemptId: Option[ApplicationAttemptId] = None
+  private def attemptId: Option[ApplicationAttemptId] = {
+    applicationInfo.flatMap(_.attemptId)
+  }
 
   /** YARN timeline client. */
   private var _timelineClient: Option[TimelineClient] = None
@@ -528,8 +538,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   private[yarn] def bindToYarnApplication(appId: ApplicationId,
       maybeAttemptId: Option[ApplicationAttemptId]): Unit = {
     require(appId != null, "Null appId parameter")
-    applicationId = appId
-    attemptId = maybeAttemptId
+    applicationInfo = Some(AppAttemptTuple(appId, maybeAttemptId))
   }
 
   /**
@@ -737,7 +746,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       queueForPosting(detail)
 
       if (timelineVersion1_5) {
-        //v1.5: add the summary
+        // v1.5: add the summary
         val summary = createTimelineEntity(true, t)
         queueForPosting(summary)
       }
@@ -765,8 +774,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   def createTimelineEntity(isSummaryEntity: Boolean, timestamp: Long): TimelineEntity = {
     YarnTimelineUtils.createTimelineEntity(
       createEntityType(isSummaryEntity),
-      applicationId,
-      attemptId,
+      applicationInfo.get,
       sparkApplicationId,
       sparkApplicationAttemptId,
       applicationName,
@@ -922,8 +930,12 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
         logDebug(s"entity successfully published")
         metrics.entityPostSuccesses.inc()
         metrics.eventsSuccessfullyPosted.inc(entity.getEvents.size())
-        // and flush the timeline
-        timelineClient.flush()
+        // and flush the timeline if it implements the API
+        timelineClient match {
+          case flushable: Flushable =>
+            flushable.flush()
+          case _ =>
+        }
       } else {
         // The ATS service rejected the request at the API level.
         // this is something we assume cannot be re-tried

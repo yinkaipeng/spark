@@ -25,6 +25,7 @@ import org.apache.spark.deploy.history.yarn.server.{TimelineApplicationAttemptIn
 import org.apache.spark.deploy.history.yarn.server.YarnProviderUtils._
 import org.apache.spark.deploy.history.yarn.testtools.{ExtraAssertions, YarnTestUtils}
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.deploy.history.yarn.AppAttemptTuple
 
 /**
  * Test of utility methods in [[org.apache.spark.deploy.history.yarn.server.YarnProviderUtils]]
@@ -222,8 +223,7 @@ class YarnProviderUtilsSuite extends SparkFunSuite
 
     val entity = createTimelineEntity(
       SPARK_DETAIL_ENTITY_TYPE,
-      yarnAppId,
-      Some(yarnAttemptId),
+      AppAttemptTuple(yarnAppId, Some(yarnAttemptId)),
       sparkAppId,
       sparkAttemptId,
       "app",
@@ -252,8 +252,7 @@ class YarnProviderUtilsSuite extends SparkFunSuite
 
     val entity = createTimelineEntity(
       SPARK_SUMMARY_ENTITY_TYPE,
-      yarnAppId,
-      None,
+      AppAttemptTuple(yarnAppId, None),
       sparkAppId,
       None,
       "app",

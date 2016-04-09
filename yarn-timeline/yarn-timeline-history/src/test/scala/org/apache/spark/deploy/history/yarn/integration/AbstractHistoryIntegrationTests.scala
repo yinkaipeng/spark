@@ -19,6 +19,7 @@ package org.apache.spark.deploy.history.yarn.integration
 
 import java.io.{File, IOException}
 import java.net.URL
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.logging.Logger
 
 import scala.collection.mutable
@@ -830,6 +831,16 @@ abstract class AbstractHistoryIntegrationTests
   val SPARK_ATS_PLUGIN_CLASS = "org.apache.spark.deploy.history.yarn.plugin.SparkATSPlugin"
 
   /**
+   * Get the name to use for the timeline directory. To avoid
+   * problems with leveldb, use a unique name for each test run.
+   * The base method does this through a counter and hex format
+   * @return a string that may used as a directory name
+   */
+  def timelineDirName: String = {
+    AbstractHistoryIntegrationTests.nextFilename()
+  }
+
+  /**
    * Everything needed to turn on ATS v1.5 timeline server and client.
    *
    * 1. Create the various directories for active and complete apps, plus leveldb, all of
@@ -845,8 +856,9 @@ abstract class AbstractHistoryIntegrationTests
   def enableATS1_5(conf: Configuration): Unit = {
     val projectBuildDir = new File(System.getProperty("project.build.dir",
       System.getProperty("java.io.tmpdir")))
-    val integrationDir = new File(projectBuildDir, "integration")
-    FileUtils.deleteDirectory(integrationDir)
+    val integrationBase = new File(projectBuildDir, "integration")
+    val integrationDir = new File(integrationBase, timelineDirName)
+    FileUtils.deleteDirectory(integrationBase)
     integrationDir.mkdirs()
     val leveldbDir = new File(integrationDir, "leveldb")
     leveldbDir.mkdirs()
@@ -924,3 +936,12 @@ abstract class AbstractHistoryIntegrationTests
   }
 }
 
+private object AbstractHistoryIntegrationTests {
+  private var counter: Int = 0
+
+  private def nextFilename(): String = {
+    val c = counter
+    counter += 1
+    Integer.toString(counter, 16)
+  }
+}

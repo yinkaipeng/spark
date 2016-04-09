@@ -43,6 +43,16 @@ import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerApp
 import org.apache.spark.util.{JsonProtocol, Utils}
 
 /**
+ * A tuple describing an application+attempt.
+ * No attempt ID means this instance is a client-side spark context.
+ * @param appId application ID
+ * @param attemptId optional attempt ID.
+ */
+private[yarn] case class AppAttemptTuple(
+    appId: ApplicationId,
+    attemptId: Option[ApplicationAttemptId]);
+
+/**
  * Utility methods for timeline classes.
  */
 private[yarn] object YarnTimelineUtils extends Logging {
@@ -714,8 +724,7 @@ private[yarn] object YarnTimelineUtils extends Logging {
    */
   def createTimelineEntity(
       entityType: String,
-      appId: ApplicationId,
-      attemptId: Option[ApplicationAttemptId],
+      attempt: AppAttemptTuple,
       sparkApplicationId: Option[String],
       sparkApplicationAttemptId: Option[String],
       appName: String,
@@ -725,13 +734,13 @@ private[yarn] object YarnTimelineUtils extends Logging {
       lastUpdated: Long,
       groupId: Option[String]): TimelineEntity = {
     require(entityType != null, "no entityType Id")
-    require(appId != null, "no application Id")
+    require(attempt.appId != null, "no application Id")
     require(appName != null, "no application name")
     require(startTime > 0, "no start time")
 
     val entity = new TimelineEntity()
-    val entityId = buildEntityId(appId, attemptId)
-    val appIdField = buildApplicationIdField(appId)
+    val entityId = buildEntityId(attempt.appId, attempt.attemptId)
+    val appIdField = buildApplicationIdField(attempt.appId)
     entity.setEntityType(entityType)
     entity.setEntityId(entityId)
     // add app/attempt ID information
