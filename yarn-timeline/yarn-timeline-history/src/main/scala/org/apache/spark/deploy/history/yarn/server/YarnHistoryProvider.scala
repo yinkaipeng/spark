@@ -821,7 +821,8 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
           appListener.viewAcls.getOrElse(""))
         val latestState = toApplicationHistoryInfo(attemptEntity).attempts.head
         Some(LoadedAppUI(ui,
-          if (attemptInfo.completed) {
+/*
+        if (attemptInfo.completed) {
             logDebug("Application is complete: returning 'completed' application probe")
             completedAppProbe
           } else {
@@ -829,6 +830,9 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
             yarnUpdateProbe(appId, attemptId, latestState.version, latestState.lastUpdated,
               now() + updateProbeWindowMs)
           }
+*/
+          yarnUpdateProbe(appId, attemptId, latestState.version, latestState.lastUpdated,
+            now() + updateProbeWindowMs)
         ))
       } catch {
 

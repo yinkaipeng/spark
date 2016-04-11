@@ -25,7 +25,7 @@ import org.apache.spark.deploy.history.yarn.server.{TimelineApplicationAttemptIn
 import org.apache.spark.deploy.history.yarn.server.YarnProviderUtils._
 import org.apache.spark.deploy.history.yarn.testtools.{ExtraAssertions, YarnTestUtils}
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.deploy.history.yarn.AppAttemptTuple
+import org.apache.spark.deploy.history.yarn.{AppAttemptDetails, SparkAppAttemptDetails}
 
 /**
  * Test of utility methods in [[org.apache.spark.deploy.history.yarn.server.YarnProviderUtils]]
@@ -221,15 +221,10 @@ class YarnProviderUtilsSuite extends SparkFunSuite
     val sparkAttemptId = Some("spark-attempt-id")
     val yarnAttemptIdStr = yarnAttemptId.toString
 
-    val entity = createTimelineEntity(
-      SPARK_DETAIL_ENTITY_TYPE,
-      AppAttemptTuple(yarnAppId, Some(yarnAttemptId)),
-      sparkAppId,
-      sparkAttemptId,
-      "app",
-      "user",
-      1000, 0, 1000,
-      Some("groupId"))
+    val entity = createTimelineEntity(SPARK_DETAIL_ENTITY_TYPE,
+      AppAttemptDetails(yarnAppId, Some(yarnAttemptId), Some("groupId")),
+      SparkAppAttemptDetails( sparkAppId, sparkAttemptId, "app", "user"),
+      1000, 0, 1000, 1)
     val entityDescription = describeEntity(entity)
     val ev1 = entity.getOtherInfo.get(FIELD_ENTITY_VERSION)
     val version = numberField(entity, FIELD_ENTITY_VERSION, -1).longValue()
@@ -252,13 +247,9 @@ class YarnProviderUtilsSuite extends SparkFunSuite
 
     val entity = createTimelineEntity(
       SPARK_SUMMARY_ENTITY_TYPE,
-      AppAttemptTuple(yarnAppId, None),
-      sparkAppId,
-      None,
-      "app",
-      "user",
-      1000, 0, 1000,
-      None)
+      AppAttemptDetails(yarnAppId, None),
+      SparkAppAttemptDetails(sparkAppId, None, "app", "user"),
+      1000, 0, 1000, 1)
     val info = toApplicationHistoryInfo(entity)
     assert(yarnAppStr === info.id)
 

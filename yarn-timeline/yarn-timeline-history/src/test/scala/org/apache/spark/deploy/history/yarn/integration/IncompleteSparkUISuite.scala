@@ -75,7 +75,7 @@ class IncompleteSparkUISuite extends AbstractHistoryIntegrationTests with Eventu
       // look for active jobs marker
       assertContains(appUIBody, activeJobsMarker, s"active jobs string in $attemptURL")
 
-      logInfo("Ending job and application")
+      describe("Ending job and application")
       // job completion event
       listener.onJobEnd(jobSuccessEvent(startTime + 1, jobId))
       // stop the app
@@ -97,8 +97,9 @@ class IncompleteSparkUISuite extends AbstractHistoryIntegrationTests with Eventu
       assert(attempt1.completed,
         s"application attempt considered incomplete: $historyDescription")
 
+      describe("Checking Web UI picks up changed state")
 
-      eventually(stdTimeout, stdInterval) {
+      eventually(mediumTimeout, mediumInterval) {
         // get the final app UI
         val finalAppUIPage = connector.execHttpOperation("GET", attemptURL, null, "").responseBody
         assertContains(finalAppUIPage, APP_NAME, s"Application name $APP_NAME not found" +

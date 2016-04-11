@@ -37,7 +37,7 @@ import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerBlockUpdated, SparkListenerEvent, SparkListenerExecutorMetricsUpdate}
 import org.apache.spark.scheduler.cluster.{SchedulerExtensionService, SchedulerExtensionServiceBinding}
-import org.apache.spark.util.{SystemClock, Utils}
+import org.apache.spark.util.SystemClock
 
 /**
  * A Yarn Extension Service to post lifecycle events to a registered YARN Timeline Server.
@@ -102,7 +102,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   /** YARN configuration from the spark context. */
   private var config: YarnConfiguration = _
 
-  private[yarn] var applicationInfo: Option[AppAttemptTuple] = None
+  private[yarn] var applicationInfo: Option[AppAttemptDetails] = None
 
   /** Application ID. */
   private[yarn] def applicationId: ApplicationId = {
@@ -124,29 +124,19 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   /** ATS v 1.5 group ID. */
   private var groupId: Option[TimelineEntityGroupId] = None
 
-  /**
-   * ATS v 1.5 group instance ID; used with the AppId to build
-   * the `TimelineEntityGroupId`.
-   * */
-  private var groupInstanceId: Option[String] = None
-
   /** Does the the timeline server support v 1.5 APIs? */
   private var timelineVersion1_5 = false
 
   /** Registered event listener. */
   private var listener: Option[YarnEventListener] = None
 
-  /** Application name  from the spark start event. */
-  private var applicationName: String = _
+  private var sparkAttemptDetails: SparkAppAttemptDetails = _
 
   /** Application ID received from a [[SparkListenerApplicationStart]]. */
   private var sparkApplicationId: Option[String] = None
 
   /** Optional Attempt ID string from [[SparkListenerApplicationStart]]. */
   private var sparkApplicationAttemptId: Option[String] = None
-
-  /** User name as derived from `SPARK_USER` env var or [[Utils]]. */
-  private var userName = Utils.getCurrentUserName
 
   /** Clock for recording time */
   private val clock = new SystemClock
@@ -210,6 +200,13 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
 
   /** Metric fields. Used in tests as well as metrics infrastructure. */
   val metrics = new HistoryMetrics(this)
+
+  /**
+   * A counter incremented every time a new entity is created. This is included as an "other"
+   * field in the entity information -so can be used as a probe to determine if the entity
+   * has been updated since a previous check.
+   */
+  private val entityVersionCounter = new AtomicLong(1)
 
   /**
    * Create a timeline client and start it. This does not update the
@@ -401,7 +398,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       case Some(attempt) => attempt.getAttemptId.toString
       case None => CLIENT_BACKEND_ATTEMPT_ID
     }
-    setContextAppAndAttemptInfo(Some(appId.toString), Some(attempt1))
+    setContextAppAndAttemptInfo(Some(appId.toString), Some(attempt1), attempt1, "")
 
     def intOption(key: String, defVal: Int): Int = {
       val v = sparkConf.getInt(key, defVal)
@@ -453,8 +450,8 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     logInfo(s"Spark events will be published to $timelineWebappAddress"
       + s" API version=$version; domain ID = $domainId; client=${_timelineClient.toString}")
     if (timelineVersion1_5) {
-      groupInstanceId = Some(applicationId.toString)
-      groupId = Some(TimelineEntityGroupId.newInstance(applicationId, groupInstanceId.get))
+      groupId = Some(TimelineEntityGroupId.newInstance(applicationId,
+        applicationInfo.get.groupId.get))
       logDebug(s"GroupID=$groupId")
     }
     // declare that the processing is started
@@ -538,7 +535,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   private[yarn] def bindToYarnApplication(appId: ApplicationId,
       maybeAttemptId: Option[ApplicationAttemptId]): Unit = {
     require(appId != null, "Null appId parameter")
-    applicationInfo = Some(AppAttemptTuple(appId, maybeAttemptId))
+    applicationInfo = Some(AppAttemptDetails(appId, maybeAttemptId, Some(appId.toString)))
   }
 
   /**
@@ -550,11 +547,15 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    * @param appId application ID
    * @param attemptId attempt ID
    */
-  private def setContextAppAndAttemptInfo(appId: Option[String],
-      attemptId: Option[String]): Unit = {
+  private def setContextAppAndAttemptInfo(
+      appId: Option[String],
+      attemptId: Option[String],
+      name: String,
+      user: String): Unit = {
     logDebug(s"Setting Spark application ID to $appId; attempt ID to $attemptId")
     sparkApplicationId = appId
     sparkApplicationAttemptId = attemptId
+    sparkAttemptDetails = SparkAppAttemptDetails(appId, attemptId, name, user)
   }
 
   /**
@@ -737,7 +738,8 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       // -as the app name is needed for the the publishing.
       metrics.flushCount.inc()
       val t = now()
-      val detail = createTimelineEntity(false, t)
+      val count = entityVersionCounter.getAndIncrement()
+      val detail = createTimelineEntity(false, t, count)
       // copy in pending events and then reset the list
       pendingEvents.synchronized {
         pendingEvents.foreach(detail.addEvent)
@@ -746,9 +748,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       queueForPosting(detail)
 
       if (timelineVersion1_5) {
-        // v1.5: add the summary
-        val summary = createTimelineEntity(true, t)
-        queueForPosting(summary)
+        queueForPosting(createTimelineEntity(true, t, count))
       }
       true
     } else {
@@ -771,18 +771,18 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    * @param timestamp timestamp
    * @return
    */
-  def createTimelineEntity(isSummaryEntity: Boolean, timestamp: Long): TimelineEntity = {
+  def createTimelineEntity(
+      isSummaryEntity: Boolean,
+      timestamp: Long,
+      entityCount: Long): TimelineEntity = {
     YarnTimelineUtils.createTimelineEntity(
       createEntityType(isSummaryEntity),
       applicationInfo.get,
-      sparkApplicationId,
-      sparkApplicationAttemptId,
-      applicationName,
-      userName,
+      sparkAttemptDetails,
       startTime,
       endTime,
       timestamp,
-      groupInstanceId)
+      entityCount)
   }
 
   /**
@@ -1098,17 +1098,17 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
         logDebug(s"Handling application start event: $event")
         if (!appStartEventProcessed.getAndSet(true)) {
           applicationStartEvent = Some(start)
-          applicationName = start.appName
+          var applicationName = start.appName
           if (applicationName == null || applicationName.isEmpty) {
             logWarning("Application does not have a name")
             applicationName = applicationId.toString
           }
-          userName = start.sparkUser
           startTime = start.time
           if (startTime == 0) {
             startTime = timestamp
           }
-          setContextAppAndAttemptInfo(start.appId, start.appAttemptId)
+          setContextAppAndAttemptInfo(start.appId, start.appAttemptId, applicationName,
+            start.sparkUser)
           logDebug(s"Application started: $event")
           isLifecycleEvent = true
           push = true

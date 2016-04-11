@@ -19,7 +19,6 @@ package org.apache.spark.deploy.history.yarn.integration
 
 import java.io.{File, IOException}
 import java.net.URL
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.logging.Logger
 
 import scala.collection.mutable
@@ -86,6 +85,8 @@ abstract class AbstractHistoryIntegrationTests
   protected val stdInterval = interval(100 milliseconds)
   protected val longTimeout = timeout(60 seconds)
   protected val longInterval = interval(1 second)
+  protected val mediumTimeout = timeout(30 seconds)
+  protected val mediumInterval = interval(1 second)
 
   // a list of actions to fail with
   protected var failureActions: mutable.MutableList[() => Unit] = mutable.MutableList()
