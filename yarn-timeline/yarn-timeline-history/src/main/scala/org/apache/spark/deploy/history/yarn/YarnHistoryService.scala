@@ -388,10 +388,12 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     val attemptId = binding.attemptId
     require(context != null, "Null context parameter")
     logDebug(s"Starting YarnHistoryService with appID $appId, attempt $attemptId ")
-    bindToYarnApplication(appId, attemptId)
     this.sparkContext = context
     this.config = new YarnConfiguration(context.hadoopConfiguration)
+    timelineVersion1_5 = timelineServiceV1_5Enabled(config)
     val sparkConf = sparkContext.conf
+    bindToYarnApplication(appId, attemptId,
+      if (timelineVersion1_5) Some(appId.toString) else None)
 
     // work out the attempt ID from the YARN attempt ID. No attempt, assume "1".
     val attempt1 = attemptId match {
@@ -445,7 +447,6 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       YarnConfiguration.TIMELINE_SERVICE_VERSION,
       YarnConfiguration.DEFAULT_TIMELINE_SERVICE_VERSION)
     _timelineClient = Some(createTimelineClient())
-    timelineVersion1_5 = timelineServiceV1_5Enabled(config)
     domainId = createTimelineDomain()
     logInfo(s"Spark events will be published to $timelineWebappAddress"
       + s" API version=$version; domain ID = $domainId; client=${_timelineClient.toString}")
@@ -533,9 +534,10 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    * @param maybeAttemptId optional attempt ID
    */
   private[yarn] def bindToYarnApplication(appId: ApplicationId,
-      maybeAttemptId: Option[ApplicationAttemptId]): Unit = {
+      maybeAttemptId: Option[ApplicationAttemptId],
+      groupId: Option[String]): Unit = {
     require(appId != null, "Null appId parameter")
-    applicationInfo = Some(AppAttemptDetails(appId, maybeAttemptId, Some(appId.toString)))
+    applicationInfo = Some(AppAttemptDetails(appId, maybeAttemptId, groupId))
   }
 
   /**

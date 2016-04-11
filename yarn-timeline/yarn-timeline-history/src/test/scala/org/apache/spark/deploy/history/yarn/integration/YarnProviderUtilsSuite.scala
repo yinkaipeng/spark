@@ -80,17 +80,17 @@ class YarnProviderUtilsSuite extends SparkFunSuite
   val none_completed_orig_time = new TimelineApplicationAttemptInfo(None, 100, 0, 102, "spark",
     true, "001", None)
   // app attempt started @ 100, updated @102, version 1
-  val attempt_1_1 = new TimelineApplicationAttemptInfo(Some("attempt_1_1"),
+  val attempt_1_1_incomplete_v1 = new TimelineApplicationAttemptInfo(Some("attempt_1_1"),
     100, 0, 102, "spark", false, "001", None, 1)
   // attempt 1.1 updated at time = 102; no version field
-  val attempt_1_1_updated = new TimelineApplicationAttemptInfo(Some("attempt_1_1"),
+  val attempt_1_1_incomplete_v1_updated = new TimelineApplicationAttemptInfo(Some("attempt_1_1"),
     100, 0, 150, "spark", false, "001", None)
   // attempt 1.1 with the version field updated to 2; it should always be newer
-  val attempt_1_1_updated_version = new TimelineApplicationAttemptInfo(Some("attempt_1_1"),
+  val attempt_1_1_incomplete_v2 = new TimelineApplicationAttemptInfo(Some("attempt_1_1"),
     100, 0, 300, "spark", false, "001", None, 2)
   val attempt_1_1_completed_v4 = new TimelineApplicationAttemptInfo(Some("attempt_1_1"),
     100, 400, 400, "spark", true, "001", None, 4)
-  val attempt_1_2 = new TimelineApplicationAttemptInfo(Some("attempt_1_2"), 200, 202, 202,
+  val attempt_1_2_completed_v3 = new TimelineApplicationAttemptInfo(Some("attempt_1_2"), 200, 202, 202,
     "spark", true, "001", None, 3)
 
   test("timeShort") {
@@ -247,7 +247,7 @@ class YarnProviderUtilsSuite extends SparkFunSuite
 
     val entity = createTimelineEntity(
       SPARK_SUMMARY_ENTITY_TYPE,
-      AppAttemptDetails(yarnAppId, None),
+      AppAttemptDetails(yarnAppId, None, None),
       SparkAppAttemptDetails(sparkAppId, None, "app", "user"),
       1000, 0, 1000, 1)
     val info = toApplicationHistoryInfo(entity)
@@ -259,13 +259,13 @@ class YarnProviderUtilsSuite extends SparkFunSuite
   }
 
   test("MergeHistoryEvents") {
-    val one_1 = new TimelineApplicationHistoryInfo("app1", "one", attempt_1_1 :: Nil)
-    val one_2 = new TimelineApplicationHistoryInfo("app1", "one", attempt_1_2 :: Nil)
+    val one_1 = new TimelineApplicationHistoryInfo("app1", "one", attempt_1_1_incomplete_v1 :: Nil)
+    val one_2 = new TimelineApplicationHistoryInfo("app1", "one", attempt_1_2_completed_v3 :: Nil)
     val one_0 = new TimelineApplicationHistoryInfo("app1", "one", Nil)
 
     val merge_12 = mergeAttempts(one_1, one_2)
     assertListSize(merge_12.attempts, 2, "merged attempt list")
-    assert(List(attempt_1_2, attempt_1_1) === merge_12.attempts)
+    assert(List(attempt_1_2_completed_v3, attempt_1_1_incomplete_v1) === merge_12.attempts)
 
     assert(1 === mergeAttempts(one_1, one_0).attempts.size)
     assert(one_1 === mergeAttempts(one_1, one_1))
@@ -301,11 +301,13 @@ class YarnProviderUtilsSuite extends SparkFunSuite
   }
 
   test("MergeAttemptOrdering-4") {
-    assert(attempt_1_1_updated === mostRecentAttempt(attempt_1_1, attempt_1_1_updated))
+    assert(attempt_1_1_incomplete_v1_updated ===
+        mostRecentAttempt(attempt_1_1_incomplete_v1, attempt_1_1_incomplete_v1_updated))
   }
 
   test("MergeAttemptOrdering-5") {
-    assert(attempt_1_1_updated === mostRecentAttempt(attempt_1_1_updated, attempt_1_1))
+    assert(attempt_1_1_incomplete_v1_updated ===
+        mostRecentAttempt(attempt_1_1_incomplete_v1_updated, attempt_1_1_incomplete_v1))
   }
 
   test("MergeAttemptOrdering-6") {
@@ -319,23 +321,23 @@ class YarnProviderUtilsSuite extends SparkFunSuite
   }
 
   test("MergeAttemptOrdering-8") {
-    assert(attempt_1_1_updated_version === mostRecentAttempt(attempt_1_1,
-      attempt_1_1_updated_version))
+    assert(attempt_1_1_incomplete_v2 === mostRecentAttempt(attempt_1_1_incomplete_v1,
+      attempt_1_1_incomplete_v2))
   }
 
   test("MergeAttemptOrdering-9") {
-    assert(attempt_1_1_updated_version === mostRecentAttempt(attempt_1_1_updated_version,
-      attempt_1_1))
+    assert(attempt_1_1_incomplete_v2 === mostRecentAttempt(attempt_1_1_incomplete_v2,
+      attempt_1_1_incomplete_v1))
   }
 
   test("MergeAttemptOrdering-10") {
-    assert(attempt_1_1_completed_v4 === mostRecentAttempt(attempt_1_1_updated_version,
+    assert(attempt_1_1_completed_v4 === mostRecentAttempt(attempt_1_1_incomplete_v2,
       attempt_1_1_completed_v4))
   }
 
   test("MergeAttemptOrdering-11") {
     assert(attempt_1_1_completed_v4 === mostRecentAttempt(attempt_1_1_completed_v4,
-      attempt_1_1_updated_version))
+      attempt_1_1_incomplete_v2))
   }
 
   test("SortAttempts-by-version") {
@@ -344,45 +346,50 @@ class YarnProviderUtilsSuite extends SparkFunSuite
 
   test("merge-results-updated-first") {
     // and in the other order
-    assert(List(attempt_1_1_updated_version) ===
-        mergeAttemptInfoLists(List(attempt_1_1_updated_version), List(attempt_1_1)))
+    assert(List(attempt_1_1_incomplete_v2) ===
+        mergeAttemptInfoLists(List(attempt_1_1_incomplete_v2), List(attempt_1_1_incomplete_v1)))
   }
 
-  test("merge-results-updated-second") {
+  test("merge-results-incomplete-second") {
     // and in the other order
-    assert(List(attempt_1_1_updated_version) ===
-        mergeAttemptInfoLists(List(attempt_1_1), List(attempt_1_1_updated_version)))
+    assert(List(attempt_1_1_incomplete_v2) ===
+        mergeAttemptInfoLists(List(attempt_1_1_incomplete_v1), List(attempt_1_1_incomplete_v2)))
   }
 
-  test("merge-results-v2_v3") {
-    // and in the other order
-    assert(List(attempt_1_2, attempt_1_1_updated_version) ===
-        mergeAttemptInfoLists(List(attempt_1_2), List(attempt_1_1_updated_version)))
+  test("merge-results-completed applications first") {
+    // completed applications must come ahead of incomplete ones
+    assert(List(attempt_1_2_completed_v3, attempt_1_1_incomplete_v2) ===
+        mergeAttemptInfoLists(List(attempt_1_2_completed_v3), List(attempt_1_1_incomplete_v2)))
   }
 
   test("merge-results-v1_v2_v3") {
     // and in the other order
-    assert(List(attempt_1_2, attempt_1_1_updated_version) ===
-        mergeAttemptInfoLists(List(attempt_1_2, attempt_1_1),
-          List(attempt_1_1_updated_version)))
+    assert(List(attempt_1_2_completed_v3, attempt_1_1_incomplete_v2) ===
+        mergeAttemptInfoLists(List(attempt_1_2_completed_v3, attempt_1_1_incomplete_v1),
+          List(attempt_1_1_incomplete_v2)))
   }
 
 
   test("merge-multiple-attempts-by-version") {
 
-    val app2 = new TimelineApplicationHistoryInfo("app2", "app2", List(attempt_1_1))
+    val app1 = new TimelineApplicationHistoryInfo("app1", "app1", List(attempt_1_1_incomplete_v1))
 
-    val histories1 = combineResults(Nil, List(app2))
-    val app2_updated = new TimelineApplicationHistoryInfo("app2", "app2",
+    val histories1 = combineResults(Nil, List(app1))
+    val app1_updated = new TimelineApplicationHistoryInfo("app1", "app1",
       List(attempt_1_1_completed_v4))
 
-    val histories2 = combineResults(Nil, List(app2_updated))
+    val histories2 = combineResults(Nil, List(app1_updated))
     val merged = combineResults(histories1, histories2)
     merged should have size 1
     val finalApp = merged.head
     val finalAppDescription = describeApplicationHistoryInfo(finalApp)
     val finalAttempt = finalApp.attempts.head
     assert(finalAttempt.completed, s"not completed $finalAppDescription")
+    assert(List(historyInfo(a1_attempt_1, a1_attempt_2.attempts ++ a1_attempt_1.attempts))
+        === combineResults(List(a1_attempt_1), List(a1_attempt_2)))
+  }
+
+  test("combine history info") {
     assert(List(historyInfo(a1_attempt_1, a1_attempt_2.attempts ++ a1_attempt_1.attempts))
         === combineResults(List(a1_attempt_1), List(a1_attempt_2)))
   }

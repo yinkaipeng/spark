@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.history.yarn.integration
+package org.apache.spark.deploy.history.yarn.integration.timeline_v1
+
+import org.apache.spark.deploy.history.yarn.integration.ScaleSuite
 
 /**
  * Scale test.
@@ -27,7 +29,7 @@ package org.apache.spark.deploy.history.yarn.integration
  * and the total queue are expanded to cover having a large number of queued events.
  * The test will fail if the batch sizes are too small
  */
-class ScaleSuiteATSv1 extends ScaleSuite {
+class ScaleSuiteATS_v1 extends ScaleSuite {
 
   override def enableATSv15: Boolean = false
 }

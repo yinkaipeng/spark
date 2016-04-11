@@ -242,8 +242,38 @@ private[spark] object YarnProviderUtils extends Logging {
   }
 
   /**
+   * An ordering of events such that if `attempt1` is newer than `attempt2`, the result is negative,
+   * if `attempt1` is newer than `attempt2` then the result is positive. Newer-than-ness considers
+   * any attempts that are complete to come ahead of those which are not.
+   */
+  class attemptOrdering extends Ordering[TimelineApplicationAttemptInfo] {
+    override def compare(
+        attempt1: TimelineApplicationAttemptInfo,
+        attempt2: TimelineApplicationAttemptInfo): Int = {
+      if (attempt1.completed && !attempt2.completed) {
+        // only attempt1 has completed
+        -1
+      } else if (!attempt1.completed && attempt2.completed) {
+        // only attempt2 has completed
+        1
+      } else if (attempt1.lastUpdated >  attempt2.lastUpdated) {
+        // equal completed state, attempt 1 was updated more recently
+        -1
+      } else if (attempt1.lastUpdated == attempt2.lastUpdated) {
+        // equal completed state, both attempts updated at same time
+        0
+      } else {
+        // equal completed state, attempt 2 must have been updated more recently
+        1
+      }
+    }
+  }
+
+  /**
    * Comparator to find which attempt is newer than the other.
    *
+   * The Web UI requires any incomplete application to come ahead of any completed application,
+   * this is done by
    * @param attempt1 attempt 1
    * @param attempt2 attempt 2
    * @return true if attempt1 is considered newer than attempt2
@@ -251,8 +281,10 @@ private[spark] object YarnProviderUtils extends Logging {
   def attemptNewerThan(
       attempt1: TimelineApplicationAttemptInfo,
       attempt2: TimelineApplicationAttemptInfo): Boolean = {
-    if (attempt1.version > 0 && attempt2.version > 0) {
-      attempt1.version > attempt2.version
+    if (!attempt1.completed && attempt2.completed) {
+      true
+    } else if (attempt1.completed && !attempt2.completed) {
+      false
     } else {
       attempt1.lastUpdated > attempt2.lastUpdated
     }
@@ -269,7 +301,7 @@ private[spark] object YarnProviderUtils extends Logging {
   def sortAttempts(attempts: List[TimelineApplicationAttemptInfo])
     : List[TimelineApplicationAttemptInfo] = {
     // sort attempts
-    attempts.sortWith(attemptNewerThan)
+    attempts.sorted(new attemptOrdering())
   }
 
   /**

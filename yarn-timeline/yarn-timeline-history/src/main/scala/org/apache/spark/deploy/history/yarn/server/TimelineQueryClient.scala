@@ -329,6 +329,7 @@ private[spark] class TimelineQueryClient(
       windowEnd: Option[Long] = None,
       fromId: Option[String] = None,
       fromTimestamp: Option[Long] = None): List[TimelineEntity] = {
+
       require(!entityType.isEmpty, "no entity type")
       var resource = entityResource(entityType)
       // build the resource

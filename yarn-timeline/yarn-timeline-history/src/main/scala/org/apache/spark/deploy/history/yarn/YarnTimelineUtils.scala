@@ -51,7 +51,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
 private[yarn] case class AppAttemptDetails(
     appId: ApplicationId,
     attemptId: Option[ApplicationAttemptId],
-    groupId: Option[String] = None);
+    groupId: Option[String]);
 
 /**
  * The details from the spark application start event
