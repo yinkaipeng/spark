@@ -69,8 +69,8 @@ class YarnProviderUtilsSuite extends SparkFunSuite
   val i30 = historyInfo("i30", 3, 0, false)
   val h33 = historyInfo("h30", 3, 3, true)
   val h44 = historyInfo("h44", 4, 4, true)
-  val iA10_incomplete = historyInfo("iA", 1, 0, false)
-  val iA11_completed = historyInfo("iA", 1, 1, true)
+  val iA10_incomplete = historyInfo("iA", 100, 100, false)
+  val iA11_completed = historyInfo("iA", 100, 200, true)
   val a1_attempt_1 = historyInfo("iA", Some("attempt_1"), 100, 102, 102, false)
   val a1_attempt_2 = historyInfo("iA", Some("attempt_2"), 200, 202, 202, true)
   val none_incomplete = new TimelineApplicationAttemptInfo(None, 100, 0, 102, "spark", false,
@@ -83,7 +83,7 @@ class YarnProviderUtilsSuite extends SparkFunSuite
   val attempt_1_1_incomplete_v1 = new TimelineApplicationAttemptInfo(Some("attempt_1_1"),
     100, 0, 102, "spark", false, "001", None, 1)
   // attempt 1.1 updated at time = 102; no version field
-  val attempt_1_1_incomplete_v1_updated = new TimelineApplicationAttemptInfo(Some("attempt_1_1"),
+  val attempt_1_1_incomplete_v_none_updated = new TimelineApplicationAttemptInfo(Some("attempt_1_1"),
     100, 0, 150, "spark", false, "001", None)
   // attempt 1.1 with the version field updated to 2; it should always be newer
   val attempt_1_1_incomplete_v2 = new TimelineApplicationAttemptInfo(Some("attempt_1_1"),
@@ -283,7 +283,7 @@ class YarnProviderUtilsSuite extends SparkFunSuite
     val one_0 = new TimelineApplicationHistoryInfo("id_1", "one", Nil)
   }
 
-  test("merge-results-None-attemptId-incomplete-first") {
+  test("merge-results-None-attemptId-complete-first") {
     assert(List(none_completed) === mergeAttemptInfoLists(List(none_incomplete),
       List(none_completed)))
   }
@@ -307,13 +307,13 @@ class YarnProviderUtilsSuite extends SparkFunSuite
   }
 
   test("MergeAttemptOrdering-4") {
-    assert(attempt_1_1_incomplete_v1_updated ===
-        mostRecentAttempt(attempt_1_1_incomplete_v1, attempt_1_1_incomplete_v1_updated))
+    assert(attempt_1_1_incomplete_v_none_updated ===
+        mostRecentAttempt(attempt_1_1_incomplete_v1, attempt_1_1_incomplete_v_none_updated))
   }
 
   test("MergeAttemptOrdering-5") {
-    assert(attempt_1_1_incomplete_v1_updated ===
-        mostRecentAttempt(attempt_1_1_incomplete_v1_updated, attempt_1_1_incomplete_v1))
+    assert(attempt_1_1_incomplete_v_none_updated ===
+        mostRecentAttempt(attempt_1_1_incomplete_v_none_updated, attempt_1_1_incomplete_v1))
   }
 
   test("MergeAttemptOrdering-6") {
@@ -402,6 +402,36 @@ class YarnProviderUtilsSuite extends SparkFunSuite
       List(historyInfo(a1_attempt_1, a1_attempt_2.attempts ++ a1_attempt_1.attempts)),
       0,
       List(a1_attempt_1), List(a1_attempt_2))
+  }
+
+  def assertAttemptListSorts(expected: List[TimelineApplicationAttemptInfo],
+      attempts: List[TimelineApplicationAttemptInfo]): Unit = {
+   assert(expected === sortAttempts(attempts))
+  }
+
+  /*
+  Test all the list orderin, verifying that completed applications
+  always come first, then it is most-recent by update timr
+   */
+  test("attempt-list-ordering") {
+    assertAttemptListSorts(Nil, Nil)
+    assertAttemptListSorts(
+      List(attempt_1_2_completed_v3, attempt_1_1_incomplete_v2),
+      List(attempt_1_1_incomplete_v2, attempt_1_2_completed_v3))
+    assertAttemptListSorts(
+      List(attempt_1_2_completed_v3, attempt_1_1_incomplete_v2),
+      List(attempt_1_2_completed_v3, attempt_1_1_incomplete_v2))
+    assertAttemptListSorts(
+      List(none_completed, none_completed_orig_time),
+      List(none_completed, none_completed_orig_time))
+    assertAttemptListSorts(
+      List(none_completed, none_completed_orig_time),
+      List(none_completed_orig_time, none_completed))
+  }
+
+  test("SameAs semantics") {
+    assert(attempt_1_1_incomplete_v2.sameAs(attempt_1_1_incomplete_v2))
+    assert(!attempt_1_1_incomplete_v2.sameAs(attempt_1_1_incomplete_v_none_updated))
   }
 
 }
