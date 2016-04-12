@@ -25,11 +25,13 @@ import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
  *
  * @param timestamp timestamp in milliseconds
  * @param applications application listing. These must be pre-sorted
+ * @param newEntries count of new entries in last listing action
  * @param failureCause optional exception raised (implies operation was a failure)
  */
 private[spark] class ApplicationListingResults(
     val timestamp: Long,
     val applications: Seq[TimelineApplicationHistoryInfo],
+    val newEntries: Int,
     val failureCause: Option[Throwable]) extends Logging {
 
   /**

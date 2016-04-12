@@ -205,7 +205,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * The empty listing, with a timestamp to indicate that the listing
    * has never taken place.
    */
-  private val EmptyListing = new ApplicationListingResults(0, Nil, None)
+  private val EmptyListing = new ApplicationListingResults(0, Nil, 0, None)
 
   /**
    * List of applications. Initial result is empty.
@@ -285,7 +285,9 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
     if (!enabled) {
       logError(TEXT_SERVICE_DISABLED)
     } else {
+      val atsVersion = if (timelineServiceV1_5Enabled(yarnConf)) "1.5" else "1.0"
       logInfo(TEXT_SERVICE_ENABLED)
+      logInfo(s"ATS version $atsVersion")
       logInfo(KEY_SERVICE_URL + ": " + timelineEndpoint)
       logDebug(sparkConf.toDebugString)
       // get the thread time
@@ -596,15 +598,15 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       }
       // merge the results so that multiple attempts are combined into
       // single history entries
-      val histories = combineResults(Nil, umergedHistory)
+      val (histories, newApplications) = combineResults(Nil, umergedHistory)
       val incomplete = countIncompleteApplications(histories)
-      logInfo(s"Found ${histories.size} application(s): " +
+      logInfo(s"Found ${histories.size} application(s); " +
           s"${histories.size - incomplete} complete and $incomplete incomplete")
-      new ApplicationListingResults(timestamp, histories, None)
+      new ApplicationListingResults(timestamp, histories, newApplications, None)
     } catch {
       case e: IOException =>
         logWarning(s"Failed to list entities from $timelineEndpoint", e)
-        new ApplicationListingResults(now(), Nil, Some(e))
+        new ApplicationListingResults(now(), Nil,  0, Some(e))
     }
   }
 
@@ -612,7 +614,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
    * List applications.
    *
    * Also updates the cached values of the listing/last failure, depending
-   * upon the outcome.
+   * upon the outcome, merging in the latest listing with the previous one.
    *
    * If the timeline is not enabled, returns an empty list.
    *
@@ -654,11 +656,14 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
           // on a success, the existing application list is merged
           // creating a new aggregate application list
           logDebug(s"Listed application count: ${results.size}")
-          val merged = combineResults(history, results.applications)
-          logDebug(s"Existing count: ${history.size}; merged = ${merged.size} ")
+          val (merged, newEntries) = combineResults(history, results.applications)
+          logDebug(s"Existing count: ${history.size};" +
+              s" merged = ${merged.size};" +
+              s" new entries $newEntries")
           val sorted = sortApplicationsByStartTime(updateAppsFromYARN(merged, yarnApps))
           // and a final result
-          setApplications(new ApplicationListingResults(results.timestamp, sorted, None))
+          setApplications(
+            new ApplicationListingResults(results.timestamp, sorted, newEntries, None))
           resetLastFailure()
           metrics.refreshLastSuccessTime.time = refreshStartTime
         } else {
@@ -820,9 +825,9 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
         ui.getSecurityManager.setViewAcls(appListener.sparkUser.getOrElse("<Not Started>"),
           appListener.viewAcls.getOrElse(""))
         val latestState = toApplicationHistoryInfo(attemptEntity).attempts.head
+        val skipProbe = false // attemptInfo.completed
         Some(LoadedAppUI(ui,
-/*
-        if (attemptInfo.completed) {
+        if (skipProbe) {
             logDebug("Application is complete: returning 'completed' application probe")
             completedAppProbe
           } else {
@@ -830,9 +835,6 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
             yarnUpdateProbe(appId, attemptId, latestState.version, latestState.lastUpdated,
               now() + updateProbeWindowMs)
           }
-*/
-          yarnUpdateProbe(appId, attemptId, latestState.version, latestState.lastUpdated,
-            now() + updateProbeWindowMs)
         ))
       } catch {
 

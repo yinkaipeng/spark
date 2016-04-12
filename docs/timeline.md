@@ -70,11 +70,6 @@ Examples:
   <value>atshost.example.org:8188</value>
 </property>
 
-<property>
-  <name>yarn.timeline-service.entity-group-fs-store.summary-entity-types</name>
-  <value>YARN_APPLICATION,YARN_APPLICATION_ATTEMPT,YARN_CONTAINER,spark_event_v01</value>
-</property>
-
 <!-- Classes for other services can be listed, separated by commas -->
 <property>
   <name>yarn.timeline-service.entity-group-fs-store.group-id-plugin-classes</name>
@@ -87,7 +82,6 @@ Examples:
   set this flag to true.</description>
   <value>true</value>
 </property>
-
 
 <property>
   <name>yarn.timeline-service.entity-group-fs-store.active-dir</name>
@@ -114,7 +108,7 @@ by setting the spark configuration property `spark.yarn.services`
 to `org.apache.spark.deploy.history.yarn.YarnHistoryService`
 
     spark.yarn.services org.apache.spark.deploy.history.yarn.YarnHistoryService
-    spark.eventLog.enabled true
+    spark.hadoop.yarn.timeline-service.enabled true
 
 Notes
 
@@ -421,7 +415,7 @@ web server (V1.0 API) or write to the specific HDFS directory (ATS API v1.5).
 
 ### An application is not appearing in the history
 
-All the causes above, and
+All the causes above, and:
 
 - The application isn't actually starting.
 

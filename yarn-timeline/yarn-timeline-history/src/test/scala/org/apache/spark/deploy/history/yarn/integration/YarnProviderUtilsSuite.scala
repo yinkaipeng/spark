@@ -146,33 +146,43 @@ class YarnProviderUtilsSuite extends SparkFunSuite
     assert(Some(h44) === findStartOfWindow(List(h44, h12, h33)))
   }
 
+  def assertCombinedResults(expected: Seq[TimelineApplicationHistoryInfo], expectedNew: Int,
+      original: Seq[TimelineApplicationHistoryInfo], latest: Seq[TimelineApplicationHistoryInfo]): Unit = {
+    val (results, newEntries) = combineResults(original, latest)
+    assert(expected === results)
+    assert(expectedNew === expectedNew, s"Expected count of new entries with list $expected" +
+        " and combined list $results")
+  }
+
   test("combineResults-list-nil") {
-    assert((h44 :: Nil) === combineResults(List(h44), Nil))
+    assertCombinedResults((h44 :: Nil), 0, List(h44), Nil)
   }
 
   test("combineResults-2-Nil-list") {
-    assert((h44 :: Nil) === combineResults(Nil, List(h44)))
+    assertCombinedResults((h44 :: Nil), 1, Nil, List(h44))
   }
 
   test("combineResults-3-Nil-lists") {
-    assert(Nil === combineResults(Nil, Nil))
+    assertCombinedResults(Nil, 0, Nil, Nil)
   }
 
   test("combineResults-5") {
-    assert((h44 :: i20 :: Nil) === combineResults(List(h44), List(i20)))
+    assertCombinedResults((h44 :: i20 :: Nil), 1, List(h44), List(i20))
   }
 
   test("combineResults-6-merge-duplicate-to-one") {
-    assert(List(h44) === combineResults(List(h44), List(h44)))
+    assertCombinedResults(List(h44), 0, List(h44), List(h44))
   }
 
   test("combineResults-7-completed") {
-    assert(List(iA11_completed) === combineResults(List(iA10_incomplete), List(iA11_completed)))
+    assertCombinedResults(List(iA11_completed), 0, List(iA10_incomplete), List(iA11_completed))
   }
 
   test("merge-multiple_attempts") {
-    assert(List(historyInfo(a1_attempt_1, a1_attempt_2.attempts ++ a1_attempt_1.attempts))
-       === combineResults(List(a1_attempt_1), List(a1_attempt_2)))
+    assertCombinedResults(
+      List(historyInfo(a1_attempt_1, a1_attempt_2.attempts ++ a1_attempt_1.attempts)),
+      0,
+      List(a1_attempt_1), List(a1_attempt_2))
   }
 
   test("SortApplications-1") {
@@ -200,8 +210,6 @@ class YarnProviderUtilsSuite extends SparkFunSuite
   }
 
   test("buildEntityIds") {
-    val sparkAppId = "spark_app_id_2"
-    val attempt = "attempt_id"
     val yarnAppStr = yarnAppId.toString
     val attemptId = Some(yarnAttemptId)
     val attemptIdStr = yarnAttemptId.toString
@@ -226,7 +234,6 @@ class YarnProviderUtilsSuite extends SparkFunSuite
       SparkAppAttemptDetails( sparkAppId, sparkAttemptId, "app", "user"),
       1000, 0, 1000, 1)
     val entityDescription = describeEntity(entity)
-    val ev1 = entity.getOtherInfo.get(FIELD_ENTITY_VERSION)
     val version = numberField(entity, FIELD_ENTITY_VERSION, -1).longValue()
     assert (0 < version, s"wrong version in $entityDescription")
 
@@ -243,7 +250,6 @@ class YarnProviderUtilsSuite extends SparkFunSuite
   test("EntityWithoutAttempt") {
     val sparkAppId = Some("spark-app-id-1")
     val yarnAppStr = yarnAppId.toString
-    val yarnAttemptIdStr = yarnAttemptId.toString
 
     val entity = createTimelineEntity(
       SPARK_SUMMARY_ENTITY_TYPE,
@@ -374,24 +380,28 @@ class YarnProviderUtilsSuite extends SparkFunSuite
 
     val app1 = new TimelineApplicationHistoryInfo("app1", "app1", List(attempt_1_1_incomplete_v1))
 
-    val histories1 = combineResults(Nil, List(app1))
+    val (histories1, h1c) = combineResults(Nil, List(app1))
     val app1_updated = new TimelineApplicationHistoryInfo("app1", "app1",
       List(attempt_1_1_completed_v4))
 
-    val histories2 = combineResults(Nil, List(app1_updated))
-    val merged = combineResults(histories1, histories2)
+    val (histories2, h2c) = combineResults(Nil, List(app1_updated))
+    val (merged, newlyAdded) = combineResults(histories1, histories2)
     merged should have size 1
     val finalApp = merged.head
     val finalAppDescription = describeApplicationHistoryInfo(finalApp)
     val finalAttempt = finalApp.attempts.head
     assert(finalAttempt.completed, s"not completed $finalAppDescription")
-    assert(List(historyInfo(a1_attempt_1, a1_attempt_2.attempts ++ a1_attempt_1.attempts))
-        === combineResults(List(a1_attempt_1), List(a1_attempt_2)))
+    assertCombinedResults(
+      List(historyInfo(a1_attempt_1, a1_attempt_2.attempts ++ a1_attempt_1.attempts)),
+      0,
+      List(a1_attempt_1), List(a1_attempt_2))
   }
 
   test("combine history info") {
-    assert(List(historyInfo(a1_attempt_1, a1_attempt_2.attempts ++ a1_attempt_1.attempts))
-        === combineResults(List(a1_attempt_1), List(a1_attempt_2)))
+    assertCombinedResults(
+      List(historyInfo(a1_attempt_1, a1_attempt_2.attempts ++ a1_attempt_1.attempts)),
+      0,
+      List(a1_attempt_1), List(a1_attempt_2))
   }
 
 }
