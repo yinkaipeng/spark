@@ -600,7 +600,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       // single history entries
       val (histories, newApplications) = combineResults(Nil, umergedHistory)
       val incomplete = countIncompleteApplications(histories)
-      logInfo(s"Listing ${histories.size} application(s); $newApplications new; " +
+      logInfo(s"Found ${histories.size} application(s); " +
           s"${histories.size - incomplete} complete and $incomplete incomplete")
       new ApplicationListingResults(timestamp, histories, newApplications, None)
     } catch {
@@ -825,17 +825,14 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
         ui.getSecurityManager.setViewAcls(appListener.sparkUser.getOrElse("<Not Started>"),
           appListener.viewAcls.getOrElse(""))
         val latestState = toApplicationHistoryInfo(attemptEntity).attempts.head
-        // as the app UI cache probes on spark event queue, it's probe logic can
-        // still check for completion here
         val skipProbe = false // attemptInfo.completed
         Some(LoadedAppUI(ui,
         if (skipProbe) {
             logDebug("Application is complete: returning 'completed' application probe")
             completedAppProbe
           } else {
-            logDebug(s"Incomplete app -probe will trigger after $updateProbeWindowMs mS")
+            logDebug("Incomplete app -probe will trigger after $updateProbeWindowMs")
             yarnUpdateProbe(appId, attemptId, latestState.version, latestState.lastUpdated,
-              attemptInfo.completed,
               now() + updateProbeWindowMs)
           }
         ))
@@ -1039,7 +1036,6 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       attemptId: Option[String],
       version: Long,
       updated: Long,
-      wasCompleted: Boolean,
       checkTime: Long)(): Boolean = {
     val time = now()
     val (_, attempt, _) = getApplications.lookupAttempt(appId, attemptId)
@@ -1047,11 +1043,11 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
       case None =>
         logDebug(s"Application Attempt $appId/$attemptId not found")
         false
-      case Some(a) if a.version > version && a.completed && !wasCompleted =>
-        logDebug(s"Updated application attempt is now complete: $a")
-        true
       case Some(a) if a.version > version && time > checkTime =>
-        logDebug(s"Attempt version ${a.version} > $version after check time: $a")
+        logDebug(s"Attempt version=${a.version} > version after check time: $a")
+        true
+      case Some(a) if a.version > version && a.completed =>
+        logDebug(s"Updated application is now complete: $a")
         true
       case Some(a) =>
         logDebug(s"Probe conditions were not met")

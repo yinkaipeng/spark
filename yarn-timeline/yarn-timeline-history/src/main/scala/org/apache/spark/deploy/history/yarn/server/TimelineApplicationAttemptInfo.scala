@@ -72,17 +72,6 @@ private[spark] class TimelineApplicationAttemptInfo(
      """.stripMargin
   }
 
-  /**
-   * The equality rules which consider two attempts to be "the same"
-   * @param that the other entity
-   * @return true if for the purpose of update operations, these two attempts
-   *         are considered current and equivalent.
-   */
-  def sameAs(that: TimelineApplicationAttemptInfo): Boolean = {
-    entityId.equals(that.entityId) &&
-        ((version > 0 && version == that.version)) ||
-        (version == 0 && that.version == 0 && lastUpdated == that.lastUpdated)
-  }
 }
 
 private[spark] class TimelineApplicationHistoryInfo(
