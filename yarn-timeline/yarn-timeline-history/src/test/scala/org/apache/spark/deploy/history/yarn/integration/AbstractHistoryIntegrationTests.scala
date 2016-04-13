@@ -137,6 +137,7 @@ abstract class AbstractHistoryIntegrationTests
     sparkConf.set(OPTION_BACKGROUND_REFRESH_INTERVAL, "0s")
     sparkConf.set(OPTION_YARN_LIVENESS_CHECKS, "false")
     sparkConf.set(OPTION_WINDOW_LIMIT, "0")
+    sparkConf.set(OPTION_APPLICATION_UPDATE_WINDOW, "10s")
     sparkConf.setAppName(APP_NAME)
     if (useMiniHDFS) {
       hadoopOpt(sparkConf, CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY,

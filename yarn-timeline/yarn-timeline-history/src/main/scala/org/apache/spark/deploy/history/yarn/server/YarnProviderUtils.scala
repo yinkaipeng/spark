@@ -153,8 +153,11 @@ private[spark] object YarnProviderUtils extends Logging {
     latest.foreach(history => {
       val id = history.id
       results.put(id, results.get(id) match {
-        case Some(old) => mergeAttempts(old, history)
+        case Some(old) =>
+          mergeAttempts(old, history)
+
         case None => {
+          logInfo(s"New application found: $id")
           newApplications += 1
           history
         }
@@ -180,9 +183,18 @@ private[spark] object YarnProviderUtils extends Logging {
   def mergeAttempts(old: TimelineApplicationHistoryInfo, latest: TimelineApplicationHistoryInfo)
     : TimelineApplicationHistoryInfo = {
     val oldAttempts = old.attempts
-    val latestAttempts = latest.attempts
-    new TimelineApplicationHistoryInfo(old.id, old.name,
-      mergeAttemptInfoLists(oldAttempts, latestAttempts))
+    val merged = mergeAttemptInfoLists(oldAttempts, latest.attempts)
+    val growth = merged.size - oldAttempts.size
+    if (growth > 0) {
+      // at least one attempt has been added (implicit: list size > 0)
+      logInfo(s"Application ${old.id} added attempt count $growth " +
+          s"head attempt ${merged.head.entityId}")
+    }
+    val updatedInfo = new TimelineApplicationHistoryInfo(old.id, old.name, merged)
+    if (!old.completed && updatedInfo.completed) {
+      logInfo(s"Application ${old.id} has now completed")
+    }
+    updatedInfo
   }
 
   /**
@@ -204,18 +216,25 @@ private[spark] object YarnProviderUtils extends Logging {
       a => attemptMap += (a.attemptId -> a)
     }
 
-    latestAttempts foreach (a => {
-      val id = a.attemptId
+    latestAttempts foreach (latest => {
+      val id = latest.attemptId
+      logDebug(s"Processing latest attempt $latest")
       attemptMap get id match {
         case None =>
           // no match: insert into the map
           // and add to the map of attempts
-          attemptMap += (id -> a)
+          logInfo(s"Adding new attempt $id")
+          attemptMap += (id -> latest)
+
+        case Some(existing) if (existing.sameAs(latest)) =>
+          logDebug("New event is same as old event: ignoring")
 
         case Some(existing) =>
           // existing match, so merge.
           // this will also match Some(None), meaning there is an attempt ID with the of `None`,
-          attemptMap += (id -> mostRecentAttempt(existing, a))
+          logInfo(s"Updating attempt $id")
+          logDebug(s"Existing attempt is $existing")
+          attemptMap += (id -> mostRecentAttempt(existing, latest))
       }
     })
     val finalMapValues = attemptMap.values.toList
@@ -270,27 +289,6 @@ private[spark] object YarnProviderUtils extends Logging {
         // equal completed state, attempt 2 must have been updated more recently
         1
       }
-    }
-  }
-
-  /**
-   * Comparator to find which attempt is newer than the other.
-   *
-   * The Web UI requires any incomplete application to come ahead of any completed application,
-   * this is done by
-   * @param attempt1 attempt 1
-   * @param attempt2 attempt 2
-   * @return true if attempt1 is considered newer than attempt2
-   */
-  def attemptNewerThan(
-      attempt1: TimelineApplicationAttemptInfo,
-      attempt2: TimelineApplicationAttemptInfo): Boolean = {
-    if (!attempt1.completed && attempt2.completed) {
-      true
-    } else if (attempt1.completed && !attempt2.completed) {
-      false
-    } else {
-      attempt1.lastUpdated > attempt2.lastUpdated
     }
   }
 
