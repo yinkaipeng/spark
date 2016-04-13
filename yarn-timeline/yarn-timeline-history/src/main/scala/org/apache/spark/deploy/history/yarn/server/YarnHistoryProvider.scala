@@ -606,7 +606,7 @@ private[spark] class YarnHistoryProvider(sparkConf: SparkConf)
     } catch {
       case e: IOException =>
         logWarning(s"Failed to list entities from $timelineEndpoint", e)
-        new ApplicationListingResults(now(), Nil,  0, Some(e))
+        new ApplicationListingResults(now(), Nil, 0, Some(e))
     }
   }
 
