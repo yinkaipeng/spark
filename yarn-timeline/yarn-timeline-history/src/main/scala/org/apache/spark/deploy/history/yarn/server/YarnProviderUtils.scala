@@ -139,24 +139,28 @@ private[spark] object YarnProviderUtils extends Logging {
    *
    * @param original original list of entries
    * @param latest later list of entries
-   * @return a combined list.
+   * @return (a combined list, count of new applications)
    */
   def combineResults(
       original: Seq[TimelineApplicationHistoryInfo],
       latest: Seq[TimelineApplicationHistoryInfo])
-      : Seq[TimelineApplicationHistoryInfo] = {
+      : (Seq[TimelineApplicationHistoryInfo], Int) = {
     // build map of original
     val results = new scala.collection.mutable.HashMap[String, TimelineApplicationHistoryInfo]
+    var newApplications = 0
     original.map((elt) => results.put(elt.id, elt))
     // then merge in the new values, a combination of appending and adding
     latest.foreach(history => {
       val id = history.id
       results.put(id, results.get(id) match {
         case Some(old) => mergeAttempts(old, history)
-        case None => history
+        case None => {
+          newApplications += 1
+          history
+        }
       })
     })
-    results.values.toList
+    (results.values.toList, newApplications)
   }
 
   /**
@@ -515,7 +519,7 @@ private[spark] object YarnProviderUtils extends Logging {
         incomplete.sparkAttemptId,
         incomplete.version,
         incomplete.groupId)
-      logDebug(s"Marking application ${appInfo.id} completed: ${describeAttempt(incomplete)}")
+      logInfo(s"Marking application ${appInfo.id} as completed: ${describeAttempt(incomplete)}")
       new TimelineApplicationHistoryInfo(appInfo.id, appInfo.name, updated :: appInfo.attempts.tail)
     }
 
