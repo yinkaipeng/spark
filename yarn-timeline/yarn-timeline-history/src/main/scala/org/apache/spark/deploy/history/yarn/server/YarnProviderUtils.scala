@@ -24,7 +24,7 @@ import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.Logging
-import org.apache.spark.deploy.history.yarn.YarnHistoryService._
+import org.apache.spark.deploy.history.yarn.EntityConstants._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 
 /**

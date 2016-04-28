@@ -20,7 +20,7 @@ package org.apache.spark.deploy.history.yarn.integration
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.history.yarn.YarnHistoryService._
+import org.apache.spark.deploy.history.yarn.EntityConstants._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.server.YarnHistoryProvider
 import org.apache.spark.deploy.history.yarn.testtools.{HistoryServiceNotListeningToSparkContext, TimelineSingleEntryBatchSize}

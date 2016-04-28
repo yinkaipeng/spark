@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.history.yarn
+package org.apache.spark.deploy.history.yarn.publish
 
 /**
  * All the constants for the history integration.
@@ -23,11 +23,20 @@ package org.apache.spark.deploy.history.yarn
  * Some of these need to be kept in sync with constants in the `SparkATSPlugin` class;
  * changing the fields will also break all existing history lookups.
  */
-class EntityConstants {
+object EntityConstants {
+
   /**
-   * Name of the entity type used to declare spark Applications.
+   * Name of the entity type used to declare summary
+   * data of an application.
    */
-  val SPARK_EVENT_ENTITY_TYPE: String = "spark_event_v01"
+  val SPARK_SUMMARY_ENTITY_TYPE = "spark_event_v01"
+
+  /**
+   * Name of the entity type used to publish full
+   * application details.
+   */
+  val SPARK_DETAIL_ENTITY_TYPE = "spark_event_v01_detail"
+
   /**
    * Name of the entity type used to declare spark Applications.
    */
@@ -68,6 +77,14 @@ class EntityConstants {
    * Entity `OTHER_INFO` field: attempt ID from spark start event.
    */
   val FIELD_ATTEMPT_ID: String = "attemptId"
+
+  /**
+   * For ATS1.5+: the group instance Id under which events are stored.
+   * If this field is absent, it means that the API/dataset are 1.0 events, so
+   * there is no split between summary and non-summary data.
+   */
+  val FIELD_GROUP_INSTANCE_ID = "groupInstanceId"
+
   /**
    * Entity `OTHER_INFO` field: a counter which is incremented whenever a new timeline entity
    * is created in this JVM (hence, attempt). It can be used to compare versions of the

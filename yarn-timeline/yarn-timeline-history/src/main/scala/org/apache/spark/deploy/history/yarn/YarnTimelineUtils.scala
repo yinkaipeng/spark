@@ -38,7 +38,7 @@ import org.json4s.JsonAST.{JArray, JBool, JDecimal, JDouble, JInt, JNothing, JNu
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.Logging
-import org.apache.spark.deploy.history.yarn.YarnHistoryService._
+import org.apache.spark.deploy.history.yarn.EntityConstants._
 import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerEvent, SparkListenerExecutorAdded, SparkListenerExecutorRemoved, SparkListenerJobEnd, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerStageSubmitted}
 import org.apache.spark.util.{JsonProtocol, Utils}
 
@@ -374,7 +374,7 @@ private[yarn] object YarnTimelineUtils extends Logging {
   def createYarnTimelineClient(hadoopConfiguration: Configuration): TimelineClient = {
     val client = TimelineClient.createTimelineClient()
     hadoopConfiguration.set("yarn.timeline-service.entity-group-fs-store.summary-entity-types",
-      YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
+      EntityConstants.SPARK_SUMMARY_ENTITY_TYPE)
     client.init(hadoopConfiguration)
     client.start()
     client
@@ -434,7 +434,7 @@ private[yarn] object YarnTimelineUtils extends Logging {
    * @return
    */
   def timelineWebappUri(conf: Configuration): URI = {
-    timelineWebappUri(conf, YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
+    timelineWebappUri(conf, EntityConstants.SPARK_SUMMARY_ENTITY_TYPE)
   }
 
   /**

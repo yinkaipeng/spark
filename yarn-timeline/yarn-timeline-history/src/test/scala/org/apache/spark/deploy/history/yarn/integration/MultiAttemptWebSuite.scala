@@ -19,7 +19,7 @@ package org.apache.spark.deploy.history.yarn.integration
 
 import java.net.URL
 
-import org.apache.spark.deploy.history.yarn.YarnHistoryService._
+import org.apache.spark.deploy.history.yarn.EntityConstants._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.server.{YarnHistoryProvider, YarnProviderUtils}
 import org.apache.spark.deploy.history.yarn.server.YarnProviderUtils._

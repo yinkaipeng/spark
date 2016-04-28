@@ -22,7 +22,7 @@ import java.net.{NoRouteToHostException, URI}
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.history.yarn.YarnHistoryService
+import org.apache.spark.deploy.history.yarn.EntityConstants
 import org.apache.spark.deploy.history.yarn.integration.AbstractHistoryIntegrationTests
 import org.apache.spark.deploy.history.yarn.rest.{JerseyBinding, UnauthorizedRequestException}
 import org.apache.spark.deploy.history.yarn.server.YarnHistoryProvider
@@ -60,7 +60,7 @@ class TimelineQueryFailureSuite extends AbstractHistoryIntegrationTests {
   test("ClientListFails") {
     val failingClient = FailingYarnHistoryProvider.createQueryClient()
     intercept[NoRouteToHostException] {
-      failingClient.listEntities(YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
+      failingClient.listEntities(EntityConstants.SPARK_SUMMARY_ENTITY_TYPE)
     }
   }
 
@@ -72,7 +72,7 @@ class TimelineQueryFailureSuite extends AbstractHistoryIntegrationTests {
       JerseyBinding.createClientConfig())
 
     intercept[UnauthorizedRequestException] {
-      failingClient.listEntities(YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
+      failingClient.listEntities(EntityConstants.SPARK_SUMMARY_ENTITY_TYPE)
     }
   }
 
