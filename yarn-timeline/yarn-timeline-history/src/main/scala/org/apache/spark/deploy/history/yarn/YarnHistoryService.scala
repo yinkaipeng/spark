@@ -17,12 +17,9 @@
 
 package org.apache.spark.deploy.history.yarn
 
-import java.io.{Flushable, InterruptedIOException}
 import java.net.{ConnectException, URI}
-import java.util.concurrent.{LinkedBlockingDeque, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import com.codahale.metrics.{Counter, Gauge, Metric, MetricRegistry, Timer}
@@ -37,7 +34,6 @@ import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerBlockUpdated, SparkListenerEvent, SparkListenerExecutorMetricsUpdate}
 import org.apache.spark.scheduler.cluster.{SchedulerExtensionService, SchedulerExtensionServiceBinding}
-import org.apache.spark.util.SystemClock
 
 /**
  * A Yarn Extension Service to post lifecycle events to a registered YARN Timeline Server.
@@ -72,7 +68,8 @@ import org.apache.spark.util.SystemClock
  * will be interrupted once the wait time has expired. All time consumed during the ongoing
  * operation will be counted as part of the shutdown time period.
  */
-private[spark] class YarnHistoryService extends SchedulerExtensionService with Logging {
+private[spark] class YarnHistoryService extends SchedulerExtensionService with Logging
+  with TimeSource {
 
   import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 
@@ -121,9 +118,6 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   /** YARN timeline client. */
   private var _timelineClient: Option[TimelineClient] = None
 
-  /** ATS v 1.5 group ID. */
-  private var groupId: Option[TimelineEntityGroupId] = None
-
   /** Does the the timeline server support v 1.5 APIs? */
   private var timelineVersion1_5 = false
 
@@ -138,9 +132,6 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   /** Optional Attempt ID string from [[SparkListenerApplicationStart]]. */
   private var sparkApplicationAttemptId: Option[String] = None
 
-  /** Clock for recording time */
-  private val clock = new SystemClock
-
   /** Start time of the application, as received in the start event. */
   private var startTime: Long = _
 
@@ -151,10 +142,10 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   private[yarn] var batchSize = DEFAULT_BATCH_SIZE
 
   /** Queue of entities to asynchronously post, plus the number of events in each entry. */
-  private val postingQueue = new LinkedBlockingDeque[PostQueueAction]()
+//  private val postingQueue = new LinkedBlockingDeque[PostQueueAction]()
 
   /** Number of events in the post queue. */
-  private val _postQueueEventSize = new AtomicLong
+//  private val _postQueueEventSize = new AtomicLong
 
   /** Limit on the total number of events permitted. */
   private var postQueueLimit = DEFAULT_POST_EVENT_LIMIT
@@ -173,24 +164,6 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
 
   /** Has the application event event been processed? */
   private val appEndEventProcessed = new AtomicBoolean(false)
-
-  /** Event handler thread. */
-  private var entityPostThread: Option[Thread] = None
-
-  /** Flag to indicate the queue is stopped; events aren't being processed. */
-  private val postingQueueStopped = new AtomicBoolean(true)
-
-  /** Boolean to track when the post thread is active; Set and reset in the thread itself. */
-  private val postThreadActive = new AtomicBoolean(false)
-
-  /** How long to wait in millseconds for shutdown before giving up? */
-  private var shutdownWaitTime = 0L
-
-  /** What is the initial and incrementing interval for POST retries? */
-  private var retryInterval = 0L
-
-  /** What is the max interval for POST retries? */
-  private var retryIntervalMax = 0L
 
   /** Domain ID for entities: may be null. */
   private var domainId: Option[String] = None
@@ -234,6 +207,11 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   }
 
   /**
+   * Event publisher
+   */
+  var publisher: Option[EventPublisher] = None
+
+  /**
    * Get the configuration of this service.
    *
    * @return the configuration as a YarnConfiguration instance
@@ -269,28 +247,36 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     *
     * @return the current queue length
     */
-  def postQueueActionSize: Int = postingQueue.size()
+  def postQueueActionSize: Int = {
+    publisher.map(_.postingQueueSize).getOrElse(0)
+  }
 
   /**
    * Get the number of events in the posting queue.
    *
    * @return a counter of outstanding events
    */
-  def postQueueEventSize: Long = _postQueueEventSize.get()
+  def postQueueEventSize: Long = {
+    publisher.map(_.postQueueEventSize).getOrElse(0)
+  }
 
   /**
    * Query the counter of attempts to post entities to the timeline service.
    *
    * @return the current value
    */
-  def postAttempts: Long = metrics.entityPostAttempts.getCount
+  def postAttempts: Long = {
+    publisher.map(_.entityPostAttempts.getCount).getOrElse(0)
+  }
 
   /**
    * Get the total number of failed post operations.
    *
    * @return counter of timeline post operations which failed
    */
-  def postFailures: Long = metrics.entityPostFailures.getCount
+  def postFailures: Long = {
+    publisher.map(_.entityPostFailures.getCount).getOrElse(0)
+  }
 
   /**
    * Query the counter of successful post operations (this is not the same as the
@@ -298,7 +284,9 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    *
    * @return the number of successful post operations.
    */
-  def postSuccesses: Long = metrics.entityPostSuccesses.getCount
+  def postSuccesses: Long = {
+    publisher.map(_.entityPostSuccesses.getCount).getOrElse(0)
+  }
 
   /**
    * Is the asynchronous posting thread active?
@@ -306,7 +294,9 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    * @return true if the post thread has started; false if it has not yet/ever started, or
    *         if it has finished.
    */
-  def isPostThreadActive: Boolean = postThreadActive.get
+  def isPostThreadActive: Boolean = {
+    publisher.map(_.isPostThreadActive).getOrElse(false)
+  }
 
   /**
    * Reset the timeline client. Idempotent.
@@ -356,12 +346,8 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     logInfo(s"Creating domain $domain with readers: $readers and writers: $writers")
 
     // create the timeline domain with the reader and writer permissions
-    val timelineDomain = new TimelineDomain()
-    timelineDomain.setId(domain)
-    timelineDomain.setReaders(readers)
-    timelineDomain.setWriters(writers)
     try {
-      timelineClient.putDomain(timelineDomain)
+      Some(publisher.get.putNewDomain(domain, readers, writers))
       Some(domain)
     } catch {
       case e: Exception =>
@@ -407,16 +393,11 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       require(v > 0, s"Option $key out of range: $v")
       v
     }
-    def millis(key: String, defVal: String): Long = {
-      1000 * sparkConf.getTimeAsSeconds(key, defVal)
-    }
+
 
     batchSize = intOption(BATCH_SIZE, batchSize)
     postQueueLimit = batchSize + intOption(POST_EVENT_LIMIT, postQueueLimit)
 
-    retryInterval = millis(POST_RETRY_INTERVAL, DEFAULT_POST_RETRY_INTERVAL)
-    retryIntervalMax = millis(POST_RETRY_MAX_INTERVAL, DEFAULT_POST_RETRY_MAX_INTERVAL)
-    shutdownWaitTime = millis(SHUTDOWN_WAIT_TIME, DEFAULT_SHUTDOWN_WAIT_TIME)
 
     // the full metrics integration happens if the spark context has a metrics system
     contextMetricsSystem.foreach(_.registerSource(metrics))
@@ -446,21 +427,36 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     val version = config.getFloat(
       YarnConfiguration.TIMELINE_SERVICE_VERSION,
       YarnConfiguration.DEFAULT_TIMELINE_SERVICE_VERSION)
-    _timelineClient = Some(createTimelineClient())
+    val timeline = createTimelineClient()
+    _timelineClient = Some(timeline)
+    def millis(key: String, defVal: String): Long = {
+      1000 * sparkContext.conf.getTimeAsSeconds(key, defVal)
+    }
+
+    /** ATS v 1.5 group ID. */
+    val groupId = if (timelineVersion1_5) {
+      Some(TimelineEntityGroupId.newInstance(applicationId,
+        applicationInfo.get.groupId.get))
+    } else None
+
+    // create the publisher
+    publisher = Some(new EventPublisher(
+      applicationInfo,
+      attemptId,
+      timeline,
+      timelineWebappAddress,
+      timelineVersion1_5,
+      groupId,
+      millis(POST_RETRY_INTERVAL, DEFAULT_POST_RETRY_INTERVAL),
+      millis(POST_RETRY_MAX_INTERVAL, DEFAULT_POST_RETRY_MAX_INTERVAL),
+      millis(SHUTDOWN_WAIT_TIME, DEFAULT_SHUTDOWN_WAIT_TIME)))
+
     domainId = createTimelineDomain()
     logInfo(s"Spark events will be published to $timelineWebappAddress"
       + s" API version=$version; domain ID = $domainId; client=${_timelineClient.toString}")
-    if (timelineVersion1_5) {
-      groupId = Some(TimelineEntityGroupId.newInstance(applicationId,
-        applicationInfo.get.groupId.get))
-      logDebug(s"GroupID=$groupId")
-    }
-    // declare that the processing is started
-    postingQueueStopped.set(false)
-    val thread = new Thread(new EntityPoster(), "EventPoster")
-    entityPostThread = Some(thread)
-    thread.setDaemon(true)
-    thread.start()
+
+    publisher.get.start()
+
   }
 
   /**
@@ -484,7 +480,6 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
        | endpoint=$timelineWebappAddress;
        | bonded to ATS=$bondedToATS;
        | ATS v1.5=$timelineVersion1_5
-       | groupId=$groupId
        | listening=$listening;
        | batchSize=$batchSize;
        | postQueueLimit=$postQueueLimit;
@@ -501,6 +496,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
        | start time=$startTime;
        | app end event received=$appEndEventProcessed;
        | end time=$endTime;
+       | publisher=$publisher;
      """.stripMargin
 
   /**
@@ -589,7 +585,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    * @return true if the event was queued
    */
   def process(event: SparkListenerEvent): Boolean = {
-    if (!postingQueueStopped.get) {
+    if (!publisher.map(_.isPostingQueueStopped).getOrElse(true)) {
       metrics.sparkEventsQueued.inc()
       logDebug(s"Enqueue $event")
       handleEvent(event)
@@ -621,7 +617,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       return
     }
     try {
-      stopQueue()
+      stopPublisher()
     } finally {
       contextMetricsSystem.foreach( _.removeSource(metrics))
     }
@@ -642,46 +638,33 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   }
 
   /**
-   * Stop the queue system.
+   * Stop the publisher
    */
-  private def stopQueue(): Unit = {
+  private def stopPublisher(): Unit = {
     // if the queue is live
-    if (!postingQueueStopped.get) {
+    publisher.foreach { pub =>
+      if (!pub.isPostingQueueStopped) {
 
-      if (appStartEventProcessed.get && !appEndEventProcessed.get) {
-        // push out an application stop event if none has been received
-        logDebug("Generating a SparkListenerApplicationEnd during service stop()")
-        process(SparkListenerApplicationEnd(now()))
-      }
-
-      // flush out the events
-      asyncFlush()
-
-      // push out that queue stop event; this immediately sets the `queueStopped` flag
-      pushQueueStop(now(), shutdownWaitTime)
-
-      // Now await the halt of the posting thread.
-      var shutdownPosted = false
-      if (postThreadActive.get) {
-        postThreadActive.synchronized {
-          // check it hasn't switched state
-          if (postThreadActive.get) {
-            logDebug(s"Stopping posting thread and waiting $shutdownWaitTime mS")
-            shutdownPosted = true
-            postThreadActive.wait(shutdownWaitTime)
-            // then interrupt the thread if it is still running
-            if (postThreadActive.get) {
-              logInfo("Interrupting posting thread after $shutdownWaitTime mS")
-              entityPostThread.foreach(_.interrupt())
-            }
-          }
+        if (appStartEventProcessed.get && !appEndEventProcessed.get) {
+          // push out an application stop event if none has been received
+          logDebug("Generating a SparkListenerApplicationEnd during service stop()")
+          process(SparkListenerApplicationEnd(now()))
         }
-      }
-      if (!shutdownPosted) {
-        // there was no running post thread, just stop the timeline client ourselves.
-        // (if there is a thread running, it must be the one to stop it)
-        stopTimelineClient()
-        logInfo(s"Stopped: $this")
+
+        // flush out the events
+        asyncFlush()
+
+        // push out that queue stop event; this immediately sets the `queueStopped` flag
+        pub.pushQueueStop()
+
+        // Now await the halt of the posting thread.
+        var shutdownPosted = pub.awaitQueueCompletion();
+        if (!shutdownPosted) {
+          // there was no running post thread, just stop the timeline client ourselves.
+          // (if there is a thread running, it must be the one to stop it)
+          pub.stopTimelineClient()
+          logInfo(s"Stopped: $this")
+        }
       }
     }
   }
@@ -752,11 +735,12 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       }
       oldPendingEvents.foreach(detail.addEvent)
 
-      queueForPosting(detail)
+      publisher.foreach(_.queueForPosting(detail))
 
       if (timelineVersion1_5) {
         // ATS 1.5: push out an updated summary entry
-        queueForPosting(createTimelineEntity(true, t, count))
+        publisher.foreach(_.
+            queueForPosting(createTimelineEntity(true, t, count)))
       }
       true
     } else {
@@ -802,283 +786,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     publishPendingEvents()
   }
 
-  /**
-   * A `StopQueueAction` action has a size of 0
-   *
-   * @param currentTime time when action was queued.
-   * @param waitTime time for shutdown to wait
-   */
-  private def pushQueueStop(currentTime: Long, waitTime: Long): Unit = {
-    postingQueueStopped.set(true)
-    postingQueue.add(StopQueueAction(currentTime, waitTime))
-  }
 
-  /**
-   * Queue an entity for posting; also increases
-   * `_postQueueEventSize` by the size of the entity.
-   *
-   * @param timelineEntity entity to push
-   */
-  def queueForPosting(timelineEntity: TimelineEntity): Unit = {
-    // queue the entity for posting
-    preflightCheck(timelineEntity)
-    val e = new PostEntity(timelineEntity)
-    _postQueueEventSize.addAndGet(e.size)
-    postingQueue.add(e)
-  }
-
-  /**
-   * Push a `PostQueueAction` to the start of the queue; also increments
-   * `_postQueueEventSize` by the size of the action.
-   *
-   * @param action action to push
-   */
-  private def pushToFrontOfQueue(action: PostQueueAction): Unit = {
-    postingQueue.push(action)
-    _postQueueEventSize.addAndGet(action.size)
-  }
-
-  /**
-    * Take from the posting queue; decrements `_postQueueEventSize` by the size
-    * of the action.
-    *
-    * @return the action
-    */
-  private def takeFromPostingQueue(): PostQueueAction = {
-    val taken = postingQueue.take()
-    _postQueueEventSize.addAndGet(-taken.size)
-    taken
-  }
-
-  /**
-    * Poll from the posting queue; decrements  [[_postQueueEventSize]] by the size
-    * of the action.
-    *
-    * @return
-    */
-  private def pollFromPostingQueue(mills: Long): Option[PostQueueAction] = {
-    val taken = postingQueue.poll(mills, TimeUnit.MILLISECONDS)
-    _postQueueEventSize.addAndGet(-taken.size)
-    Option(taken)
-  }
-
-  /**
-   * Perform any preflight checks.
-   *
-   * This is just a safety check to catch regressions in the code which
-   * publish data that cannot be parsed at the far end.
-   *
-   * @param entity timeline entity to review.
-   */
-  private def preflightCheck(entity: TimelineEntity): Unit = {
-    require(entity.getStartTime != null,
-      s"No start time in ${describeEntity(entity)}")
-  }
-
-  /** Actions in the post queue */
-  private sealed trait PostQueueAction {
-    /**
-     * Number of events in this entry
-     *
-     * @return a natural number
-     */
-    def size: Int
-  }
-
-  /**
-   * A `StopQueueAction` action has a size of 0
-   *
-   * @param currentTime time when action was queued.
-   * @param waitTime time for shutdown to wait
-   */
-  private case class StopQueueAction(currentTime: Long, waitTime: Long) extends PostQueueAction {
-    override def size: Int = 0
-    def timeLimit: Long = currentTime + waitTime
-  }
-
-  /**
-   *  A `PostEntity` action has a size of the number of listed events
-   */
-  private case class PostEntity(entity: TimelineEntity) extends PostQueueAction {
-    override def size: Int = entity.getEvents.size()
-  }
-
-  /**
-   * Post a single entity.
-   *
-   * Any network/connectivity errors will be caught and logged, and returned as the
-   * exception field in the returned tuple.
-   *
-   * Any posting which generates a response will result in the timeline response being
-   * returned. This response *may* contain errors; these are almost invariably going
-   * to re-occur when resubmitted.
-   *
-   * @param entity entity to post
-   * @return Any exception other than an interruption raised during the operation.
-   * @throws InterruptedException if an [[InterruptedException]] or [[InterruptedIOException]] is
-   * received. These exceptions may also get caught and wrapped in the ATS client library.
-   */
-  private def postOneEntity(entity: TimelineEntity): Option[Exception] = {
-    domainId.foreach(entity.setDomainId)
-    val entityDescription = describeEntity(entity)
-    logInfo(s"About to publish entity ${entity.getEntityType}/${entity.getEntityId}" +
-        s" with ${entity.getEvents.size()} events" +
-        s" to timeline service $timelineWebappAddress")
-    logDebug(s"About to publish $entityDescription")
-    val timeContext = metrics.postOperationTimer.time()
-    metrics.entityPostAttempts.inc()
-    try {
-      val response = if (timelineVersion1_5) {
-        timelineClient.putEntities(attemptId.orNull, groupId.get, entity)
-      } else {
-        timelineClient.putEntities(entity)
-      }
-      val errors = response.getErrors
-      if (errors.isEmpty) {
-        logDebug(s"entity successfully published")
-        metrics.entityPostSuccesses.inc()
-        metrics.eventsSuccessfullyPosted.inc(entity.getEvents.size())
-        // and flush the timeline if it implements the API
-        timelineClient match {
-          case flushable: Flushable =>
-            flushable.flush()
-          case _ =>
-        }
-      } else {
-        // The ATS service rejected the request at the API level.
-        // this is something we assume cannot be re-tried
-        metrics.entityPostRejections.inc()
-        logError(s"Failed to publish $entityDescription")
-        errors.asScala.foreach { err =>
-          logError(describeError(err))
-        }
-      }
-      // whether accepted or rejected, this request is not re-issued
-      None
-    } catch {
-
-      case e: InterruptedException =>
-        // interrupted; this will break out of IO/Sleep operations and
-        // trigger a rescan of the stopped() event.
-        throw e
-
-      case e: ConnectException =>
-        // connection failure: network, ATS down, config problems, ...
-        metrics.entityPostFailures.inc()
-        logDebug(s"Connection exception submitting $entityDescription", e)
-        Some(e)
-
-      case e: Exception =>
-        val cause = e.getCause
-        if (cause.isInstanceOf[InterruptedException]) {
-          // hadoop 2.7 retry logic wraps the interrupt
-          throw cause
-        }
-        // something else has gone wrong.
-        metrics.entityPostFailures.inc()
-        logDebug(s"Could not handle history entity: $entityDescription", e)
-        Some(e)
-
-    } finally {
-      val duration = timeContext.stop()
-      logDebug(s"Duration of posting: $duration nS")
-    }
-  }
-
-  /**
-   * Wait for and then post entities until stopped.
-   *
-   * Algorithm.
-   *
-   * 1. The thread waits for events in the [[postingQueue]] until stopped or interrupted.
-   * 1. Failures result in the entity being queued for resending, after a delay which grows
-   * linearly on every retry.
-   * 1. Successful posts reset the retry delay.
-   * 1. If the process is interrupted, the loop continues with the `stopFlag` flag being checked.
-   *
-   * To stop this process then, first set the `stopFlag` flag, then interrupt the thread.
-   *
-   * @param retryInterval delay in milliseconds for the first retry delay; the delay increases
-   *        by this value on every future failure. If zero, there is no delay, ever.
-   * @param retryMax maximum interval time in milliseconds
-   * @return the [[StopQueueAction]] received to stop the process.
-   */
-  private def postEntities(retryInterval: Long, retryMax: Long): StopQueueAction = {
-    var lastAttemptFailed = false
-    var currentRetryDelay = retryInterval
-    var result: StopQueueAction = null
-    while (result == null) {
-      takeFromPostingQueue() match {
-        case PostEntity(entity) =>
-          postOneEntity(entity) match {
-            case Some(ex) =>
-              // something went wrong
-              if (!postingQueueStopped.get()) {
-                if (!lastAttemptFailed) {
-                  // avoid filling up logs with repeated failures
-                  logWarning(s"Exception submitting entity to $timelineWebappAddress", ex)
-                }
-                // log failure and queue for posting again
-                lastAttemptFailed = true
-                // push back to the head of the queue
-                postingQueue.addFirst(PostEntity(entity))
-                currentRetryDelay = Math.min(currentRetryDelay + retryInterval, retryMax)
-                if (currentRetryDelay > 0) {
-                  Thread.sleep(currentRetryDelay)
-                }
-              }
-            case None =>
-              // success; reset flags and retry delay
-              lastAttemptFailed = false
-              currentRetryDelay = retryInterval
-              metrics.postTimestamp.touch()
-          }
-
-        case stop: StopQueueAction =>
-          logDebug("Queue stopped")
-          result = stop
-      }
-    }
-    result
-  }
-
-  /**
-   * Shutdown phase: continually post oustanding entities until the timeout has been exceeded.
-   * The interval between failures is the retryInterval: there is no escalation, and if
-   * is longer than the remaining time in the shutdown, the remaining time sets the limit.
-   *
-   * @param shutdown shutdown parameters.
-   * @param retryInterval delay in milliseconds for every delay.
-   */
-  private def postEntitiesShutdownPhase(shutdown: StopQueueAction, retryInterval: Long): Unit = {
-    val timeLimit = shutdown.timeLimit
-    val timestamp = YarnTimelineUtils.timeShort(timeLimit, "")
-    logDebug(s"Queue shutdown, time limit= $timestamp")
-    while (now() < timeLimit && !postingQueue.isEmpty) {
-      pollFromPostingQueue(timeLimit - now()) match {
-          case Some(PostEntity(entity)) =>
-            postOneEntity(entity).foreach {
-              case ex: InterruptedException => throw ex
-              case ex: InterruptedIOException => throw ex
-              case ex: Exception =>
-                // failure, push back to try again
-                pushToFrontOfQueue(PostEntity(entity))
-                if (retryInterval > 0) {
-                  Thread.sleep(retryInterval)
-                } else {
-                  // there's no retry interval, so fail immediately
-                  throw ex
-                }
-            }
-          case Some(StopQueueAction(_, _)) =>
-            // ignore these
-            logDebug("Ignoring StopQueue action")
-
-          case None =>
-            // get here then the queue is empty; all is well
-        }
-      }
-  }
 
   /**
    * If the event reaches the batch size or flush is true, push events to ATS.
@@ -1186,15 +894,6 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   }
 
   /**
-   * Return the current time in milliseconds.
-   *
-   * @return system time in milliseconds
-   */
-  private def now(): Long = {
-    clock.getTimeMillis()
-  }
-
-  /**
    * Get the number of flush events that have taken place.
    *
    * This includes flushes triggered by the event list being bigger the batch size,
@@ -1205,43 +904,6 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    */
   def getFlushCount: Long = {
     metrics.flushCount.getCount
-  }
-
-  /**
-   * Post events until told to stop.
-   */
-  private class EntityPoster extends Runnable {
-
-    override def run(): Unit = {
-      postThreadActive.set(true)
-      try {
-        val shutdown = postEntities(retryInterval, retryIntervalMax)
-        // getting here means the `stop` flag is true
-        postEntitiesShutdownPhase(shutdown, retryInterval)
-        logInfo(s"Stopping dequeue service, final queue size is ${postingQueue.size};" +
-          s" outstanding events to post count: ${_postQueueEventSize.get()}")
-      } catch {
-        // handle exceptions triggering thread exit. Interruptes are good; others less welcome.
-        case ex: InterruptedException =>
-          logInfo("Entity Posting thread interrupted")
-          logDebug("Entity Posting thread interrupted", ex)
-
-        case ex: InterruptedIOException =>
-          logInfo("Entity Posting thread interrupted")
-          logDebug("Entity Posting thread interrupted", ex)
-
-        case ex: Exception =>
-          logError("Entity Posting thread exiting after exception raised", ex)
-      } finally {
-        stopTimelineClient()
-        postThreadActive synchronized {
-          // declare that this thread is no longer active
-          postThreadActive.set(false)
-          // and notify all listeners of this fact
-          postThreadActive.notifyAll()
-        }
-      }
-    }
   }
 
 }
@@ -1527,7 +1189,7 @@ private[spark] object YarnHistoryService {
    * @param enabled new value
    */
   private[yarn] def enableMetricRegistration(enabled: Boolean): Unit = {
-   metricsEnabled = enabled
+    metricsEnabled = enabled
   }
 
 
