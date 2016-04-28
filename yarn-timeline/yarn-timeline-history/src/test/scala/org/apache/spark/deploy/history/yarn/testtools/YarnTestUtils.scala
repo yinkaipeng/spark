@@ -83,7 +83,7 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
   /**
    * Time to wait for anything to start/state to be reached
    */
-  val TEST_STARTUP_DELAY = 5000
+  val TEST_STARTUP_DELAY = 20000
 
   /** probes during service shutdown need to handle delayed posting */
   val SERVICE_SHUTDOWN_DELAY = 10000
@@ -91,7 +91,7 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
   /**
    * Time to wait for timeline scans before failing
    */
-  val TIMELINE_SCAN_DELAY = 2000
+  val TIMELINE_SCAN_DELAY = 10000
 
   def newApplicationId(clusterTimestamp: Long, id: Int): ApplicationId = {
     ApplicationId.newInstance(clusterTimestamp, id)
@@ -431,7 +431,6 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
         val message = s"event count mismatch; $details;"
         logError(message)
         fail(message)
-        fail(s"Expected $details")
         }
     }
 
@@ -604,7 +603,7 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    */
   def awaitSequenceSize[T](
       expectedSize: Int,
-      message: String,
+      message: => String,
       timeout: Long,
       operation: () => Seq[T]): Seq[T] = {
     // last list fetched
