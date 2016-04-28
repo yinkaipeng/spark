@@ -24,7 +24,6 @@ import scala.language.postfixOps
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.history.yarn.{YarnEventListener, YarnHistoryService}
-import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.rest.HttpOperationResponse
 import org.apache.spark.deploy.history.yarn.server.YarnHistoryProvider
@@ -90,11 +89,11 @@ class ScaleSuite extends AbstractHistoryIntegrationTests
       completed(historyService)
       // this is a minimum, ignoring stage events and other interim events
       val totalEventCount = 2 + jobs * 2
-      val queued = historyService.metrics.sparkEventsQueued.getCount
+      val queued = historyService.sparkEventsQueued.getCount
       assert(totalEventCount < queued)
-      val posted = historyService.metrics.eventsSuccessfullyPosted.getCount
+      val posted = historyService.counterMetric("eventsSuccessfullyPosted")
       assert(totalEventCount < posted, s"event count >= posted in $historyService")
-      assert(0 === historyService.metrics.eventsDropped.getCount,
+      assert(0 === historyService.eventsDropped.getCount,
         s"Events were dropped in $historyService")
 
       val expectedAppId = historyService.applicationId.toString

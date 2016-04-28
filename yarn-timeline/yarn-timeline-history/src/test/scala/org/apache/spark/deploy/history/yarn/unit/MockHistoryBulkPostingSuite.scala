@@ -62,7 +62,7 @@ class MockHistoryBulkPostingSuite extends AbstractMockHistorySuite {
       }
       // events dropped
       awaitAtLeast(batchSize, TEST_STARTUP_DELAY,
-        () => service.eventsDropped,
+        () => service.eventsDropped.getCount,
         service.toString())
 
       // posts failed

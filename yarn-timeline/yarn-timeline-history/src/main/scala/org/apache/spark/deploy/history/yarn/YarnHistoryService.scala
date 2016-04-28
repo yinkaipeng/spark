@@ -17,15 +17,15 @@
 
 package org.apache.spark.deploy.history.yarn
 
-import java.net.{ConnectException, URI}
+import java.net.URI
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
 
 import scala.collection.mutable
 
-import com.codahale.metrics.{Counter, Gauge, Metric, MetricRegistry, Timer}
+import com.codahale.metrics.{Counter, Counting, Metric, MetricRegistry}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
-import org.apache.hadoop.yarn.api.records.timeline.{TimelineDomain, TimelineEntity, TimelineEntityGroupId, TimelineEvent}
+import org.apache.hadoop.yarn.api.records.timeline.{TimelineEntity, TimelineEntityGroupId, TimelineEvent}
 import org.apache.hadoop.yarn.client.api.TimelineClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
@@ -141,12 +141,6 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   /** Number of events to batch up before posting. */
   private[yarn] var batchSize = DEFAULT_BATCH_SIZE
 
-  /** Queue of entities to asynchronously post, plus the number of events in each entry. */
-//  private val postingQueue = new LinkedBlockingDeque[PostQueueAction]()
-
-  /** Number of events in the post queue. */
-//  private val _postQueueEventSize = new AtomicLong
-
   /** Limit on the total number of events permitted. */
   private var postQueueLimit = DEFAULT_POST_EVENT_LIMIT
 
@@ -165,6 +159,9 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   /** Has the application event event been processed? */
   private val appEndEventProcessed = new AtomicBoolean(false)
 
+  /** Counter of events processed -that is have been through `handleEvent()`. */
+  val eventsProcessedCounter = new Counter()
+  
   /** Domain ID for entities: may be null. */
   private var domainId: Option[String] = None
 
@@ -172,7 +169,12 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   private[yarn] var timelineWebappAddress: URI = _
 
   /** Metric fields. Used in tests as well as metrics infrastructure. */
-  val metrics = new HistoryMetrics(this)
+  val metrics = new HistoryMetrics()
+
+  /**
+   * A map of metrics for registration and local lookup
+   */
+  private val metricsMap = mutable.Map[String, Metric]()
 
   /**
    * A counter incremented every time a new entity is created. This is included as an "other"
@@ -218,14 +220,14 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    */
   def yarnConfiguration: YarnConfiguration = config
 
-  /**
-   * Get the total number of events dropped due to the queue of
-   * outstanding posts being too long.
-   *
-   * @return counter of events processed
-   */
+  /** Counter of events queued. */
+  val sparkEventsQueued = new Counter()
 
-  def eventsDropped: Long = metrics.eventsDropped.getCount
+  /** The number of events which were dropped as the backlog of pending posts was too big. */
+  val eventsDropped = new Counter()
+
+  /** How many flushes have taken place? */
+  val flushCount = new Counter()
 
   /**
    * Get the total number of processed events, those handled in the back-end thread without
@@ -233,14 +235,14 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    *
    * @return counter of events processed
    */
-  def eventsProcessed: Long = metrics.eventsProcessed.getCount
+  def eventsProcessed: Long = eventsProcessedCounter.getCount
 
   /**
    * Get the total number of events queued.
    *
    * @return the total event count
    */
-  def eventsQueued: Long = metrics.sparkEventsQueued.getCount
+  def eventsQueued: Long = sparkEventsQueued.getCount
 
   /**
     * Get the current size of the posting queue in terms of outstanding actions.
@@ -322,7 +324,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    *
    * @return an optional domain string. If `None`, then no domain was created.
    */
-  private def createTimelineDomain(): Option[String] = {
+  private def createTimelineDomain(eventPublisher: EventPublisher): Option[String] = {
     val sparkConf = sparkContext.getConf
     val aclsOn = sparkConf.getBoolean("spark.ui.acls.enable",
         sparkConf.getBoolean("spark.acls.enable", false))
@@ -347,7 +349,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
 
     // create the timeline domain with the reader and writer permissions
     try {
-      Some(publisher.get.putNewDomain(domain, readers, writers))
+      eventPublisher.putNewDomain(domain, readers, writers)
       Some(domain)
     } catch {
       case e: Exception =>
@@ -399,8 +401,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     postQueueLimit = batchSize + intOption(POST_EVENT_LIMIT, postQueueLimit)
 
 
-    // the full metrics integration happens if the spark context has a metrics system
-    contextMetricsSystem.foreach(_.registerSource(metrics))
+    registerMetricSource(metrics)
 
     // set up the timeline service, unless it's been disabled
     if (timelineServiceEnabled) {
@@ -437,10 +438,12 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     val groupId = if (timelineVersion1_5) {
       Some(TimelineEntityGroupId.newInstance(applicationId,
         applicationInfo.get.groupId.get))
-    } else None
+    } else {
+      None
+    }
 
     // create the publisher
-    publisher = Some(new EventPublisher(
+    val eventPublisher = new EventPublisher(
       applicationInfo,
       attemptId,
       timeline,
@@ -449,13 +452,16 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       groupId,
       millis(POST_RETRY_INTERVAL, DEFAULT_POST_RETRY_INTERVAL),
       millis(POST_RETRY_MAX_INTERVAL, DEFAULT_POST_RETRY_MAX_INTERVAL),
-      millis(SHUTDOWN_WAIT_TIME, DEFAULT_SHUTDOWN_WAIT_TIME)))
+      millis(SHUTDOWN_WAIT_TIME, DEFAULT_SHUTDOWN_WAIT_TIME))
+    publisher = Some(eventPublisher)
+    registerMetricSource(eventPublisher)
 
-    domainId = createTimelineDomain()
+    // create the timeline domain with the reader and writer permissions
+    domainId = createTimelineDomain(eventPublisher)
     logInfo(s"Spark events will be published to $timelineWebappAddress"
       + s" API version=$version; domain ID = $domainId; client=${_timelineClient.toString}")
 
-    publisher.get.start()
+    eventPublisher.start()
 
   }
 
@@ -489,9 +495,8 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
        | total number queued=$eventsQueued, processed=$eventsProcessed;
        | attempted entity posts=$postAttempts
        | successful entity posts=$postSuccesses
-       | events successfully posted=${metrics.eventsSuccessfullyPosted.getCount}
        | failed entity posts=$postFailures;
-       | events dropped=$eventsDropped;
+       | events dropped=${eventsDropped.getCount};
        | app start event received=$appStartEventProcessed;
        | start time=$startTime;
        | app end event received=$appEndEventProcessed;
@@ -586,7 +591,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    */
   def process(event: SparkListenerEvent): Boolean = {
     if (!publisher.map(_.isPostingQueueStopped).getOrElse(true)) {
-      metrics.sparkEventsQueued.inc()
+      sparkEventsQueued.inc()
       logDebug(s"Enqueue $event")
       handleEvent(event)
       true
@@ -610,10 +615,9 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    * to await the asynchronous action queue completing.
    */
   override def stop(): Unit = {
-    val oldState = enterState(StoppedState)
-    if (oldState != StartedState) {
+    if (enterState(StoppedState) != StartedState) {
       // stopping from a different state
-      logDebug(s"Ignoring stop() request from state $oldState")
+      logDebug(s"Ignoring stop() request from state ${enterState(StoppedState)}")
       return
     }
     try {
@@ -634,6 +638,33 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       Option(sparkContext.env.metricsSystem)
     } else {
       None
+    }
+  }
+
+  /**
+   * Register the metrics source with any system-wide metrics, and into the
+   * local metrics map for string lookup
+   * @param m metric source
+   */
+  def registerMetricSource(m: ExtendedMetricsSource): Unit = {
+    contextMetricsSystem.foreach(_.registerSource(m))
+    m.metricsMap.foreach( e => metricsMap.put(e._1, e._2))
+  }
+
+  def lookupMetric(name: String): Option[Metric] = {
+    metricsMap.get(name)
+  }
+
+  /**
+   * Get a count by name; return -1 if it is none
+   * @param name metric name
+   * @return value or -1
+   */
+  def counterMetric(name: String): Long = {
+    lookupMetric(name) match {
+      case Some(c: Counting) =>
+        c.getCount
+      case _ => -1L
     }
   }
 
@@ -688,7 +719,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    * @return true if the count of queued events is below the limit
    */
   private def postQueueHasCapacity: Boolean = {
-    metrics.sparkEventsQueued.getCount < postQueueLimit
+    sparkEventsQueued.getCount < postQueueLimit
   }
 
   /**
@@ -721,7 +752,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     if (size > 0 && applicationStartEvent.isDefined) {
       // push if there are events *and* the app is recorded as having started.
       // -as the app name is needed for the the publishing.
-      metrics.flushCount.inc()
+      flushCount.inc()
       val t = now()
       val count = entityVersionCounter.getAndIncrement()
       val detail = createTimelineEntity(false, t, count)
@@ -798,9 +829,9 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     // even if the queues are full.
     var isLifecycleEvent = false
     val timestamp = now()
-    metrics.eventsProcessed.inc()
-    if (metrics.eventsProcessed.getCount() % 1000 == 0) {
-      logDebug(s"${metrics.eventsProcessed} events are processed")
+    eventsProcessedCounter.inc()
+    if (eventsProcessedCounter.getCount() % 1000 == 0) {
+      logDebug(s"${eventsProcessedCounter} events are processed")
     }
     event match {
       case start: SparkListenerApplicationStart =>
@@ -867,8 +898,9 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
         // discarding the event
         // if this is due to a full queue, log it
         if (!postQueueHasCapacity) {
-          logInfo(s"Queue full: discarding event $tlEvent")
-          metrics.eventsDropped.inc()
+          logInfo(s"Queue full at ${sparkEventsQueued.getCount}, limit =$postQueueLimit" +
+              s" batch size = $batchSize: discarding event $tlEvent")
+          eventsDropped.inc()
         }
         0
       }
@@ -895,83 +927,29 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    * @return count of processed flush events.
    */
   def getFlushCount: Long = {
-    metrics.flushCount.getCount
+    flushCount.getCount
+  }
+
+  /**
+   * Metrics integration: the various counters of activity
+   */
+  private[yarn] class HistoryMetrics extends ExtendedMetricsSource {
+
+    /** Name for metrics: yarn_history */
+    override val sourceName = YarnHistoryService.METRICS_NAME
+
+    /** Metrics registry */
+    override val metricRegistry = new MetricRegistry()
+
+    val metricsMap: Map[String, Metric] = Map(
+      "eventsDropped" -> eventsDropped,
+      "eventsProcessed" -> eventsProcessedCounter,
+      "sparkEventsQueued" -> sparkEventsQueued,
+      "flushCount" -> flushCount)
   }
 
 }
 
-/**
- * Metrics integration: the various counters of activity
- */
-private[yarn] class HistoryMetrics(owner: YarnHistoryService) extends ExtendedMetricsSource {
-
-  /** Name for metrics: yarn_history */
-  override val sourceName = YarnHistoryService.METRICS_NAME
-
-  /** Metrics registry */
-  override val metricRegistry = new MetricRegistry()
-
-  /** Number of events in the post queue. */
-  val postQueueEventSize =
-    new Gauge[Long] {
-      override def getValue = owner.postQueueEventSize
-    }
-
-  /** Number of actions in the post queue. */
-  val postQueueActionsSize =
-    new Gauge[Long] {
-      override def getValue = owner.postQueueActionSize
-    }
-
-  /** Counter of events processed -that is have been through `handleEvent()`. */
-  val eventsProcessed = new Counter()
-
-  /** Counter of events queued. */
-  val sparkEventsQueued = new Counter()
-
-  /** Counter of events successfully posted. */
-  val eventsSuccessfullyPosted = new Counter()
-
-  /** Counter of number of attempts to post entities. */
-  val entityPostAttempts = new Counter()
-
-  /** Counter of number of successful entity post operations. */
-  val entityPostSuccesses = new Counter()
-
-  /** How many entity postings failed? */
-  val entityPostFailures = new Counter()
-
-  /** How many entity postings were rejected? */
-  val entityPostRejections = new Counter()
-
-  /** The number of events which were dropped as the backlog of pending posts was too big. */
-  val eventsDropped = new Counter()
-
-  /** How many flushes have taken place? */
-  val flushCount = new Counter()
-
-  /** Timer to build up statistics on post operation times */
-  val postOperationTimer = new Timer()
-
-  val postTimestamp = new TimeInMillisecondsGauge()
-
-  val metricsMap: Map[String, Metric] = Map(
-    "eventsDropped" -> eventsDropped,
-    "eventsProcessed" -> eventsProcessed,
-    "sparkEventsQueued" -> sparkEventsQueued,
-    "eventsSuccessfullyPosted" -> eventsSuccessfullyPosted,
-    "entityPostAttempts" -> entityPostAttempts,
-    "entityPostFailures" -> entityPostFailures,
-    "entityPostRejections" -> entityPostRejections,
-    "entityPostSuccesses" -> entityPostSuccesses,
-    "entityPostTimer" -> postOperationTimer,
-    "entityPostTimestamp" -> postTimestamp,
-    "flushCount" -> flushCount
-  )
-
-  init()
-
-}
 
 /**
  * Constants and defaults for the history service.

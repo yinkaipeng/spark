@@ -19,7 +19,7 @@ package org.apache.spark.deploy.history.yarn
 
 import java.util.Date
 
-import com.codahale.metrics.{Gauge, Metric, Timer}
+import com.codahale.metrics.{Counter, Counting, Gauge, Metric, Timer}
 
 import org.apache.spark.metrics.source.Source
 
@@ -36,8 +36,11 @@ private[history] trait ExtendedMetricsSource extends Source {
    */
   def metricsMap: Map[String, Metric]
 
-  protected def init(): Unit = {
-    metricsMap.foreach(elt => metricRegistry.register(elt._1, elt._2))
+  protected def register(): Unit = {
+    metricsMap.foreach(elt => {
+      require(elt._2 != null, s"Null metric for ${elt._1}")
+      metricRegistry.register(elt._1, elt._2)
+    })
   }
 
   override def toString: String = {
@@ -60,6 +63,23 @@ private[history] trait ExtendedMetricsSource extends Source {
       f
     } finally {
       timeCtx.close()
+    }
+  }
+
+  def lookup(name: String): Option[Metric] = {
+    metricsMap.get(name)
+  }
+
+  /**
+   * Get a count by name; return -1 if it is none
+   * @param name metric name
+   * @return value or -1
+   */
+  def count(name: String): Long = {
+    lookup(name) match {
+      case Some(c: Counting) =>
+        c.getCount
+      case _ => -1L
     }
   }
 }
