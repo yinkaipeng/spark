@@ -750,7 +750,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
         oldPendingEvents = pendingEvents
         pendingEvents = new mutable.MutableList[TimelineEvent]()
       }
-      pendingEvents.foreach(detail.addEvent)
+      oldPendingEvents.foreach(detail.addEvent)
 
       queueForPosting(detail)
 
@@ -1058,19 +1058,17 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       pollFromPostingQueue(timeLimit - now()) match {
           case Some(PostEntity(entity)) =>
             postOneEntity(entity).foreach {
-              _ match {
-                case ex: InterruptedException => throw ex
-                case ex: InterruptedIOException => throw ex
-                case ex: Exception =>
-                  // failure, push back to try again
-                  pushToFrontOfQueue(PostEntity(entity))
-                  if (retryInterval > 0) {
-                    Thread.sleep(retryInterval)
-                  } else {
-                    // there's no retry interval, so fail immediately
-                    throw ex
-                  }
-              }
+              case ex: InterruptedException => throw ex
+              case ex: InterruptedIOException => throw ex
+              case ex: Exception =>
+                // failure, push back to try again
+                pushToFrontOfQueue(PostEntity(entity))
+                if (retryInterval > 0) {
+                  Thread.sleep(retryInterval)
+                } else {
+                  // there's no retry interval, so fail immediately
+                  throw ex
+                }
             }
           case Some(StopQueueAction(_, _)) =>
             // ignore these

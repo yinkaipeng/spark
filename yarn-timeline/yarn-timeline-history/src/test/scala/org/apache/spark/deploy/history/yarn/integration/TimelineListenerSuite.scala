@@ -47,6 +47,7 @@ class TimelineListenerSuite extends AbstractHistoryIntegrationTests {
     listener.onApplicationStart(started)
     awaitEventsProcessed(historyService, 1, TEST_STARTUP_DELAY)
     stopHistoryService(historyService)
+    awaitEventsProcessed(historyService, 2, TEST_STARTUP_DELAY)
     completed(historyService)
     describe("reading events back")
 
@@ -81,7 +82,7 @@ class TimelineListenerSuite extends AbstractHistoryIntegrationTests {
 
     // here the events should be in the system
     val provider = new YarnHistoryProvider(sc.conf)
-    val history = awaitApplicationListingSize(provider, 1, TEST_STARTUP_DELAY)
+    val history = awaitApplicationListingSize(provider, 1, TIMELINE_SCAN_DELAY)
     val info = history.head
     logInfo(s"App history = $info")
     val attempt = info.attempts.head
@@ -105,15 +106,27 @@ class TimelineListenerSuite extends AbstractHistoryIntegrationTests {
     assertResult(started.appName, s"info.name != started.appName in $info") {
       info.name
     }
-    // fecth the Spark UI - no attempt ID
-    provider.getAppUI(info.id, None)
+
+    // list all entries, with some very detailed diagnostics on failure
+    awaitSequenceSize(2,
+      {
+        val entity = queryClient.getEntity(SPARK_DETAIL_ENTITY_TYPE, attempt.entityId)
+        val offset = lastUpdatedTime(entity) match {
+          case Some(l) => s"${now() - l} mS"
+          case None => "(n/a)"
+        }
+        s"""number of events in ${describeEntity(entity)}
+            | after ${TIMELINE_SCAN_DELAY} ms;
+            | entity age $offset
+            | """.stripMargin
+      },
+      TIMELINE_SCAN_DELAY,
+      () =>
+        queryClient.getEntity(SPARK_DETAIL_ENTITY_TYPE, attempt.entityId).getEvents.asScala.toList)
 
     // hit the underlying attempt
     val timelineEntity = queryClient.getEntity(SPARK_DETAIL_ENTITY_TYPE, attempt.entityId)
     val events = timelineEntity.getEvents.asScala.toList
-    assertResult(2, s"number of events in ${describeEntity(timelineEntity)}") {
-      events.size
-    }
     // first event must be the start one
     val sparkListenerEvents = events.map(toSparkEvent).reverse
     val (firstEvent :: secondEvent :: Nil) = sparkListenerEvents

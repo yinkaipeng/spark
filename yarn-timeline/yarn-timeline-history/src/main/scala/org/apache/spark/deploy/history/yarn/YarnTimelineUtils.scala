@@ -280,6 +280,19 @@ private[yarn] object YarnTimelineUtils extends Logging {
   }
 
   /**
+   * Get the time when an entity was last updated
+   * @param entity entity
+   * @return the value of the update time, or `None`
+   */
+  def lastUpdatedTime(entity: TimelineEntity): Option[Long] = {
+    entity.getOtherInfo.asScala.get("lastUpdated") match {
+      case Some(l) if l.isInstanceOf[Long] => Some(l.asInstanceOf[Long])
+      case _ =>
+        None
+    }
+  }
+
+  /**
    * Convert a `java.lang.Long` reference to a string value, or, if the reference is null,
    * to text declaring that the named field is empty.
    *
