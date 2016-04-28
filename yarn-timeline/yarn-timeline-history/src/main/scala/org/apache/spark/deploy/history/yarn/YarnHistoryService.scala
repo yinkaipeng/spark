@@ -453,16 +453,14 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       millis(POST_RETRY_INTERVAL, DEFAULT_POST_RETRY_INTERVAL),
       millis(POST_RETRY_MAX_INTERVAL, DEFAULT_POST_RETRY_MAX_INTERVAL),
       millis(SHUTDOWN_WAIT_TIME, DEFAULT_SHUTDOWN_WAIT_TIME))
-    publisher = Some(eventPublisher)
     registerMetricSource(eventPublisher)
 
     // create the timeline domain with the reader and writer permissions
     domainId = createTimelineDomain(eventPublisher)
     logInfo(s"Spark events will be published to $timelineWebappAddress"
       + s" API version=$version; domain ID = $domainId; client=${_timelineClient.toString}")
-
     eventPublisher.start()
-
+    publisher = Some(eventPublisher)
   }
 
   /**
@@ -780,9 +778,9 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
 
   def createEntityType(isSummaryEntity: Boolean): String = {
     if (!timelineVersion1_5 || isSummaryEntity) {
-      SPARK_SUMMARY_ENTITY_TYPE
+      EntityConstants.SPARK_SUMMARY_ENTITY_TYPE
     } else {
-      SPARK_DETAIL_ENTITY_TYPE
+      EntityConstants.SPARK_DETAIL_ENTITY_TYPE
     }
   }
 
@@ -956,17 +954,6 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
  */
 private[spark] object YarnHistoryService {
 
-  /**
-   * Name of the entity type used to declare summary
-   * data of an application.
-   */
-  val SPARK_SUMMARY_ENTITY_TYPE = "spark_event_v01"
-
-  /**
-   * Name of the entity type used to publish full
-   * application details.
-   */
-  val SPARK_DETAIL_ENTITY_TYPE = "spark_event_v01_detail"
 
   /**
    * Domain ID.
@@ -1041,86 +1028,7 @@ private[spark] object YarnHistoryService {
    */
   val DEFAULT_POST_RETRY_MAX_INTERVAL = "60s"
 
-  /**
-   * Primary key used for events.
-   */
-  val PRIMARY_KEY = "spark_application_entity"
-
-  /**
-   *  Entity `OTHER_INFO` field: start time.
-   */
-  val FIELD_START_TIME = "startTime"
-
-  /**
-   * Entity `OTHER_INFO` field: last updated time.
-   */
-  val FIELD_LAST_UPDATED = "lastUpdated"
-
-  /**
-   * Entity `OTHER_INFO` field: end time. Not present if the app is running.
-   */
-  val FIELD_END_TIME = "endTime"
-
-  /**
-   * Entity `OTHER_INFO` field: application name from context.
-   */
-  val FIELD_APP_NAME = "appName"
-
-  /**
-   * Entity `OTHER_INFO` field: user.
-   */
-  val FIELD_APP_USER = "appUser"
-
-  /**
-   * Entity `OTHER_INFO` field: YARN application ID.
-   */
-  val FIELD_APPLICATION_ID = "applicationId"
-
-  /**
-   * Entity `OTHER_INFO` field: attempt ID from spark start event.
-   */
-  val FIELD_ATTEMPT_ID = "attemptId"
-
-  /**
-   * For ATS1.5+: the group instance Id under which events are stored.
-   * If this field is absent, it means that the API/dataset are 1.0 events, so
-   * there is no split between summary and non-summary data.
-   */
-  val FIELD_GROUP_INSTANCE_ID = "groupInstanceId"
-
-  /**
-   * Entity `OTHER_INFO` field: a counter which is incremented whenever a new timeline entity
-   * is created in this JVM (hence, attempt). It can be used to compare versions of the
-   * current entity with any cached copy -it is less brittle than using timestamps.
-   */
-  val FIELD_ENTITY_VERSION = "entityVersion"
-
-  /**
-   * Entity `OTHER_INFO` field: Spark version.
-   */
-  val FIELD_SPARK_VERSION = "sparkVersion"
-
-  /**
-   * Entity filter field: to search for entities that have started.
-   */
-  val FILTER_APP_START = "startApp"
-
-  /**
-   * Value of the `startApp` filter field.
-   */
-  val FILTER_APP_START_VALUE = "SparkListenerApplicationStart"
-
-  /**
-   * Entity filter field: to search for entities that have ended.
-   */
-  val FILTER_APP_END = "endApp"
-
-  /**
-   * Value of the `endApp`filter field.
-   */
-  val FILTER_APP_END_VALUE = "SparkListenerApplicationEnd"
-
-  /**
+ /**
    * ID used in yarn-client attempts only.
    */
   val CLIENT_BACKEND_ATTEMPT_ID = "1"

@@ -38,7 +38,7 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.{ApplicationHistoryProvider, HistoryServer, LoadedAppUI}
 import org.apache.spark.deploy.history.yarn.{ExtendedMetricsSource, TimeInMillisecondsGauge, YarnTimelineUtils}
-import org.apache.spark.deploy.history.yarn.YarnHistoryService._
+import org.apache.spark.deploy.history.yarn.EntityConstants._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.rest.JerseyBinding
 import org.apache.spark.deploy.history.yarn.server.TimelineQueryClient._

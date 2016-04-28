@@ -22,7 +22,7 @@ import java.net.{URI, URL}
 
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity
 
-import org.apache.spark.deploy.history.yarn.YarnHistoryService._
+import org.apache.spark.deploy.history.yarn.EntityConstants._
 import org.apache.spark.deploy.history.yarn.rest.HttpRequestException
 import org.apache.spark.deploy.history.yarn.rest.JerseyBinding._
 import org.apache.spark.deploy.history.yarn.server.{Ls, TimelineQueryClient}

@@ -39,10 +39,10 @@ import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.deploy.history.yarn.YarnHistoryService._
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.deploy.history.yarn.EntityConstants._
 import org.apache.spark.deploy.history.yarn.server.TimelineQueryClient._
 import org.apache.spark.status.api.v1.{JobData, StageData}
-import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.history.{ApplicationHistoryProvider, FsHistoryProvider, HistoryServer}
 import org.apache.spark.deploy.history.yarn.{YarnHistoryService, YarnTimelineUtils}
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
@@ -270,7 +270,7 @@ abstract class AbstractHistoryIntegrationTests
 
   def dumpTimelineEntities(queryClient: TimelineQueryClient)(): Unit = {
     logError("-- Dumping timeline entities --")
-    val entities = queryClient.listEntities(YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
+    val entities = queryClient.listEntities(SPARK_SUMMARY_ENTITY_TYPE)
     entities.foreach { e =>
       logError(describeEntity(e))
     }
@@ -902,7 +902,7 @@ abstract class AbstractHistoryIntegrationTests
 
     conf.set(TIMELINE_SERVICE_ENTITYGROUP_FS_STORE_SUMMARY_ENTITY_TYPES,
       "YARN_APPLICATION,YARN_APPLICATION_ATTEMPT,YARN_CONTAINER,"
-          + YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
+          + SPARK_SUMMARY_ENTITY_TYPE)
     // reset current app map
     FSTimelineStoreForTesting.reset()
   }
