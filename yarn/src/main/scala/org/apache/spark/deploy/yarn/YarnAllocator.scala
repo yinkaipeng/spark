@@ -22,7 +22,7 @@ import java.util.concurrent._
 import java.util.regex.Pattern
 
 import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
@@ -39,6 +39,7 @@ import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
 import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
 
 /**
  * YarnAllocator is charged with requesting containers from the YARN ResourceManager and deciding
@@ -84,7 +85,18 @@ private[yarn] class YarnAllocator(
   @volatile private var numExecutorsRunning = 0
   // Used to generate a unique ID per executor
   private var executorIdCounter = 0
-  @volatile private var numExecutorsFailed = 0
+
+  // Queue to store the timestamp of failed executors
+  private val failedExecutorsTimeStamps = new Queue[Long]()
+
+  private var clock: Clock = new SystemClock
+
+  private val executorFailuresValidityInterval =
+    if (sparkConf.contains("spark.yarn.executor.failuresValidityInterval")) {
+      sparkConf.getTimeAsMs("spark.yarn.executor.failuresValidityInterval")
+    } else {
+      -1L
+    }
 
   @volatile private var targetNumExecutors =
     YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sparkConf)
@@ -150,9 +162,26 @@ private[yarn] class YarnAllocator(
   private[yarn] val containerPlacementStrategy =
     new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resource)
 
+  /**
+   * Use a different clock for YarnAllocator. This is mainly used for testing.
+   */
+  def setClock(newClock: Clock): Unit = {
+    clock = newClock
+  }
+
   def getNumExecutorsRunning: Int = numExecutorsRunning
 
-  def getNumExecutorsFailed: Int = numExecutorsFailed
+  def getNumExecutorsFailed: Int = synchronized {
+    val endTime = clock.getTimeMillis()
+
+    while (executorFailuresValidityInterval > 0
+      && failedExecutorsTimeStamps.nonEmpty
+      && failedExecutorsTimeStamps.head < endTime - executorFailuresValidityInterval) {
+      failedExecutorsTimeStamps.dequeue()
+    }
+
+    failedExecutorsTimeStamps.size
+  }
 
   /**
    * A sequence of pending container requests that have not yet been fulfilled.
@@ -173,6 +202,7 @@ private[yarn] class YarnAllocator(
    * Request as many executors from the ResourceManager as needed to reach the desired total. If
    * the requested total is smaller than the current number of running executors, no executors will
    * be killed.
+   *
    * @param requestedTotal total number of containers requested
    * @param localityAwareTasks number of locality aware tasks to be used as container placement hint
    * @param hostToLocalTaskCount a map of preferred hostname to possible task counts to be used as
@@ -476,7 +506,8 @@ private[yarn] class YarnAllocator(
               completedContainer.getDiagnostics,
               PMEM_EXCEEDED_PATTERN))
           case _ =>
-            numExecutorsFailed += 1
+            // Enqueue the timestamp of failed executor
+            failedExecutorsTimeStamps.enqueue(clock.getTimeMillis())
             (true, "Container marked as failed: " + containerId + onHostStr +
               ". Exit status: " + completedContainer.getExitStatus +
               ". Diagnostics: " + completedContainer.getDiagnostics)
@@ -569,6 +600,7 @@ private[yarn] class YarnAllocator(
   /**
    * Split the pending container requests into 3 groups based on current localities of pending
    * tasks.
+   *
    * @param hostToLocalTaskCount a map of preferred hostname to possible task counts to be used as
    *                             container placement hint.
    * @param pendingAllocations A sequence of pending allocation container request.
