@@ -1385,7 +1385,7 @@ private[history] class YarnHistoryProviderMetrics(owner: YarnHistoryProvider)
     "token.renewal.time" -> tokenRenewalTime
   )
 
-  init()
+  register()
 }
 
 /**

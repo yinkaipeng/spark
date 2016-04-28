@@ -24,7 +24,7 @@ import java.util.concurrent.{LinkedBlockingDeque, TimeUnit}
 
 import scala.collection.JavaConverters._
 
-import com.codahale.metrics.{Counter, Timer}
+import com.codahale.metrics.{Counter, Gauge, Metric, MetricRegistry, Timer}
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId
 import org.apache.hadoop.yarn.api.records.timeline.{TimelineDomain, TimelineEntity, TimelineEntityGroupId}
 import org.apache.hadoop.yarn.client.api.TimelineClient
@@ -47,14 +47,14 @@ import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 private[yarn] class EventPublisher(
     appAttemptDetails: Option[AppAttemptDetails],
     attemptId: Option[ApplicationAttemptId],
-        timelineClient: TimelineClient,
+    timelineClient: TimelineClient,
     timelineWebappAddress: URI,
     timelineVersion1_5: Boolean,
     groupId: Option[TimelineEntityGroupId],
     retryInterval: Long,
     retryIntervalMax: Long,
     shutdownWaitTime: Long)
-    extends Closeable with Logging with TimeSource {
+    extends Closeable with Logging with TimeSource with ExtendedMetricsSource {
 
   import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 
@@ -68,7 +68,7 @@ private[yarn] class EventPublisher(
   /** Queue of entities to asynchronously post, plus the number of events in each entry. */
   private val postingQueue = new LinkedBlockingDeque[PostQueueAction]()
 
-  def postingQueueSize: Int = {postingQueue.size()}
+  def postingQueueSize: Int = { postingQueue.size() }
 
   /** Number of events in the post queue. */
   private val _postQueueEventSize = new AtomicLong
@@ -88,6 +88,13 @@ private[yarn] class EventPublisher(
 
   /** Boolean to track when the post thread is active; Set and reset in the thread itself. */
   private val postThreadActive = new AtomicBoolean(false)
+
+  /** Name for metrics: yarn_history */
+  override val sourceName = "event_publisher_metrics"
+
+  /** Metrics registry */
+  override val metricRegistry = new MetricRegistry()
+
 
   /** Counter of events successfully posted. */
   val eventsSuccessfullyPosted = new Counter()
@@ -115,6 +122,30 @@ private[yarn] class EventPublisher(
    * has been updated since a previous check.
    */
   private val entityVersionCounter = new AtomicLong(1)
+
+  /**
+   * The metrics of this class
+   */
+  val metricsMap: Map[String, Metric] = Map(
+    "eventsSuccessfullyPosted" -> eventsSuccessfullyPosted,
+    "entityPostAttempts" -> entityPostAttempts,
+    "entityPostFailures" -> entityPostFailures,
+    "entityPostRejections" -> entityPostRejections,
+    "entityPostSuccesses" -> entityPostSuccesses,
+    "entityPostTimer" -> postOperationTimer,
+    "entityPostTimestamp" -> postTimestamp,
+    "entityPostQueueSize" -> new Gauge[Long] {
+      override def getValue = postingQueueSize
+    },
+    "entityPostQueueEventCount" -> new Gauge[Long] {
+      override def getValue = postQueueEventSize
+    }
+
+  )
+  /**
+   * Initialization: register the metrics locally
+   */
+  register()
 
   /**
    * Is the asynchronous posting thread active?
@@ -497,7 +528,20 @@ private[yarn] class EventPublisher(
      """.stripMargin
 */
 
+  override def toString = s"""EventPublisher(
+     | domainId=$domainId,
+     | batchSize=$batchSize,
+     | postQueueLimit=$postQueueLimit,
+     | postThreadActive=$postThreadActive,
+     | eventsSuccessfullyPosted=${eventsSuccessfullyPosted.getCount},
+     | entityPostAttempts=${entityPostAttempts.getCount},
+     | entityPostSuccesses=${entityPostSuccesses.getCount},
+     | entityPostFailures=${entityPostFailures.getCount},
+     | entityPostRejections=${entityPostRejections.getCount},
+     | postingQueueSize=$postingQueueSize)""".stripMargin
 }
+
+
 
 /** Actions in the post queue */
 private[yarn] sealed trait PostQueueAction {

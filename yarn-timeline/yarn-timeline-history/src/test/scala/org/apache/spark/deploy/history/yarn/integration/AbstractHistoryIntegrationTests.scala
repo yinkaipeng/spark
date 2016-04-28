@@ -383,7 +383,7 @@ abstract class AbstractHistoryIntegrationTests
     historyService.asyncFlush()
     awaitEmptyQueue(history, delay)
     assert(0 === history.postFailures, s"Post failure count: $history")
-    assert(0 === history.eventsDropped, s"Dropped events: $history")
+    assert(0 === history.eventsDropped.getCount, s"Dropped events: $history")
   }
 
   /**
