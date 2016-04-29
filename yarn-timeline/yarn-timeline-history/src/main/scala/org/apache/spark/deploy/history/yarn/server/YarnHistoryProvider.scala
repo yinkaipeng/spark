@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history.yarn.server
 
-import java.io.{FileNotFoundException, InterruptedIOException, IOException}
+import java.io.{FileNotFoundException, IOException, InterruptedIOException}
 import java.net.URI
 import java.util.Date
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
@@ -38,8 +38,8 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.{ApplicationHistoryProvider, HistoryServer, LoadedAppUI}
 import org.apache.spark.deploy.history.yarn.{ExtendedMetricsSource, TimeInMillisecondsGauge, YarnTimelineUtils}
-import org.apache.spark.deploy.history.yarn.EntityConstants._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
+import org.apache.spark.deploy.history.yarn.publish.EntityConstants._
 import org.apache.spark.deploy.history.yarn.rest.JerseyBinding
 import org.apache.spark.deploy.history.yarn.server.TimelineQueryClient._
 import org.apache.spark.deploy.history.yarn.server.YarnProviderUtils._

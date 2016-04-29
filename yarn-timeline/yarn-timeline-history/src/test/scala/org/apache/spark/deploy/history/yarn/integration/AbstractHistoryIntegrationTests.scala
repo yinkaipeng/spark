@@ -40,12 +40,12 @@ import org.json4s.jackson.JsonMethods
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.deploy.history.yarn.EntityConstants._
 import org.apache.spark.deploy.history.yarn.server.TimelineQueryClient._
 import org.apache.spark.status.api.v1.{JobData, StageData}
 import org.apache.spark.deploy.history.{ApplicationHistoryProvider, FsHistoryProvider, HistoryServer}
 import org.apache.spark.deploy.history.yarn.{YarnHistoryService, YarnTimelineUtils}
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
+import org.apache.spark.deploy.history.yarn.publish.EntityConstants._
 import org.apache.spark.deploy.history.yarn.rest.JerseyBinding._
 import org.apache.spark.deploy.history.yarn.rest.{HttpOperationResponse, SpnegoUrlConnector}
 import org.apache.spark.deploy.history.yarn.server.{TimelineQueryClient, YarnHistoryProvider}

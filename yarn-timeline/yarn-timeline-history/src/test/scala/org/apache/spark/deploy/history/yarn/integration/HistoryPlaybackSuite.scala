@@ -20,9 +20,9 @@ package org.apache.spark.deploy.history.yarn.integration
 import java.net.URL
 
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.history.yarn.EntityConstants._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.failures.FailingYarnHistoryProvider
+import org.apache.spark.deploy.history.yarn.publish.EntityConstants._
 import org.apache.spark.deploy.history.yarn.rest.JerseyBinding
 import org.apache.spark.deploy.history.yarn.server.{TimelineQueryClient, YarnHistoryProvider}
 import org.apache.spark.deploy.history.yarn.testtools.YarnTestUtils._
