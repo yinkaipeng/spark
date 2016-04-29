@@ -31,6 +31,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
+import org.apache.spark.deploy.history.yarn.publish.{EntityConstants, EventPublisher}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerBlockUpdated, SparkListenerEvent, SparkListenerExecutorMetricsUpdate}
 import org.apache.spark.scheduler.cluster.{SchedulerExtensionService, SchedulerExtensionServiceBinding}

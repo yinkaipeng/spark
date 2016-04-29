@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.history.yarn
+package org.apache.spark.deploy.history.yarn.publish
 
 import java.io.{Closeable, Flushable, InterruptedIOException}
 import java.net.{ConnectException, URI}
@@ -31,6 +31,7 @@ import org.apache.hadoop.yarn.client.api.TimelineClient
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
+import org.apache.spark.deploy.history.yarn.{AppAttemptDetails, ExtendedMetricsSource, TimeInMillisecondsGauge, TimeSource, YarnTimelineUtils}
 
 /**
  * This is the class which publishes events to the timeline server.

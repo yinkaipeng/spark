@@ -19,12 +19,12 @@ package org.apache.spark.deploy.history.yarn.integration
 
 import org.scalatest.Matchers
 
-import org.apache.spark.deploy.history.yarn.EntityConstants._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.server.{TimelineApplicationAttemptInfo, TimelineApplicationHistoryInfo}
 import org.apache.spark.deploy.history.yarn.server.YarnProviderUtils._
 import org.apache.spark.deploy.history.yarn.testtools.{ExtraAssertions, YarnTestUtils}
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.deploy.history.yarn.publish.EntityConstants._
 import org.apache.spark.deploy.history.yarn.{AppAttemptDetails, SparkAppAttemptDetails}
 
 /**

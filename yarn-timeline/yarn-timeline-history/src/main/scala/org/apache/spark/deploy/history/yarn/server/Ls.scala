@@ -26,8 +26,8 @@ import org.apache.hadoop.util.{ExitUtil, Tool, ToolRunner}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.Logging
-import org.apache.spark.deploy.history.yarn.EntityConstants._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
+import org.apache.spark.deploy.history.yarn.publish.EntityConstants._
 import org.apache.spark.deploy.history.yarn.rest.{JerseyBinding, UnauthorizedRequestException}
 import org.apache.spark.deploy.history.yarn.server.TimelineQueryClient._
 
