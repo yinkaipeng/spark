@@ -24,47 +24,46 @@ import java.util.concurrent.{LinkedBlockingDeque, TimeUnit}
 
 import scala.collection.JavaConverters._
 
-import com.codahale.metrics.{Counter, Gauge, Metric, MetricRegistry, Timer}
+import com.codahale.metrics.{Counter, Gauge, Metric, Timer}
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId
 import org.apache.hadoop.yarn.api.records.timeline.{TimelineDomain, TimelineEntity, TimelineEntityGroupId}
 import org.apache.hadoop.yarn.client.api.TimelineClient
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
-import org.apache.spark.deploy.history.yarn.{AppAttemptDetails, ExtendedMetricsSource, TimeInMillisecondsGauge, TimeSource, YarnTimelineUtils}
+import org.apache.spark.deploy.history.yarn.{AppAttemptDetails, BoolGauge, ExtendedMetricsSource, LongGauge, TimeInMillisecondsGauge, TimeSource, YarnTimelineUtils}
+import org.apache.spark.deploy.history.yarn.publish.PublishMetricNames._
 
 /**
- * This is the class which publishes events to the timeline server.
+ * This is the class which publishes entities containing events to the timeline server.
  *
- * It contains a queue of events to post
+ * It contains a queue of events to post, and a thread in the background which
+ * publishes them in order
  *
- * @param timelineClient
- * @param timelineWebappAddress
+ * @param appAttemptDetails info about the attempt
+ * @param attemptId optional attempt ID
+ * @param timelineClient timeline client
+ * @param timelineWebappAddress URI of the timeline (used in logs)
  * @param timelineVersion1_5 Does the the timeline server support v 1.5 APIs?
+ * @param groupId Group Id: mandatory for ATS1.5
  * @param retryInterval the initial and incrementing interval for POST retries
  * @param retryIntervalMax the max interval for POST retries
  * @param shutdownWaitTime How long to wait in millseconds for shutdown before giving up
  */
-private[yarn] class EventPublisher(
+private[yarn] class EntityPublisher(
     appAttemptDetails: Option[AppAttemptDetails],
     attemptId: Option[ApplicationAttemptId],
     timelineClient: TimelineClient,
-    timelineWebappAddress: URI,
-    timelineVersion1_5: Boolean,
-    groupId: Option[TimelineEntityGroupId],
-    retryInterval: Long,
-    retryIntervalMax: Long,
-    shutdownWaitTime: Long)
+    val timelineWebappAddress: URI,
+    val timelineVersion1_5: Boolean,
+    val groupId: Option[TimelineEntityGroupId],
+    val retryInterval: Long,
+    val retryIntervalMax: Long,
+    val shutdownWaitTime: Long)
     extends Closeable with Logging with TimeSource with ExtendedMetricsSource {
-
-  import org.apache.spark.deploy.history.yarn.YarnHistoryService._
-
 
   /** Domain ID for entities: may be null. */
   private var domainId: Option[String] = None
-
-  /** Number of events to batch up before posting. */
-  private[yarn] var batchSize = DEFAULT_BATCH_SIZE
 
   /** Queue of entities to asynchronously post, plus the number of events in each entry. */
   private val postingQueue = new LinkedBlockingDeque[PostQueueAction]()
@@ -75,9 +74,6 @@ private[yarn] class EventPublisher(
   private val _postQueueEventSize = new AtomicLong
 
   def postQueueEventSize: Long = _postQueueEventSize.get()
-
-  /** Limit on the total number of events permitted. */
-  private var postQueueLimit = DEFAULT_POST_EVENT_LIMIT
 
   /** Event handler thread. */
   private var entityPostThread: Option[Thread] = None
@@ -92,10 +88,6 @@ private[yarn] class EventPublisher(
 
   /** Name for metrics: yarn_history */
   override val sourceName = "event_publisher_metrics"
-
-  /** Metrics registry */
-  override val metricRegistry = new MetricRegistry()
-
 
   /** Counter of events successfully posted. */
   val eventsSuccessfullyPosted = new Counter()
@@ -128,21 +120,18 @@ private[yarn] class EventPublisher(
    * The metrics of this class
    */
   val metricsMap: Map[String, Metric] = Map(
-    "eventsSuccessfullyPosted" -> eventsSuccessfullyPosted,
-    "entityPostAttempts" -> entityPostAttempts,
-    "entityPostFailures" -> entityPostFailures,
-    "entityPostRejections" -> entityPostRejections,
-    "entityPostSuccesses" -> entityPostSuccesses,
-    "entityPostTimer" -> postOperationTimer,
-    "entityPostTimestamp" -> postTimestamp,
-    "entityPostQueueSize" -> new Gauge[Long] {
-      override def getValue = postingQueueSize
-    },
-    "entityPostQueueEventCount" -> new Gauge[Long] {
-      override def getValue = postQueueEventSize
-    }
+    ENTITY_EVENTS_SUCCESSFULLY_POSTED -> eventsSuccessfullyPosted,
+    ENTITY_POST_ATTEMPTS -> entityPostAttempts,
+    ENTITY_POST_FAILURES -> entityPostFailures,
+    ENTITY_POST_REJECTIONS -> entityPostRejections,
+    ENTITY_POST_SUCCESSES -> entityPostSuccesses,
+    ENTITY_POST_TIMER -> postOperationTimer,
+    ENTITY_POST_TIMESTAMP -> postTimestamp,
+    ENTITY_POST_QUEUE_IS_STOPPED -> new BoolGauge(() => postingQueueStopped.get),
+    ENTITY_POST_QUEUE_SIZE -> new LongGauge( () =>  postingQueueSize),
+    ENTITY_POST_QUEUE_EVENT_COUNT -> new LongGauge(() => postQueueEventSize)
+    )
 
-  )
   /**
    * Initialization: register the metrics locally
    */
@@ -179,6 +168,13 @@ private[yarn] class EventPublisher(
     timelineClient.stop()
   }
 
+  /**
+   * Create a timeline domain and PUT it to ATS
+   * @param domain domain ID
+   * @param readers reader permissions
+   * @param writers writer permissions
+   * @return the created instance
+   */
   def putNewDomain(
       domain: String,
       readers: String,
@@ -263,6 +259,7 @@ private[yarn] class EventPublisher(
     require(entity.getStartTime != null,
       s"No start time in ${describeEntity(entity)}")
   }
+
   /**
    * Post events until told to stop.
    */
@@ -503,43 +500,12 @@ private[yarn] class EventPublisher(
    *
    * @return a summary of the current service state
    */
-/*
-  override def toString(): String =
-    s"""YarnHistoryService for application $applicationId attempt $attemptId;
-        | state=$serviceState;
-        | endpoint=$timelineWebappAddress;
-        | ATS v1.5=$timelineVersion1_5
-        | groupId=$groupId
-        | listening=$listening;
-        | batchSize=$batchSize;
-        | postQueueLimit=$postQueueLimit;
-        | postQueueSize=$postQueueActionSize;
-        | postQueueEventSize=$postQueueEventSize;
-        | flush count=$getFlushCount;
-        | total number queued=$eventsQueued, processed=$eventsProcessed;
-        | attempted entity posts=$postAttempts
-        | successful entity posts=$postSuccesses
-        | events successfully posted=${metrics.eventsSuccessfullyPosted.getCount}
-        | failed entity posts=$postFailures;
-        | events dropped=$eventsDropped;
-        | app start event received=$appStartEventProcessed;
-        | start time=$startTime;
-        | app end event received=$appEndEventProcessed;
-        | end time=$endTime;
-     """.stripMargin
-*/
 
   override def toString = s"""EventPublisher(
      | domainId=$domainId,
-     | batchSize=$batchSize,
-     | postQueueLimit=$postQueueLimit,
      | postThreadActive=$postThreadActive,
-     | eventsSuccessfullyPosted=${eventsSuccessfullyPosted.getCount},
-     | entityPostAttempts=${entityPostAttempts.getCount},
-     | entityPostSuccesses=${entityPostSuccesses.getCount},
-     | entityPostFailures=${entityPostFailures.getCount},
-     | entityPostRejections=${entityPostRejections.getCount},
-     | postingQueueSize=$postingQueueSize)""".stripMargin
+     | ${metricsToString}
+     | """.stripMargin
 }
 
 

@@ -46,6 +46,7 @@ import org.apache.spark.deploy.history.{ApplicationHistoryProvider, FsHistoryPro
 import org.apache.spark.deploy.history.yarn.{YarnHistoryService, YarnTimelineUtils}
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.publish.EntityConstants._
+import org.apache.spark.deploy.history.yarn.publish.PublishMetricNames._
 import org.apache.spark.deploy.history.yarn.rest.JerseyBinding._
 import org.apache.spark.deploy.history.yarn.rest.{HttpOperationResponse, SpnegoUrlConnector}
 import org.apache.spark.deploy.history.yarn.server.{TimelineQueryClient, YarnHistoryProvider}
@@ -383,7 +384,7 @@ abstract class AbstractHistoryIntegrationTests
     historyService.asyncFlush()
     awaitEmptyQueue(history, delay)
     assert(0 === history.postFailures, s"Post failure count: $history")
-    assert(0 === history.eventsDropped.getCount, s"Dropped events: $history")
+    assert(0 === historyMetric(SPARK_EVENTS_DROPPED), s"Dropped events: $history")
   }
 
   /**
@@ -936,6 +937,17 @@ abstract class AbstractHistoryIntegrationTests
     } else {
       SPARK_SUMMARY_ENTITY_TYPE
     }
+  }
+
+  /**
+   * Look up any named metric from the history service, return its
+   * long value. The metric must exist
+   * @param name metric name
+   * @return its value
+   */
+  def historyMetric(name: String): Long = {
+    assert(historyService.lookupMetric(name).isDefined, s"No metric $name")
+    historyService.counterMetric(name)
   }
 }
 

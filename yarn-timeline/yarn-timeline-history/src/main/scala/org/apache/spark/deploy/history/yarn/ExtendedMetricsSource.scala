@@ -19,7 +19,7 @@ package org.apache.spark.deploy.history.yarn
 
 import java.util.Date
 
-import com.codahale.metrics.{Counter, Counting, Gauge, Metric, Timer}
+import com.codahale.metrics.{Counter, Counting, Gauge, Metric, MetricRegistry, Timer}
 
 import org.apache.spark.metrics.source.Source
 
@@ -28,6 +28,9 @@ import org.apache.spark.metrics.source.Source
  * to time a closure.
  */
 private[history] trait ExtendedMetricsSource extends Source {
+
+  /** Metrics registry */
+  override val metricRegistry = new MetricRegistry()
 
   /**
    * A map to build up of all metrics to register and include in the string value
@@ -43,7 +46,15 @@ private[history] trait ExtendedMetricsSource extends Source {
     })
   }
 
+  /**
+   * Stringify all the metrics
+   * @return a string which can be used in diagnostics and logging
+   */
   override def toString: String = {
+    metricsToString
+  }
+
+  def metricsToString: String = {
     def sb = new StringBuilder()
     metricsMap.foreach(elt => sb.append(s" ${elt._1} = ${elt._2}\n"))
     sb.toString()
@@ -79,9 +90,14 @@ private[history] trait ExtendedMetricsSource extends Source {
     lookup(name) match {
       case Some(c: Counting) =>
         c.getCount
+      case Some(c: Gauge[Long]) =>
+        c.getValue
+      case Some(c: Gauge[Int]) =>
+        c.getValue
       case _ => -1L
     }
   }
+
 }
 
 /**
@@ -116,4 +132,24 @@ private[spark] class TimeInMillisecondsGauge extends Gauge[Long] {
       new Date(t).toString
     }
   }
+
+
 }
+
+/**
+ * Convert a boolean value/function to a 0/1 gauge value
+ * @param b predicate
+ */
+private[spark] class BoolGauge(b: () => Boolean) extends Gauge[Long] {
+  override def getValue: Long = {if (b()) 1 else 0}
+}
+
+/**
+ * Convert a boolean value/function to a 0/1 gauge value
+ * @param b predicate
+ */
+private[spark] class LongGauge(fn: () => Long) extends Gauge[Long] {
+  override def getValue: Long = { fn() }
+}
+
+

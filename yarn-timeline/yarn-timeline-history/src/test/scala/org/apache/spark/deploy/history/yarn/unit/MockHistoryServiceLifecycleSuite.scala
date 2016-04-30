@@ -20,6 +20,7 @@ package org.apache.spark.deploy.history.yarn.unit
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.yarn.YarnHistoryService
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
+import org.apache.spark.deploy.history.yarn.publish.PublishMetricNames
 import org.apache.spark.deploy.history.yarn.testtools.{ContextSetup, HistoryServiceListeningToSparkContext}
 import org.apache.spark.deploy.history.yarn.testtools.YarnTestUtils._
 import org.apache.spark.scheduler.cluster.SchedulerExtensionServiceBinding
@@ -56,7 +57,7 @@ class MockHistoryServiceLifecycleSuite
       service.serviceState
     }
     assertResult(2, s"batch size in $service") {
-      service.batchSize
+      service.counterMetric(PublishMetricNames.SPARK_EVENTS_BATCH_SIZE)
     }
     assertResult(true, s"listen flag in $service") {
       service.listening

@@ -1305,8 +1305,6 @@ private[history] class YarnHistoryProviderMetrics(owner: YarnHistoryProvider)
     extends ExtendedMetricsSource {
   override val sourceName = "yarn.history.provider"
 
-  override val metricRegistry = new MetricRegistry()
-
   /** How many applications? */
   val applicationGauge = new Gauge[Int] {
     override def getValue: Int = { owner.getApplications.size }

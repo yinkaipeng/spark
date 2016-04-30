@@ -21,6 +21,7 @@ import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity
 import org.mockito.Matchers._
 import org.mockito.Mockito._
 
+import org.apache.spark.deploy.history.yarn.publish.PublishMetricNames
 import org.apache.spark.deploy.history.yarn.testtools.TimelineSingleEntryBatchSize
 import org.apache.spark.deploy.history.yarn.testtools.YarnTestUtils._
 
@@ -45,7 +46,8 @@ class MockBatchingTimelinePostSuite extends AbstractMockHistorySuite
     service.stop()
     awaitServiceThreadStopped(service, TEST_STARTUP_DELAY)
     // there should have been three flushed
-    assert(eventsPosted === service.getFlushCount, s"expected $eventsPosted flushed for $service" )
+    assert(eventsPosted === service.counterMetric(PublishMetricNames.SPARK_EVENTS_FLUSH_COUNT),
+      s"expected $eventsPosted flushed for $service" )
     verify(timelineClient, times(service.postAttempts.toInt))
       .putEntities(any(classOf[TimelineEntity]))
   }

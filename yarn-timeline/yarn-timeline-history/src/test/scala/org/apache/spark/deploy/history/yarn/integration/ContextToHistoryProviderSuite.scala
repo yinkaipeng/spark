@@ -19,6 +19,7 @@ package org.apache.spark.deploy.history.yarn.integration
 
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.publish.EntityConstants._
+import org.apache.spark.deploy.history.yarn.publish.PublishMetricNames
 import org.apache.spark.deploy.history.yarn.server.YarnHistoryProvider
 import org.apache.spark.deploy.history.yarn.testtools.{HistoryServiceListeningToSparkContext, TimelineSingleEntryBatchSize}
 import org.apache.spark.deploy.history.yarn.testtools.YarnTestUtils._
@@ -39,7 +40,8 @@ class ContextToHistoryProviderSuite
       // hook up to spark context
       historyService = startHistoryService(sc)
       assert(historyService.listening, s"listening $historyService")
-      assert(1 === historyService.batchSize, s"batch size in $historyService")
+      assert(1 === historyMetric(PublishMetricNames.SPARK_EVENTS_BATCH_SIZE),
+        s"batch size in $historyService")
       assert(historyService.bondedToATS, s"not bonded to ATS: $historyService")
       // post in an app start
       var flushes = 0

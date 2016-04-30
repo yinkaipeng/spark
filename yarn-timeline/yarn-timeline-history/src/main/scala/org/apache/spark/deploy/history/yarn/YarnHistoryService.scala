@@ -22,16 +22,17 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
 
 import scala.collection.mutable
 
-import com.codahale.metrics.{Counter, Counting, Metric, MetricRegistry}
+import com.codahale.metrics.{Counter, Counting, Metric}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
-import org.apache.hadoop.yarn.api.records.timeline.{TimelineEntity, TimelineEntityGroupId, TimelineEvent}
+import org.apache.hadoop.yarn.api.records.timeline.{TimelineEntity, TimelineEntityGroupId}
 import org.apache.hadoop.yarn.client.api.TimelineClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
-import org.apache.spark.deploy.history.yarn.publish.{EntityConstants, EventPublisher}
+import org.apache.spark.deploy.history.yarn.publish.PublishMetricNames._
+import org.apache.spark.deploy.history.yarn.publish.{EntityConstants, EntityPublisher, SparkEventPublisher}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerBlockUpdated, SparkListenerEvent, SparkListenerExecutorMetricsUpdate}
 import org.apache.spark.scheduler.cluster.{SchedulerExtensionService, SchedulerExtensionServiceBinding}
@@ -127,47 +128,14 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
 
   private var sparkAttemptDetails: SparkAppAttemptDetails = _
 
-  /** Application ID received from a [[SparkListenerApplicationStart]]. */
-  private var sparkApplicationId: Option[String] = None
-
-  /** Optional Attempt ID string from [[SparkListenerApplicationStart]]. */
-  private var sparkApplicationAttemptId: Option[String] = None
-
-  /** Start time of the application, as received in the start event. */
-  private var startTime: Long = _
-
-  /** Start time of the application, as received in the end event. */
-  private var endTime: Long = _
-
-  /** Number of events to batch up before posting. */
-  private[yarn] var batchSize = DEFAULT_BATCH_SIZE
-
-  /** Limit on the total number of events permitted. */
-  private var postQueueLimit = DEFAULT_POST_EVENT_LIMIT
-
-  /** List of events which will be pulled into a timeline entity when created. */
-  private var pendingEvents = new mutable.MutableList[TimelineEvent]()
-
-  /** The received application started event; `None` if no event has been received. */
-  private var applicationStartEvent: Option[SparkListenerApplicationStart] = None
-
-  /** The received application end event; `None` if no event has been received. */
-  private var applicationEndEvent: Option[SparkListenerApplicationEnd] = None
-
-  /** Has a start event been processed? */
-  private val appStartEventProcessed = new AtomicBoolean(false)
-
-  /** Has the application event event been processed? */
-  private val appEndEventProcessed = new AtomicBoolean(false)
-
-  /** Counter of events processed -that is have been through `handleEvent()`. */
-  val eventsProcessedCounter = new Counter()
-  
   /** Domain ID for entities: may be null. */
   private var domainId: Option[String] = None
 
   /** URI to timeline web application -valid after [[start()]]. */
   private[yarn] var timelineWebappAddress: URI = _
+
+  /** Counter of events queued. */
+  val sparkEventsQueued = new Counter()
 
   /** Metric fields. Used in tests as well as metrics infrastructure. */
   val metrics = new HistoryMetrics()
@@ -177,7 +145,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    */
   private val metricsMap = mutable.Map[String, Metric]()
 
-  /**
+  /** TODO
    * A counter incremented every time a new entity is created. This is included as an "other"
    * field in the entity information -so can be used as a probe to determine if the entity
    * has been updated since a previous check.
@@ -210,9 +178,15 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   }
 
   /**
-   * Event publisher
+   * ATS entity publisher.
+   * Optional, as if (for testing) ATS publishing is disabled, this will not be set
    */
-  var publisher: Option[EventPublisher] = None
+  var entityPublisher: Option[EntityPublisher] = None
+
+  /**
+   * Higher level spark event publisher
+   */
+  var sparkEventPublisher: Option[SparkEventPublisher] = None
 
   /**
    * Get the configuration of this service.
@@ -221,29 +195,20 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    */
   def yarnConfiguration: YarnConfiguration = config
 
-  /** Counter of events queued. */
-  val sparkEventsQueued = new Counter()
-
-  /** The number of events which were dropped as the backlog of pending posts was too big. */
-  val eventsDropped = new Counter()
-
-  /** How many flushes have taken place? */
-  val flushCount = new Counter()
-
   /**
    * Get the total number of processed events, those handled in the back-end thread without
    * being rejected.
    *
    * @return counter of events processed
    */
-  def eventsProcessed: Long = eventsProcessedCounter.getCount
+  def eventsProcessed: Long = sparkEventPublisher.map(_.eventsProcessed.getCount).getOrElse(0L)
 
   /**
    * Get the total number of events queued.
    *
    * @return the total event count
    */
-  def eventsQueued: Long = sparkEventsQueued.getCount
+  def eventsQueued: Long = sparkEventPublisher.map(_.sparkEventsQueued.getCount).getOrElse(0L)
 
   /**
     * Get the current size of the posting queue in terms of outstanding actions.
@@ -251,7 +216,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     * @return the current queue length
     */
   def postQueueActionSize: Int = {
-    publisher.map(_.postingQueueSize).getOrElse(0)
+    entityPublisher.map(_.postingQueueSize).getOrElse(0)
   }
 
   /**
@@ -260,7 +225,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    * @return a counter of outstanding events
    */
   def postQueueEventSize: Long = {
-    publisher.map(_.postQueueEventSize).getOrElse(0)
+    entityPublisher.map(_.postQueueEventSize).getOrElse(0)
   }
 
   /**
@@ -269,7 +234,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    * @return the current value
    */
   def postAttempts: Long = {
-    publisher.map(_.entityPostAttempts.getCount).getOrElse(0)
+    counterMetric(ENTITY_POST_ATTEMPTS)
   }
 
   /**
@@ -278,7 +243,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    * @return counter of timeline post operations which failed
    */
   def postFailures: Long = {
-    publisher.map(_.entityPostFailures.getCount).getOrElse(0)
+    counterMetric(ENTITY_POST_FAILURES)
   }
 
   /**
@@ -288,7 +253,11 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    * @return the number of successful post operations.
    */
   def postSuccesses: Long = {
-    publisher.map(_.entityPostSuccesses.getCount).getOrElse(0)
+    counterMetric(ENTITY_POST_SUCCESSES)
+  }
+
+  def flushCount: Long = {
+    counterMetric(SPARK_EVENTS_FLUSH_COUNT)
   }
 
   /**
@@ -298,7 +267,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    *         if it has finished.
    */
   def isPostThreadActive: Boolean = {
-    publisher.map(_.isPostThreadActive).getOrElse(false)
+    entityPublisher.map(_.isPostThreadActive).getOrElse(false)
   }
 
   /**
@@ -325,7 +294,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    *
    * @return an optional domain string. If `None`, then no domain was created.
    */
-  private def createTimelineDomain(eventPublisher: EventPublisher): Option[String] = {
+  private def createTimelineDomain(eventPublisher: EntityPublisher): Option[String] = {
     val sparkConf = sparkContext.getConf
     val aclsOn = sparkConf.getBoolean("spark.ui.acls.enable",
         sparkConf.getBoolean("spark.acls.enable", false))
@@ -389,24 +358,22 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       case Some(attempt) => attempt.getAttemptId.toString
       case None => CLIENT_BACKEND_ATTEMPT_ID
     }
-    setContextAppAndAttemptInfo(Some(appId.toString), Some(attempt1), attempt1, "")
-
-    def intOption(key: String, defVal: Int): Int = {
-      val v = sparkConf.getInt(key, defVal)
-      require(v > 0, s"Option $key out of range: $v")
-      v
-    }
-
-
-    batchSize = intOption(BATCH_SIZE, batchSize)
-    postQueueLimit = batchSize + intOption(POST_EVENT_LIMIT, postQueueLimit)
 
 
     registerMetricSource(metrics)
 
     // set up the timeline service, unless it's been disabled
     if (timelineServiceEnabled) {
-      startTimelineReporter()
+
+      def intOption(key: String, defVal: Int): Int = {
+        val v = sparkConf.getInt(key, defVal)
+        require(v > 0, s"Option $key out of range: $v")
+        v
+      }
+
+      val batchSize = intOption(BATCH_SIZE, DEFAULT_BATCH_SIZE)
+      val postQueueLimit = batchSize + intOption(POST_EVENT_LIMIT, DEFAULT_POST_EVENT_LIMIT)
+      startTimelineReporter(appId.toString, attempt1, batchSize, postQueueLimit)
       if (registerListener()) {
         logInfo(s"History Service listening for events: $this")
       } else {
@@ -416,13 +383,14 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     } else {
       logInfo("YARN History Service integration is disabled")
     }
+
   }
 
   /**
    * Start the timeline reporter: instantiate the client, start the background
    * entity posting thread.
    */
-  def startTimelineReporter(): Unit = {
+  def startTimelineReporter(yarnApplicationId: String, yarnAttemptId: String, batchSize: Int, postQueueLimit: Int): Unit = {
     timelineWebappAddress = getTimelineEndpoint(config)
 
     logInfo(s"Starting $this")
@@ -444,7 +412,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     }
 
     // create the publisher
-    val eventPublisher = new EventPublisher(
+    val eventPublisher = new EntityPublisher(
       applicationInfo,
       attemptId,
       timeline,
@@ -461,7 +429,19 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     logInfo(s"Spark events will be published to $timelineWebappAddress"
       + s" API version=$version; domain ID = $domainId; client=${_timelineClient.toString}")
     eventPublisher.start()
-    publisher = Some(eventPublisher)
+    entityPublisher = Some(eventPublisher)
+
+
+    // Now create the event publisher
+
+    val sparkPublisher = new SparkEventPublisher(entityPublisher.get, batchSize, postQueueLimit)
+    sparkPublisher.setContextAppAndAttemptInfo(
+      Some(yarnApplicationId),
+      Some(yarnAttemptId),
+      yarnAttemptId,
+      "")
+    registerMetricSource(sparkPublisher)
+    sparkEventPublisher = Some(sparkPublisher)
   }
 
   /**
@@ -479,6 +459,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    *
    * @return a summary of the current service state
    */
+/*
   override def toString(): String =
     s"""YarnHistoryService for application $applicationId attempt $attemptId;
        | state=$serviceState;
@@ -500,8 +481,9 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
        | start time=$startTime;
        | app end event received=$appEndEventProcessed;
        | end time=$endTime;
-       | publisher=$publisher;
+       | publisher=$entityPublisher;
      """.stripMargin
+*/
 
   /**
    * Is the service listening to events from the spark context?
@@ -540,25 +522,6 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     applicationInfo = Some(AppAttemptDetails(appId, maybeAttemptId, groupId))
   }
 
-  /**
-   * Set the "spark" application and attempt information -the information
-   * provided in the start event. The attempt ID here may be `None`; even
-   * if set it may only be unique amongst the attempts of this application.
-   * That is: not unique enough to be used as the entity ID
-   *
-   * @param appId application ID
-   * @param attemptId attempt ID
-   */
-  private def setContextAppAndAttemptInfo(
-      appId: Option[String],
-      attemptId: Option[String],
-      name: String,
-      user: String): Unit = {
-    logDebug(s"Setting Spark application ID to $appId; attempt ID to $attemptId")
-    sparkApplicationId = appId
-    sparkApplicationAttemptId = attemptId
-    sparkAttemptDetails = SparkAppAttemptDetails(appId, attemptId, name, user)
-  }
 
   /**
    * Add the listener if it is not disabled.
@@ -589,21 +552,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    * @return true if the event was queued
    */
   def process(event: SparkListenerEvent): Boolean = {
-    if (!publisher.map(_.isPostingQueueStopped).getOrElse(true)) {
-      sparkEventsQueued.inc()
-      logDebug(s"Enqueue $event")
-      handleEvent(event)
-      true
-    } else {
-      // the service is stopped, so the event will not be processed.
-      if (timelineServiceEnabled) {
-        // if a timeline service was ever enabled, log the fact the event
-        // is being discarded. Don't do this if it was not, as it will
-        // only make the (test run) logs noisy.
-        logInfo(s"History service stopped; ignoring queued event : $event")
-      }
-      false
-    }
+    sparkEventPublisher.map(_.process(event)).getOrElse(false)
   }
 
   /**
@@ -620,7 +569,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       return
     }
     try {
-      stopPublisher()
+      sparkEventPublisher.foreach(_.stop())
     } finally {
       contextMetricsSystem.foreach( _.removeSource(metrics))
     }
@@ -667,116 +616,6 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     }
   }
 
-  /**
-   * Stop the publisher
-   */
-  private def stopPublisher(): Unit = {
-    // if the queue is live
-    publisher.foreach { pub =>
-      if (!pub.isPostingQueueStopped) {
-
-        if (appStartEventProcessed.get && !appEndEventProcessed.get) {
-          // push out an application stop event if none has been received
-          logDebug("Generating a SparkListenerApplicationEnd during service stop()")
-          process(SparkListenerApplicationEnd(now()))
-        }
-
-        // flush out the events
-        asyncFlush()
-
-        // push out that queue stop event; this immediately sets the `queueStopped` flag
-        pub.pushQueueStop()
-
-        // Now await the halt of the posting thread.
-        var shutdownPosted = pub.awaitQueueCompletion();
-        if (!shutdownPosted) {
-          // there was no running post thread, just stop the timeline client ourselves.
-          // (if there is a thread running, it must be the one to stop it)
-          pub.stopTimelineClient()
-          logInfo(s"Stopped: $this")
-        }
-      }
-    }
-  }
-
-  /**
-   * Can an event be added?
-   *
-   * The policy is: only if the number of queued entities is below the limit, or the
-   * event marks the end of the application.
-   *
-   * @param isLifecycleEvent is this operation triggered by an application start/end?
-   * @return true if the event can be added to the queue
-   */
-  private def canAddEvent(isLifecycleEvent: Boolean): Boolean = {
-    isLifecycleEvent || postQueueHasCapacity
-  }
-
-  /**
-   * Does the post queue have capacity for this event?
-   *
-   * @return true if the count of queued events is below the limit
-   */
-  private def postQueueHasCapacity: Boolean = {
-    sparkEventsQueued.getCount < postQueueLimit
-  }
-
-  /**
-   * Add another event to the pending event list.
-   *
-   * Returns the size of the event list after the event was added
-   * (thread safe).
-    *
-    * @param event event to add
-   * @return the event list size
-   */
-  private def addPendingEvent(event: TimelineEvent): Int = {
-    pendingEvents.synchronized {
-      pendingEvents :+= event
-      pendingEvents.size
-    }
-  }
-
-  /**
-   * Publish next set of pending events if there are events to publish,
-   * and the application has been recorded as started.
-   *
-   * @return true if another entity was queued
-   */
-  private def publishPendingEvents(): Boolean = {
-    // verify that there are events to publish
-    val size = pendingEvents.synchronized {
-      pendingEvents.size
-    }
-    if (size > 0 && applicationStartEvent.isDefined) {
-      // push if there are events *and* the app is recorded as having started.
-      // -as the app name is needed for the the publishing.
-      flushCount.inc()
-      val t = now()
-      val count = entityVersionCounter.getAndIncrement()
-      val detail = createTimelineEntity(false, t, count)
-      // copy in pending events and then reset the list
-      pendingEvents.synchronized {
-        pendingEvents.foreach(detail.addEvent)
-        pendingEvents = new mutable.MutableList[TimelineEvent]()
-      }
-
-      oldPendingEvents.foreach(detail.addEvent)
-
-      publisher.foreach(_.queueForPosting(detail))
-
-      if (timelineVersion1_5) {
-        // ATS 1.5: push out an updated summary entry
-        publisher.foreach(_.
-            queueForPosting(createTimelineEntity(true, t, count)))
-      }
-      true
-    } else {
-      false
-    }
-  }
-
-
   def createEntityType(isSummaryEntity: Boolean): String = {
     if (!timelineVersion1_5 || isSummaryEntity) {
       EntityConstants.SPARK_SUMMARY_ENTITY_TYPE
@@ -786,147 +625,12 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
   }
 
   /**
-   * Create a timeline entity populated with the state of this history service
-   * @param isSummaryEntity entity type: summary or full
-   * @param timestamp timestamp
-   * @return
-   */
-  def createTimelineEntity(
-      isSummaryEntity: Boolean,
-      timestamp: Long,
-      entityCount: Long): TimelineEntity = {
-    YarnTimelineUtils.createTimelineEntity(
-      createEntityType(isSummaryEntity),
-      applicationInfo.get,
-      sparkAttemptDetails,
-      startTime,
-      endTime,
-      timestamp,
-      entityCount)
-  }
-
-  /**
     * Queue an asynchronous flush operation.
     *
     * @return if the flush event was queued
     */
   def asyncFlush(): Boolean = {
-    publishPendingEvents()
-  }
-
-  /**
-   * If the event reaches the batch size or flush is true, push events to ATS.
-   *
-   * @param event event. If null, no event is queued, but the post-queue flush logic still applies
-   */
-  private def handleEvent(event: SparkListenerEvent): Unit = {
-    // publish events unless stated otherwise
-    var publish = true
-    // don't trigger a push to the ATS
-    var push = false
-    // lifecycle events get special treatment: they are never discarded from the queues,
-    // even if the queues are full.
-    var isLifecycleEvent = false
-    val timestamp = now()
-    eventsProcessedCounter.inc()
-    if (eventsProcessedCounter.getCount() % 1000 == 0) {
-      logDebug(s"${eventsProcessedCounter} events are processed")
-    }
-    event match {
-      case start: SparkListenerApplicationStart =>
-        // we already have all information,
-        // flush it for old one to switch to new one
-        logDebug(s"Handling application start event: $event")
-        if (!appStartEventProcessed.getAndSet(true)) {
-          applicationStartEvent = Some(start)
-          var applicationName = start.appName
-          if (applicationName == null || applicationName.isEmpty) {
-            logWarning("Application does not have a name")
-            applicationName = applicationId.toString
-          }
-          startTime = start.time
-          if (startTime == 0) {
-            startTime = timestamp
-          }
-          setContextAppAndAttemptInfo(start.appId, start.appAttemptId, applicationName,
-            start.sparkUser)
-          logDebug(s"Application started: $event")
-          isLifecycleEvent = true
-          push = true
-        } else {
-          logWarning(s"More than one application start event received -ignoring: $start")
-          publish = false
-        }
-
-      case end: SparkListenerApplicationEnd =>
-        if (!appStartEventProcessed.get()) {
-          // app-end events being received before app-start events can be triggered in
-          // tests, even if not seen in real applications.
-          // react by ignoring the event altogether, as an un-started application
-          // cannot be reported.
-          logError(s"Received application end event without application start $event -ignoring.")
-        } else if (!appEndEventProcessed.getAndSet(true)) {
-          // the application has ended
-          logDebug(s"Application end event: $event")
-          applicationEndEvent = Some(end)
-          // flush old entity
-          endTime = if (end.time > 0) end.time else timestamp
-          push = true
-          isLifecycleEvent = true
-        } else {
-          // another test-time only situation: more than one application end event
-          // received. Discard the later one.
-          logInfo(s"Discarding duplicate application end event $end")
-          publish = false
-        }
-
-      case update: SparkListenerBlockUpdated =>
-        publish = false
-
-      case update: SparkListenerExecutorMetricsUpdate =>
-        publish = false
-
-      case _ =>
-    }
-
-    if (publish) {
-      val tlEvent = toTimelineEvent(event, timestamp)
-      val eventCount = if (tlEvent.isDefined && canAddEvent(isLifecycleEvent)) {
-        addPendingEvent(tlEvent.get)
-      } else {
-        // discarding the event
-        // if this is due to a full queue, log it
-        if (!postQueueHasCapacity) {
-          logInfo(s"Queue full at ${sparkEventsQueued.getCount}, limit =$postQueueLimit" +
-              s" batch size = $batchSize: discarding event $tlEvent")
-          eventsDropped.inc()
-        }
-        0
-      }
-
-      // trigger a push if the batch limit is reached
-      // There's no need to check for the application having started, as that is done later.
-      push |= eventCount >= batchSize
-
-      logDebug(s"current event num: $eventCount")
-      if (push) {
-        logDebug("Push triggered")
-        publishPendingEvents()
-      }
-    }
-  }
-
-  /**
-   * Get the number of flush events that have taken place.
-   *
-   * This includes flushes triggered by the event list being bigger the batch size,
-   * but excludes flush operations triggered when the action processor thread
-   * is stopped, or if the timeline service binding is disabled.
-   *
-   * @return count of processed flush events.
-   */
-  def getFlushCount: Long = {
-    flushCount.getCount
+    sparkEventPublisher.map(_.flush()).getOrElse(false)
   }
 
   /**
@@ -937,14 +641,14 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     /** Name for metrics: yarn_history */
     override val sourceName = YarnHistoryService.METRICS_NAME
 
-    /** Metrics registry */
-    override val metricRegistry = new MetricRegistry()
-
+/*
     val metricsMap: Map[String, Metric] = Map(
       "eventsDropped" -> eventsDropped,
       "eventsProcessed" -> eventsProcessedCounter,
       "sparkEventsQueued" -> sparkEventsQueued,
       "flushCount" -> flushCount)
+*/
+    val metricsMap: Map[String, Metric] = Map()
   }
 
 }

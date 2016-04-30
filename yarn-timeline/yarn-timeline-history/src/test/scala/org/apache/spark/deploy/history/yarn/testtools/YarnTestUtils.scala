@@ -34,6 +34,7 @@ import org.json4s.jackson.JsonMethods
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.deploy.history.yarn.publish.EntityConstants._
+import org.apache.spark.deploy.history.yarn.publish.PublishMetricNames
 import org.apache.spark.deploy.history.yarn.{YarnHistoryService, YarnTimelineUtils}
 import org.apache.spark.scheduler.{JobFailed, JobSucceeded, SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerEnvironmentUpdate, SparkListenerEvent, SparkListenerJobEnd, SparkListenerJobStart}
 import org.apache.spark.util.Utils
@@ -498,7 +499,8 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
     spinForState(s"awaiting flush count of $count",
       interval = 50,
       timeout = timeout,
-      probe = () => outcomeFromBool(historyService.getFlushCount >= count),
+      probe = () => outcomeFromBool(
+        historyService.counterMetric(PublishMetricNames.SPARK_EVENTS_FLUSH_COUNT) >= count),
       failure = (_, _, _) => fail(s"flush count not $count after $timeout mS in $historyService"))
   }
 

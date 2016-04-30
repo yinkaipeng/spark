@@ -25,6 +25,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.history.yarn.{YarnEventListener, YarnHistoryService}
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
+import org.apache.spark.deploy.history.yarn.publish.PublishMetricNames
 import org.apache.spark.deploy.history.yarn.rest.HttpOperationResponse
 import org.apache.spark.deploy.history.yarn.server.YarnHistoryProvider
 import org.apache.spark.deploy.history.yarn.testtools.HistoryServiceListeningToSparkContext
@@ -93,7 +94,7 @@ class ScaleSuite extends AbstractHistoryIntegrationTests
       assert(totalEventCount < queued)
       val posted = historyService.counterMetric("eventsSuccessfullyPosted")
       assert(totalEventCount < posted, s"event count >= posted in $historyService")
-      assert(0 === historyService.eventsDropped.getCount,
+      assert(0 === historyMetric(PublishMetricNames.SPARK_EVENTS_DROPPED),
         s"Events were dropped in $historyService")
 
       val expectedAppId = historyService.applicationId.toString
