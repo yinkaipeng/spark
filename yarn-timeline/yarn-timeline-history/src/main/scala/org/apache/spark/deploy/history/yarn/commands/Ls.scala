@@ -15,20 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.history.yarn.server
+package org.apache.spark.deploy.history.yarn.commands
 
 import java.io.FileNotFoundException
 
 import org.apache.commons.io.IOUtils
-import org.apache.hadoop.conf.Configured
-import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.util.{ExitUtil, Tool, ToolRunner}
+import org.apache.hadoop.util.{ExitUtil, ToolRunner}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.publish.EntityConstants._
-import org.apache.spark.deploy.history.yarn.rest.{JerseyBinding, UnauthorizedRequestException}
+import org.apache.spark.deploy.history.yarn.rest.{JerseyBinding}
+import org.apache.spark.deploy.history.yarn.server.TimelineQueryClient
 import org.apache.spark.deploy.history.yarn.server.TimelineQueryClient._
 
 /**
@@ -37,36 +36,16 @@ import org.apache.spark.deploy.history.yarn.server.TimelineQueryClient._
  * If arguments are passed in, then they are accepted as attempt IDs and explicitly retrieved.
  *
  * Everything goes to stdout
- *
- * Exit codes:
- * <pre>
- *  0: success
- * 44: "not found": the endpoint or a named
- * 41: "unauthed": caller was not authenticated
- * -1: any other failure
- * </pre>
  */
-class Ls extends Configured with Tool with Logging {
-
-  /**
-   * Run; args are expected to be a list of jobs.
-   * @param args command line
-   * @return exit code
-   */
-  override def run(args: Array[String]): Int = {
-    exec(args)
-  }
+class Ls extends TimelineCommand {
 
   /**
    * Execute the operation.
    * @param args list of arguments
    * @return the exit code.
    */
-  def exec(args: Seq[String]): Int = {
+  override def exec(args: Seq[String]): Int = {
     val yarnConf = getConf
-    if (UserGroupInformation.isSecurityEnabled) {
-      logInfo(s"Logging in to secure cluster as ${UserGroupInformation.getCurrentUser}")
-    }
     val timelineEndpoint = getTimelineEndpoint(yarnConf)
     logInfo(s"Timeline server is at $timelineEndpoint")
     var result = 0
@@ -91,7 +70,6 @@ class Ls extends Configured with Tool with Logging {
               // one of the entities was missing: report and continue with the rest
               logInfo(s"Not found: $entity")
               result = 44
-
           }
         }
       }
@@ -100,14 +78,6 @@ class Ls extends Configured with Tool with Logging {
       case notFound: FileNotFoundException =>
         logInfo(s"Not found: $timelineEndpoint")
         result = 44
-
-      case ure: UnauthorizedRequestException =>
-        logError(s"Authentication Failure $ure", ure)
-        result = 41
-
-      case e: Exception =>
-        logError(s"Failed to fetch history", e)
-        result = -1
     } finally {
       IOUtils.closeQuietly(client)
     }

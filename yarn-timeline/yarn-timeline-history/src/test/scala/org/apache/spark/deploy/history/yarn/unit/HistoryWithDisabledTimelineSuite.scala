@@ -19,6 +19,7 @@ package org.apache.spark.deploy.history.yarn.unit
 
 import org.apache.spark.deploy.history.yarn.YarnHistoryService
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
+import org.apache.spark.deploy.history.yarn.publish.PublishMetricNames
 import org.apache.spark.deploy.history.yarn.testtools.AbstractYarnHistoryTests
 import org.apache.spark.deploy.history.yarn.testtools.YarnTestUtils._
 import org.apache.spark.scheduler.cluster.SchedulerExtensionServiceBinding
@@ -63,10 +64,12 @@ class HistoryWithDisabledTimelineSuite extends AbstractYarnHistoryTests {
         assert(0 === service.eventsQueued, "queue")
 
         service.asyncFlush()
-        assert(0 === service.getFlushCount, "flush count")
+        assert(0 === service.counterMetric(PublishMetricNames.SPARK_EVENTS_FLUSH_COUNT),
+          "flush count")
 
         service.stop()
-        assert(0 === service.getFlushCount, "flush count")
+        assert(0 === service.counterMetric(PublishMetricNames.SPARK_EVENTS_FLUSH_COUNT),
+          "flush count")
       } finally {
         service.stop()
       }
