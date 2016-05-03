@@ -36,8 +36,7 @@ class ContextEventPublishingSuite
     // hook up to spark context
     historyService = startHistoryService(sc)
     assert(historyService.listening, s"listening $historyService")
-    assert(1 === historyService.counterMetric(PublishMetricNames.SPARK_EVENTS_BATCH_SIZE),
-        s"batch size in $historyService")
+    assertHistoryMetricHasValue(PublishMetricNames.SPARK_EVENTS_BATCH_SIZE, 1)
     assert(historyService.bondedToATS, s"not bonded to ATS: $historyService")
     // post in an app start
     var flushes = 0

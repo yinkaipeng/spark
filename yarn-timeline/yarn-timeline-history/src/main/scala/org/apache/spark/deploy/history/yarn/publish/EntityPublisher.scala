@@ -24,8 +24,8 @@ import java.util.concurrent.{LinkedBlockingDeque, TimeUnit}
 
 import scala.collection.JavaConverters._
 
-import com.codahale.metrics.{Counter, Gauge, Metric, Timer}
-import org.apache.hadoop.yarn.api.records.ApplicationAttemptId
+import com.codahale.metrics.{Counter, Metric, Timer}
+import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 import org.apache.hadoop.yarn.api.records.timeline.{TimelineDomain, TimelineEntity, TimelineEntityGroupId}
 import org.apache.hadoop.yarn.client.api.TimelineClient
 
@@ -40,27 +40,30 @@ import org.apache.spark.deploy.history.yarn.publish.PublishMetricNames._
  * It contains a queue of events to post, and a thread in the background which
  * publishes them in order
  *
- * @param appAttemptDetails info about the attempt
- * @param attemptId optional attempt ID
+ * @param applicationInfo info about the attempt
  * @param timelineClient timeline client
  * @param timelineWebappAddress URI of the timeline (used in logs)
  * @param timelineVersion1_5 Does the the timeline server support v 1.5 APIs?
- * @param groupId Group Id: mandatory for ATS1.5
  * @param retryInterval the initial and incrementing interval for POST retries
  * @param retryIntervalMax the max interval for POST retries
  * @param shutdownWaitTime How long to wait in millseconds for shutdown before giving up
  */
 private[yarn] class EntityPublisher(
-    appAttemptDetails: Option[AppAttemptDetails],
-    attemptId: Option[ApplicationAttemptId],
+    val applicationInfo: AppAttemptDetails,
     timelineClient: TimelineClient,
     val timelineWebappAddress: URI,
     val timelineVersion1_5: Boolean,
-    val groupId: Option[TimelineEntityGroupId],
     val retryInterval: Long,
     val retryIntervalMax: Long,
     val shutdownWaitTime: Long)
     extends Closeable with Logging with TimeSource with ExtendedMetricsSource {
+
+  /** ATS v 1.5 group ID. */
+  val groupId = if (timelineVersion1_5) {
+    Some(TimelineEntityGroupId.newInstance(applicationInfo.appId, applicationInfo.groupId.get))
+  } else {
+    None
+  }
 
   /** Domain ID for entities: may be null. */
   private var domainId: Option[String] = None
@@ -71,9 +74,13 @@ private[yarn] class EntityPublisher(
   def postingQueueSize: Int = { postingQueue.size() }
 
   /** Number of events in the post queue. */
-  private val _postQueueEventSize = new AtomicLong
+  private val _postQueueEventCount = new AtomicLong
 
-  def postQueueEventSize: Long = _postQueueEventSize.get()
+  /**
+   * Number of events in the queue
+   * @return
+   */
+  def postQueueEventCount: Long = _postQueueEventCount.get()
 
   /** Event handler thread. */
   private var entityPostThread: Option[Thread] = None
@@ -128,8 +135,8 @@ private[yarn] class EntityPublisher(
     ENTITY_POST_TIMER -> postOperationTimer,
     ENTITY_POST_TIMESTAMP -> postTimestamp,
     ENTITY_POST_QUEUE_IS_STOPPED -> new BoolGauge(() => postingQueueStopped.get),
-    ENTITY_POST_QUEUE_SIZE -> new LongGauge( () =>  postingQueueSize),
-    ENTITY_POST_QUEUE_EVENT_COUNT -> new LongGauge(() => postQueueEventSize)
+    ENTITY_POST_QUEUE_SIZE -> new LongGauge(() => postingQueueSize),
+    ENTITY_POST_QUEUE_EVENT_COUNT -> new LongGauge(() => postQueueEventCount)
     )
 
   /**
@@ -168,6 +175,19 @@ private[yarn] class EntityPublisher(
     timelineClient.stop()
   }
 
+  /** YARN Application ID. */
+  def applicationId: ApplicationId = {
+    applicationInfo.appId
+  }
+
+  /**
+   * YARN Attempt ID.
+   * @return the attempt ID, if defined
+   */
+  def attemptId: Option[ApplicationAttemptId] = {
+    applicationInfo.attemptId
+  }
+
   /**
    * Create a timeline domain and PUT it to ATS
    * @param domain domain ID
@@ -200,7 +220,7 @@ private[yarn] class EntityPublisher(
 
   /**
    * Queue an entity for posting; also increases
-   * `_postQueueEventSize` by the size of the entity.
+   * `_postQueueEventCount` by the size of the entity.
    *
    * @param timelineEntity entity to push
    */
@@ -208,42 +228,42 @@ private[yarn] class EntityPublisher(
     // queue the entity for posting
     preflightCheck(timelineEntity)
     val e = new PostEntity(timelineEntity)
-    _postQueueEventSize.addAndGet(e.size)
+    _postQueueEventCount.addAndGet(e.size)
     postingQueue.add(e)
   }
 
   /**
    * Push a `PostQueueAction` to the start of the queue; also increments
-   * `_postQueueEventSize` by the size of the action.
+   * `_postQueueEventCount` by the size of the action.
    *
    * @param action action to push
    */
   private def pushToFrontOfQueue(action: PostQueueAction): Unit = {
     postingQueue.push(action)
-    _postQueueEventSize.addAndGet(action.size)
+    _postQueueEventCount.addAndGet(action.size)
   }
 
   /**
-   * Take from the posting queue; decrements `_postQueueEventSize` by the size
+   * Take from the posting queue; decrements `_postQueueEventCount` by the size
    * of the action.
    *
    * @return the action
    */
   private def takeFromPostingQueue(): PostQueueAction = {
     val taken = postingQueue.take()
-    _postQueueEventSize.addAndGet(-taken.size)
+    _postQueueEventCount.addAndGet(-taken.size)
     taken
   }
 
   /**
-   * Poll from the posting queue; decrements  [[_postQueueEventSize]] by the size
+   * Poll from the posting queue; decrements  [[_postQueueEventCount]] by the size
    * of the action.
    *
    * @return
    */
   private def pollFromPostingQueue(mills: Long): Option[PostQueueAction] = {
     val taken = postingQueue.poll(mills, TimeUnit.MILLISECONDS)
-    _postQueueEventSize.addAndGet(-taken.size)
+    _postQueueEventCount.addAndGet(-taken.size)
     Option(taken)
   }
 
@@ -261,6 +281,24 @@ private[yarn] class EntityPublisher(
   }
 
   /**
+   * Generate the timeline entity
+   * @param entityType the entity type to declare the entity as
+   * @param startTime time in milliseconds when this entity was started (must be non zero)
+   * @param endTime time in milliseconds when this entity was last updated (0 means not ended)
+   * @param lastUpdated time in milliseconds when this entity was last updated (0 leaves unset)
+   * @return the timeline entity
+   */
+  def createTimelineEntity(
+      entityType: String,
+      startTime: Long,
+      endTime: Long,
+      lastUpdated: Long,
+      entityCount: Long): TimelineEntity = {
+    YarnTimelineUtils.createTimelineEntity(entityType, applicationInfo, startTime, endTime,
+      lastUpdated, entityCount);
+  }
+
+    /**
    * Post events until told to stop.
    */
   private class EntityPoster extends Runnable {
@@ -272,7 +310,7 @@ private[yarn] class EntityPublisher(
         // getting here means the `stop` flag is true
         postEntitiesShutdownPhase(shutdown, retryInterval)
         logInfo(s"Stopping dequeue service, final queue size is ${postingQueue.size};" +
-            s" outstanding events to post count: ${_postQueueEventSize.get()}")
+            s" outstanding events to post count: ${_postQueueEventCount.get()}")
       } catch {
         // handle exceptions triggering thread exit. Interrupts are good; others less welcome.
         case ex: InterruptedException =>
@@ -501,7 +539,7 @@ private[yarn] class EntityPublisher(
    * @return a summary of the current service state
    */
 
-  override def toString = s"""EventPublisher(
+  override def toString(): String = s"""EventPublisher(
      | domainId=$domainId,
      | postThreadActive=$postThreadActive,
      | ${metricsToString}

@@ -22,14 +22,14 @@ import org.mockito.Matchers._
 import org.mockito.Mockito._
 
 import org.apache.spark.deploy.history.yarn.publish.PublishMetricNames
-import org.apache.spark.deploy.history.yarn.testtools.TimelineSingleEntryBatchSize
+import org.apache.spark.deploy.history.yarn.testtools.{ExtraAssertions, TimelineSingleEntryBatchSize}
 import org.apache.spark.deploy.history.yarn.testtools.YarnTestUtils._
 
 /**
  * Mock tests with Batch size 1.
  */
 class MockBatchingTimelinePostSuite extends AbstractMockHistorySuite
-    with TimelineSingleEntryBatchSize {
+    with TimelineSingleEntryBatchSize   {
 
   test("retry upload on failure") {
     describe("mock failures, verify retry count incremented")
@@ -46,8 +46,9 @@ class MockBatchingTimelinePostSuite extends AbstractMockHistorySuite
     service.stop()
     awaitServiceThreadStopped(service, TEST_STARTUP_DELAY)
     // there should have been three flushed
-    assert(eventsPosted === service.counterMetric(PublishMetricNames.SPARK_EVENTS_FLUSH_COUNT),
+    assert(eventsPosted === service.flushCount,
       s"expected $eventsPosted flushed for $service" )
+
     verify(timelineClient, times(service.postAttempts.toInt))
       .putEntities(any(classOf[TimelineEntity]))
   }
