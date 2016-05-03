@@ -500,7 +500,7 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
       interval = 50,
       timeout = timeout,
       probe = () => outcomeFromBool(
-        historyService.counterMetric(PublishMetricNames.SPARK_EVENTS_FLUSH_COUNT) >= count),
+        historyService.metricValue(PublishMetricNames.SPARK_EVENTS_FLUSH_COUNT) >= count),
       failure = (_, _, _) => fail(s"flush count not $count after $timeout mS in $historyService"))
   }
 

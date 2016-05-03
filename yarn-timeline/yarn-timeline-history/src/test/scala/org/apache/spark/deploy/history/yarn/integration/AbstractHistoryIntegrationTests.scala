@@ -19,6 +19,7 @@ package org.apache.spark.deploy.history.yarn.integration
 
 import java.io.{File, IOException}
 import java.net.URL
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.logging.Logger
 
 import scala.collection.mutable
@@ -43,7 +44,7 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.history.yarn.server.TimelineQueryClient._
 import org.apache.spark.status.api.v1.{JobData, StageData}
 import org.apache.spark.deploy.history.{ApplicationHistoryProvider, FsHistoryProvider, HistoryServer}
-import org.apache.spark.deploy.history.yarn.{YarnHistoryService, YarnTimelineUtils}
+import org.apache.spark.deploy.history.yarn.{ExtendedMetricsSource, YarnHistoryService, YarnTimelineUtils}
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.publish.EntityConstants._
 import org.apache.spark.deploy.history.yarn.publish.PublishMetricNames._
@@ -946,17 +947,33 @@ abstract class AbstractHistoryIntegrationTests
    * @return its value
    */
   def historyMetric(name: String): Long = {
-    assert(historyService.lookupMetric(name).isDefined, s"No metric $name")
-    historyService.counterMetric(name)
+    assert(historyService.lookup(name).isDefined, s"No metric $name")
+    historyService.metricValue(name)
   }
+
+  /**
+   * Assert that a history service metric has a given value
+   * @param name metric name
+   * @param expected expected value
+   */
+  def assertHistoryMetricHasValue(name: String, expected:Long): Unit = {
+    assertMetricHasValue(historyService, name, expected)
+  }
+
 }
 
+/**
+ * Any static fields and methods to span test suites
+ */
 private object AbstractHistoryIntegrationTests {
-  private var counter: Int = 0
+  private var counter = new AtomicInteger(0)
 
+  /**
+   * A factory of filenames unique across the lifespan of the JVM.
+   * There is no attempt to hold such a guarantee across test runs
+   * @return the next filename to use
+   */
   private def nextFilename(): String = {
-    val c = counter
-    counter += 1
-    Integer.toString(counter, 16)
+    Integer.toString(counter.getAndIncrement(), 16)
   }
 }

@@ -57,7 +57,7 @@ class MockHistoryServiceLifecycleSuite
       service.serviceState
     }
     assertResult(2, s"batch size in $service") {
-      service.counterMetric(PublishMetricNames.SPARK_EVENTS_BATCH_SIZE)
+      service.metricValue(PublishMetricNames.SPARK_EVENTS_BATCH_SIZE)
     }
     assertResult(true, s"listen flag in $service") {
       service.listening

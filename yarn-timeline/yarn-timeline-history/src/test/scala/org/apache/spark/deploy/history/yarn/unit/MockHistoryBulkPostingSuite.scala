@@ -63,7 +63,7 @@ class MockHistoryBulkPostingSuite extends AbstractMockHistorySuite {
       }
       // events dropped
       awaitAtLeast(batchSize, TEST_STARTUP_DELAY,
-        () => service.counterMetric(PublishMetricNames.SPARK_EVENTS_DROPPED),
+        () => service.metricValue(PublishMetricNames.SPARK_EVENTS_DROPPED),
         service.toString())
 
       // posts failed

@@ -41,13 +41,17 @@ class MockHistoryFlushingSuite extends AbstractMockHistorySuite
     val service = startHistoryService(sc)
     try {
       assert(service.timelineServiceEnabled, s"no timeline service in $service")
-      service.timelineClient
-      service.createTimelineClient()
+      assert(timelineClient === service.timelineClient)
       val listener = new YarnEventListener(sc, service)
+      // this will trigger a push all on its own
       listener.onApplicationStart(applicationStart)
+      awaitPostSuccessCount(service, 1)
+      assert(!service.asyncFlush(), s"asyncFlush had non-empty queue -$service")
+      // not a lifecycle event
+      listener.onUnpersistRDD(SparkListenerUnpersistRDD(1))
       service.asyncFlush()
-      awaitPostAttemptCount(service, 1)
-      verify(timelineClient, times(1)).putEntities(any(classOf[TimelineEntity]))
+      awaitPostSuccessCount(service, 2)
+      verify(timelineClient, times(2)).putEntities(any(classOf[TimelineEntity]))
     } finally {
       service.stop()
     }
@@ -57,8 +61,7 @@ class MockHistoryFlushingSuite extends AbstractMockHistorySuite
     describe("verify that events are pushed on service stop")
     val service = startHistoryService(sc)
     try {
-      service.timelineClient
-      service.createTimelineClient()
+      assert(timelineClient === service.timelineClient)
       val listener = new YarnEventListener(sc, service)
       listener.onApplicationStart(applicationStart)
       awaitPostAttemptCount(service, 1)

@@ -90,12 +90,12 @@ class ScaleSuite extends AbstractHistoryIntegrationTests
       completed(historyService)
       // this is a minimum, ignoring stage events and other interim events
       val totalEventCount = 2 + jobs * 2
-      val queued = historyService.sparkEventsQueued.getCount
+      val queued = historyMetric(PublishMetricNames.SPARK_EVENTS_QUEUED)
       assert(totalEventCount < queued)
-      val posted = historyService.counterMetric("eventsSuccessfullyPosted")
+      val posted = historyMetric(PublishMetricNames.ENTITY_EVENTS_SUCCESSFULLY_POSTED)
       assert(totalEventCount < posted, s"event count >= posted in $historyService")
-      assert(0 === historyMetric(PublishMetricNames.SPARK_EVENTS_DROPPED),
-        s"Events were dropped in $historyService")
+
+      assertHistoryMetricHasValue(PublishMetricNames.SPARK_EVENTS_DROPPED, 0)
 
       val expectedAppId = historyService.applicationId.toString
       val expectedAttemptId = attemptId.toString

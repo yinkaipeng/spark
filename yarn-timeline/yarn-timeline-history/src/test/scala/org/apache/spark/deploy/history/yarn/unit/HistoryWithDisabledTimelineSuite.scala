@@ -64,12 +64,10 @@ class HistoryWithDisabledTimelineSuite extends AbstractYarnHistoryTests {
         assert(0 === service.eventsQueued, "queue")
 
         service.asyncFlush()
-        assert(0 === service.counterMetric(PublishMetricNames.SPARK_EVENTS_FLUSH_COUNT),
-          "flush count")
-
+        assert(0 === service.metricValue(PublishMetricNames.SPARK_EVENTS_FLUSH_COUNT, 0),
+          s"Flush count In $service")
         service.stop()
-        assert(0 === service.counterMetric(PublishMetricNames.SPARK_EVENTS_FLUSH_COUNT),
-          "flush count")
+        assert(0 === service.flushCount, s"Flush count In $service")
       } finally {
         service.stop()
       }

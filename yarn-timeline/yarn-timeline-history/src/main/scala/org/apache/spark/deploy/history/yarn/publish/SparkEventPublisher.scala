@@ -23,12 +23,11 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import scala.collection.mutable
 
 import com.codahale.metrics.{Counter, Metric}
-import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.hadoop.yarn.api.records.timeline.{TimelineEntity, TimelineEvent}
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
-import org.apache.spark.deploy.history.yarn.{AppAttemptDetails, ExtendedMetricsSource, LongGauge, SparkAppAttemptDetails, TimeSource, YarnTimelineUtils}
+import org.apache.spark.deploy.history.yarn.{ExtendedMetricsSource, LongGauge, SparkAppAttemptDetails, TimeSource, YarnTimelineUtils}
 import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerBlockUpdated, SparkListenerEvent, SparkListenerExecutorMetricsUpdate}
 import org.apache.spark.deploy.history.yarn.publish.PublishMetricNames._
 
@@ -61,7 +60,9 @@ class SparkEventPublisher(
   /** How many flushes have taken place? */
   val flushCount = new Counter()
 
-  private var sparkAttemptDetails: SparkAppAttemptDetails = _
+  /** spark attempt details; only set after a start event is received]. */
+  private var sparkAttemptDetails: Option[SparkAppAttemptDetails] = _
+
   /** Application ID received from a [[SparkListenerApplicationStart]]. */
   private var sparkApplicationId: Option[String] = None
 
@@ -114,16 +115,6 @@ class SparkEventPublisher(
    */
   private val entityVersionCounter = new AtomicLong(1)
 
-  private[yarn] var applicationInfo: Option[AppAttemptDetails] = None
-
-  /** Application ID. */
-  private[yarn] def applicationId: ApplicationId = {
-    if (applicationInfo.isDefined) {
-      applicationInfo.get.appId
-    } else {
-      null
-    }
-  }
   /**
    * Can an event be added?
    *
@@ -162,7 +153,7 @@ class SparkEventPublisher(
     }
   }
 
-  def createEntityType(isSummaryEntity: Boolean): String = {
+  private def createEntityType(isSummaryEntity: Boolean): String = {
     if (!timelineVersion1_5 || isSummaryEntity) {
       EntityConstants.SPARK_SUMMARY_ENTITY_TYPE
     } else {
@@ -171,25 +162,25 @@ class SparkEventPublisher(
   }
 
   /**
-   * Create a timeline entity populated with the state of this history service
+   * Create a timeline entity populated with the state of this history service.
    * @param isSummaryEntity entity type: summary or full
    * @param timestamp timestamp
-   * @return
+   * @return the entity.
    */
-  def createTimelineEntity(
+  private def createTimelineEntity(
       isSummaryEntity: Boolean,
       timestamp: Long,
       entityCount: Long): TimelineEntity = {
-    require(applicationInfo.isDefined,
-      s"No applicationInfo data: service is unbound in $this")
-    YarnTimelineUtils.createTimelineEntity(
+    require(sparkAttemptDetails.isDefined,
+      "A spark application start event has not yet been received")
+    val entity = entityPublisher.createTimelineEntity(
       createEntityType(isSummaryEntity),
-      applicationInfo.get,
-      sparkAttemptDetails,
       startTime,
       endTime,
       timestamp,
       entityCount)
+    YarnTimelineUtils.addSparkAttemptDetails(entity, sparkAttemptDetails.get)
+    entity
   }
 
   /**
@@ -201,7 +192,7 @@ class SparkEventPublisher(
    * @param appId application ID
    * @param attemptId attempt ID
    */
-  def setContextAppAndAttemptInfo(
+  private def setSparkAppAndAttemptInfo(
       appId: Option[String],
       attemptId: Option[String],
       appName: String,
@@ -209,7 +200,7 @@ class SparkEventPublisher(
     logDebug(s"Setting Spark application ID to $appId; attempt ID to $attemptId")
     sparkApplicationId = appId
     sparkApplicationAttemptId = attemptId
-    sparkAttemptDetails = SparkAppAttemptDetails(appId, attemptId, appName, userName)
+    sparkAttemptDetails = Some(SparkAppAttemptDetails(appId, attemptId, appName, userName))
   }
 
   /**
@@ -248,6 +239,8 @@ class SparkEventPublisher(
       }
       true
     } else {
+      logDebug(s"Ignoring flush() request: pending event queue+ size=$size;" +
+          s" applicationStartEvent=$applicationStartEvent")
       false
     }
   }
@@ -277,7 +270,7 @@ class SparkEventPublisher(
    *
    * @param event event. If null, no event is queued, but the post-queue flush logic still applies
    */
-  def handleEvent(event: SparkListenerEvent): Unit = {
+  private def handleEvent(event: SparkListenerEvent): Unit = {
     // publish events unless stated otherwise
     var publish = true
     // don't trigger a push to the ATS
@@ -300,13 +293,10 @@ class SparkEventPublisher(
           var applicationName = start.appName
           if (applicationName == null || applicationName.isEmpty) {
             logWarning("Application does not have a name")
-            applicationName = applicationId.toString
+            applicationName = entityPublisher.applicationInfo.toString
           }
-          startTime = start.time
-          if (startTime == 0) {
-            startTime = timestamp
-          }
-          setContextAppAndAttemptInfo(start.appId, start.appAttemptId, applicationName,
+          startTime = if (start.time > 0) start.time else timestamp
+          setSparkAppAndAttemptInfo(start.appId, start.appAttemptId, applicationName,
             start.sparkUser)
           logDebug(s"Application started: $event")
           isLifecycleEvent = true
@@ -345,6 +335,7 @@ class SparkEventPublisher(
         publish = false
 
       case _ =>
+        publish = true
     }
 
     if (publish) {
@@ -417,7 +408,7 @@ class SparkEventPublisher(
       }
   }
 
-  override def toString =  {
+  override def toString(): String = {
     s"""SparkEventPublisher($sparkApplicationId,
        | $sparkApplicationAttemptId,
        | $sourceName
