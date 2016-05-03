@@ -27,6 +27,7 @@ IMPROVEMENTS
   SPARK-7889. Jobs progress of apps on complete page of HistoryServer shows uncompleted
   SPARK-11314. Add service API and test service for Yarn Cluster schedulers
   SPARK-1537. Add integration with Yarn's Application Timeline Server
+  SPARK-6717 Clear shuffle files after checkpointing in ALS
 
 BUG FIXES
 
