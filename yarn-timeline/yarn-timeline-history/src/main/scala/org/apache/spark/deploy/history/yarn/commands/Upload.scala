@@ -17,15 +17,24 @@
 
 package org.apache.spark.deploy.history.yarn.commands
 
+import java.io.{File, FileNotFoundException}
+import java.util.concurrent.TimeUnit
+
 import org.apache.hadoop.util.{ExitUtil, ToolRunner}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.yarn.util.ConverterUtils
 
-import org.apache.spark.Logging
+import org.apache.spark.deploy.history.yarn.{AppAttemptDetails, YarnHistoryService, YarnTimelineUtils}
+import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
+import org.apache.spark.deploy.history.yarn.publish.{EntityPublisher, SparkEventPublisher}
 
 /**
- * Upload: application application attempt file
+ * Upload: applicationId application-attempt file
  */
 class Upload extends TimelineCommand {
+
+  import org.apache.spark.deploy.history.yarn.commands.TimelineCommand._
+  import org.apache.spark.deploy.history.yarn.commands.Upload._
 
   /**
    * Execute the operation.
@@ -33,13 +42,137 @@ class Upload extends TimelineCommand {
    * @return the exit code.
    */
   override def exec(args: Seq[String]): Int = {
-    val yarnConf = getConf
-    0
+    if (args.length != 3) {
+      throw usage()
+    }
+    val appId = args.head
+    val attemptId = if (args(1) == Upload.NO_ATTEMPT) None else Some(args(1))
+    val filename = args(2)
+
+    uploadHistory(appId, attemptId, new File(filename))
+  }
+
+  def millis(key: String, defVal: Long): Long = {
+    getConf.getTimeDuration(key, defVal, TimeUnit.MILLISECONDS)
+  }
+
+  def intOption(key: String, defVal: Int): Int = {
+    val v = getConf.getInt(key, defVal)
+    require(v > 0, s"Option $key out of range: $v")
+    v
+  }
+
+  def uploadHistory(appId: String, attempt: Option[String], file: File)
+      : Int = {
+    if (!file.exists()) {
+      throw new FileNotFoundException(s"No file ${file.getCanonicalPath}")
+    }
+    val config = getConf
+    val timelineVersion1_5 = timelineServiceV1_5Enabled(config)
+    val applicationId = ConverterUtils.toApplicationId(appId)
+    val attemptId = attempt.map(ConverterUtils.toApplicationAttemptId)
+    val timelineWebappAddress = getTimelineEndpoint(config)
+    val timelineClient = YarnTimelineUtils.createYarnTimelineClient(config)
+    val groupId = if (timelineVersion1_5) Some(appId) else None
+
+    // create the publisher
+    val atsPublisher = new EntityPublisher(
+      new AppAttemptDetails(applicationId, attemptId, groupId),
+      timelineClient,
+      timelineWebappAddress,
+      timelineVersion1_5,
+      millis(YarnHistoryService.POST_RETRY_INTERVAL, DEFAULT_POST_RETRY_INTERVAL),
+      millis(POST_RETRY_MAX_INTERVAL, DEFAULT_POST_RETRY_MAX_INTERVAL),
+      millis(SHUTDOWN_WAIT_TIME, DEFAULT_SHUTDOWN_WAIT_TIME))
+
+    val batchSize = intOption(BATCH_SIZE, DEFAULT_BATCH_SIZE)
+    val postQueueLimit = batchSize + intOption(POST_EVENT_LIMIT, DEFAULT_POST_EVENT_LIMIT)
+    val sparkPublisher = new SparkEventPublisher(atsPublisher, batchSize, postQueueLimit)
+    try {
+      sparkPublisher.start()
+
+      // TODO: load in history file and replay to ATS
+      sparkPublisher.stop();
+    } finally {
+      // idempotent stop operation
+      sparkPublisher.stop();
+    }
+
+    E_SUCCESS
+  }
+
+
+  def usage(): CommandException = {
+    new CommandException(E_USAGE, Upload.USAGE)
   }
 }
 
 object Upload {
+  val NO_ATTEMPT = "--"
+  val USAGE = s"Usage: upload <applicationId> [<attemptId> | $NO_ATTEMPT ] filename"
+
   def main(args: Array[String]): Unit = {
     ExitUtil.halt(ToolRunner.run(new YarnConfiguration(), new Upload(), args))
   }
+
+  /**
+   * Limit on number of posts in the outbound queue -when exceeded
+   * new events will be dropped.
+   */
+  val POST_EVENT_LIMIT = "yarn.timeline.post.limit"
+
+  /**
+   * The default limit of events in the post queue.
+   */
+  val DEFAULT_POST_EVENT_LIMIT = 10000
+
+  /**
+   * Interval in milliseconds between POST retries. Every
+   * failure causes the interval to increase by this value.
+   */
+  val POST_RETRY_INTERVAL = "yarn.timeline.post.retry.interval"
+
+  /**
+   * The default retry interval in millis.
+   */
+  val DEFAULT_POST_RETRY_INTERVAL = 1000L
+
+  /**
+   * The maximum interval between retries.
+   */
+
+  val POST_RETRY_MAX_INTERVAL = "yarn.timeline.post.retry.max.interval"
+
+  /**
+   * The default maximum retry interval.
+   */
+  val DEFAULT_POST_RETRY_MAX_INTERVAL = 60000L
+
+  /**
+   * The maximum time in to wait for event posting to complete when the service stops.
+   */
+  val SHUTDOWN_WAIT_TIME = "yarn.timeline.shutdown.waittime"
+
+  /**
+   * Time in millis to wait for shutdown on service stop.
+   */
+  val DEFAULT_SHUTDOWN_WAIT_TIME = 30000L
+
+  /**
+   * Option for the size of the batch for timeline uploads. Bigger: less chatty.
+   * Smaller: history more responsive.
+   */
+  val BATCH_SIZE = "yarn.timeline.batch.size"
+
+  /**
+   * The default size of a batch.
+   */
+  val DEFAULT_BATCH_SIZE = 100
+
+  /**
+   * Name of a domain for the timeline.
+   */
+  val TIMELINE_DOMAIN = "yarn.timeline.domain"
+
+
 }

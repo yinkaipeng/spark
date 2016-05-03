@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.history.yarn.publish
 
-import java.io.Closeable
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import scala.collection.mutable
@@ -44,9 +43,15 @@ class SparkEventPublisher(
     entityPublisher: EntityPublisher,
     val batchSize: Int,
     val postQueueLimit: Int
-    ) extends Closeable with Logging with TimeSource with ExtendedMetricsSource  {
+    ) extends AbstractPublisher with TimeSource {
 
-  override def close(): Unit = {
+  /**
+   * All Startup Operations
+   */
+  override def start(): Unit = {
+    super.start()
+    logDebug("Spark Event publisher started")
+    entityPublisher.start();
   }
 
   val timelineVersion1_5 = entityPublisher.timelineVersion1_5

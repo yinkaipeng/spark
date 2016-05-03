@@ -39,6 +39,8 @@ import org.apache.spark.deploy.history.yarn.server.TimelineQueryClient._
  */
 class Ls extends TimelineCommand {
 
+  import org.apache.spark.deploy.history.yarn.commands.TimelineCommand._
+
   /**
    * Execute the operation.
    * @param args list of arguments
@@ -48,7 +50,7 @@ class Ls extends TimelineCommand {
     val yarnConf = getConf
     val timelineEndpoint = getTimelineEndpoint(yarnConf)
     logInfo(s"Timeline server is at $timelineEndpoint")
-    var result = 0
+    var result = E_SUCCESS
     var client: TimelineQueryClient = null
     try {
       client = new TimelineQueryClient(timelineEndpoint, yarnConf,
@@ -69,7 +71,7 @@ class Ls extends TimelineCommand {
             case notFound: FileNotFoundException =>
               // one of the entities was missing: report and continue with the rest
               logInfo(s"Not found: $entity")
-              result = 44
+              result = E_NOT_FOUND
           }
         }
       }
@@ -77,7 +79,7 @@ class Ls extends TimelineCommand {
 
       case notFound: FileNotFoundException =>
         logInfo(s"Not found: $timelineEndpoint")
-        result = 44
+        result = E_NOT_FOUND
     } finally {
       IOUtils.closeQuietly(client)
     }

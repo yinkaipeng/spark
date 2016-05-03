@@ -29,6 +29,8 @@ import org.apache.spark.deploy.history.yarn.rest.UnauthorizedRequestException
 
 abstract class TimelineCommand extends Configured with Tool with Logging {
 
+  import org.apache.spark.deploy.history.yarn.commands.TimelineCommand._
+
   /**
    * Run the command.
    *
@@ -51,15 +53,20 @@ abstract class TimelineCommand extends Configured with Tool with Logging {
     } catch {
 
       case notFound: FileNotFoundException =>
-        44
+        E_NOT_FOUND
 
       case ure: UnauthorizedRequestException =>
         logError(s"Authentication Failure $ure", ure)
-        41
+        E_UNAUTH
+
+      case e: CommandException =>
+        logError(s"$e")
+        logDebug(s"exit code ${e.exitCode}", e)
+        e.exitCode
 
       case e: Exception =>
-        logError(s"Failed to fetch history", e)
-        -1
+        logError(s"Failed: $e", e)
+        E_ERROR
     }
   }
 
@@ -72,4 +79,26 @@ abstract class TimelineCommand extends Configured with Tool with Logging {
     0
 
   }
+
+}
+
+object TimelineCommand {
+
+  val E_SUCCESS = 0
+  val E_NOT_FOUND = 44
+  val E_UNAUTH = 1
+  val E_USAGE = 2
+  val E_ERROR = -1
+
+}
+
+/**
+ * An exception that can be raised to provide an exit code and a message.
+ * The stack trace in here will only be logged at debug level
+ * @param exitCode exit code
+ * @param message message
+ * @param thrown any exception to contain
+ */
+class CommandException(val exitCode: Int, message: String, thrown: Throwable = null)
+    extends Exception(message, thrown) {
 }
