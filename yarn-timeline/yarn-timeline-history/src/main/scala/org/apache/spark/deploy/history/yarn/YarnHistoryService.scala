@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable
 
-import com.codahale.metrics.{Counter, Metric}
+import com.codahale.metrics.Metric
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity
@@ -405,7 +405,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
     }
 
     // create the publisher
-    val eventPublisher = new EntityPublisher(
+    val atsPublisher = new EntityPublisher(
       applicationInfo.get,
       timeline,
       timelineWebappAddress,
@@ -413,21 +413,21 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
       millis(POST_RETRY_INTERVAL, DEFAULT_POST_RETRY_INTERVAL),
       millis(POST_RETRY_MAX_INTERVAL, DEFAULT_POST_RETRY_MAX_INTERVAL),
       millis(SHUTDOWN_WAIT_TIME, DEFAULT_SHUTDOWN_WAIT_TIME))
-    registerMetricSource(eventPublisher)
+    registerMetricSource(atsPublisher)
 
     // create the timeline domain with the reader and writer permissions
-    domainId = createTimelineDomain(eventPublisher)
+    domainId = createTimelineDomain(atsPublisher)
     logInfo(s"Spark events will be published to $timelineWebappAddress"
       + s" timeline 1.5=$timelineVersion1_5;" +
         s" domain ID = $domainId;" +
         s" client=${_timelineClient.toString}")
-    eventPublisher.start()
-    entityPublisher = Some(eventPublisher)
+    entityPublisher = Some(atsPublisher)
 
     // Now create the event publisher
-    val sparkPublisher = new SparkEventPublisher(entityPublisher.get, batchSize, postQueueLimit)
+    val sparkPublisher = new SparkEventPublisher(atsPublisher, batchSize, postQueueLimit)
     registerMetricSource(sparkPublisher)
     sparkEventPublisher = Some(sparkPublisher)
+    sparkPublisher.start()
   }
 
   /**
@@ -445,7 +445,7 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
    *
    * @return a summary of the current service state
    */
-/*
+
   override def toString(): String =
     s"""YarnHistoryService for application $applicationId attempt $attemptId;
        | state=$serviceState;
@@ -453,23 +453,15 @@ private[spark] class YarnHistoryService extends SchedulerExtensionService with L
        | bonded to ATS=$bondedToATS;
        | ATS v1.5=$timelineVersion1_5
        | listening=$listening;
-       | batchSize=$batchSize;
-       | postQueueLimit=$postQueueLimit;
        | postQueueSize=$postQueueActionSize;
        | postQueueEventSize=$postQueueEventSize;
-       | flush count=$getFlushCount;
        | total number queued=$eventsQueued, processed=$eventsProcessed;
        | attempted entity posts=$postAttempts
        | successful entity posts=$postSuccesses
        | failed entity posts=$postFailures;
-       | events dropped=${eventsDropped.getCount};
-       | app start event received=$appStartEventProcessed;
-       | start time=$startTime;
-       | app end event received=$appEndEventProcessed;
-       | end time=$endTime;
        | publisher=$entityPublisher;
+       | $metricsToString
      """.stripMargin
-*/
 
   /**
    * Is the service listening to events from the spark context?
@@ -644,15 +636,16 @@ private[spark] object YarnHistoryService {
    */
   val DOMAIN_ID_PREFIX = "Spark_ATS_"
 
-  /**
-   * Time in millis to wait for shutdown on service stop.
-   */
-  val DEFAULT_SHUTDOWN_WAIT_TIME = "30s"
 
   /**
    * The maximum time in to wait for event posting to complete when the service stops.
    */
   val SHUTDOWN_WAIT_TIME = "spark.hadoop.yarn.timeline.shutdown.waittime"
+
+  /**
+   * Time in millis to wait for shutdown on service stop.
+   */
+  val DEFAULT_SHUTDOWN_WAIT_TIME = "30s"
 
   /**
    * Option to declare that the history service should register as a spark context

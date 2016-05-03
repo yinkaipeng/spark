@@ -21,8 +21,7 @@ import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity
 import org.mockito.Matchers._
 import org.mockito.Mockito._
 
-import org.apache.spark.deploy.history.yarn.publish.PublishMetricNames
-import org.apache.spark.deploy.history.yarn.testtools.{ExtraAssertions, TimelineSingleEntryBatchSize}
+import org.apache.spark.deploy.history.yarn.testtools.TimelineSingleEntryBatchSize
 import org.apache.spark.deploy.history.yarn.testtools.YarnTestUtils._
 
 /**

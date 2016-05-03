@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history.yarn.publish
 
-import java.io.{Closeable, Flushable, InterruptedIOException}
+import java.io.{Flushable, InterruptedIOException}
 import java.net.{ConnectException, URI}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import java.util.concurrent.{LinkedBlockingDeque, TimeUnit}
@@ -29,9 +29,8 @@ import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
 import org.apache.hadoop.yarn.api.records.timeline.{TimelineDomain, TimelineEntity, TimelineEntityGroupId}
 import org.apache.hadoop.yarn.client.api.TimelineClient
 
-import org.apache.spark.Logging
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
-import org.apache.spark.deploy.history.yarn.{AppAttemptDetails, BoolGauge, ExtendedMetricsSource, LongGauge, TimeInMillisecondsGauge, TimeSource, YarnTimelineUtils}
+import org.apache.spark.deploy.history.yarn.{AppAttemptDetails, BoolGauge, LongGauge, TimeInMillisecondsGauge, TimeSource, YarnTimelineUtils}
 import org.apache.spark.deploy.history.yarn.publish.PublishMetricNames._
 
 /**
@@ -56,7 +55,7 @@ private[yarn] class EntityPublisher(
     val retryInterval: Long,
     val retryIntervalMax: Long,
     val shutdownWaitTime: Long)
-    extends Closeable with Logging with TimeSource with ExtendedMetricsSource {
+    extends AbstractPublisher with TimeSource {
 
   /** ATS v 1.5 group ID. */
   val groupId = if (timelineVersion1_5) {
@@ -117,13 +116,6 @@ private[yarn] class EntityPublisher(
   val postTimestamp = new TimeInMillisecondsGauge()
 
   /**
-   * A counter incremented every time a new entity is created. This is included as an "other"
-   * field in the entity information -so can be used as a probe to determine if the entity
-   * has been updated since a previous check.
-   */
-  private val entityVersionCounter = new AtomicLong(1)
-
-  /**
    * The metrics of this class
    */
   val metricsMap: Map[String, Metric] = Map(
@@ -152,17 +144,17 @@ private[yarn] class EntityPublisher(
    */
   def isPostThreadActive: Boolean = postThreadActive.get
 
-  def start(): Unit = {
+  /**
+   * All Startup Operations
+   */
+  override def start(): Unit = {
+    super.start()
     // declare that the processing is started
     postingQueueStopped.set(false)
     val thread = new Thread(new EntityPoster(), "EventPoster")
     entityPostThread = Some(thread)
     thread.setDaemon(true)
     thread.start()
-  }
-
-  override def close(): Unit = {
-
   }
 
   /**
