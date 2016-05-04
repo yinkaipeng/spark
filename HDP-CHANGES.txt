@@ -25,6 +25,7 @@ IMPROVEMENTS
   HOTFIX-31 adding R to assembly descriptor, copying to /R/lib/SparkR
   HOTFIX-25 disable mqtt assembly builds unless -Pmqtt-assembly set
   SPARK-11314 Add service API and test service for Yarn Cluster schedulers
+  SPARK-1537 Add integration with Yarn's Application Timeline Server
   SPARK-11315 Add YARN extension service to publish Spark events to YARN timeline service (part of SPARK-1537)
   SPARK-11323 Add History Service Provider to service application histories from YARN timeline server (part of SPARK-1537)
   SPARK-6717 Clear shuffle files after checkpointing in ALS
@@ -59,3 +60,4 @@ BUG FIXES
   SPARK-13642   Properly handle signal kill in ApplicationMaster
   SPARK-14062   Fix log4j and upload metrics.properties automatically with distributed cache
   SPARK-11182   HDFS Delegation Token will be expired when calling "UserGroupInformation.getCurrentUser.addCredentials" in HA mode
+  SPARK-7889    Jobs progress of apps on complete page of HistoryServer shows uncompleted
