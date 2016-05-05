@@ -721,7 +721,16 @@ private[spark] class TaskSetManager(
     failedExecutors.getOrElseUpdate(index, new HashMap[String, Long]()).
       put(info.executorId, clock.getTimeMillis())
     sched.dagScheduler.taskEnded(tasks(index), reason, null, null, info, taskMetrics)
-    addPendingTask(index)
+
+    if (successful(index)) {
+      logInfo(
+        s"Task ${info.id} in stage ${taskSet.id} (TID $tid) failed, " +
+          "but another instance of the task has already succeeded, " +
+          "so not re-queuing the task to be re-executed.")
+    } else {
+      addPendingTask(index)
+    }
+
     if (!isZombie && state != TaskState.KILLED && !reason.isInstanceOf[TaskCommitDenied]) {
       // If a task failed because its attempt to commit was denied, do not count this failure
       // towards failing the stage. This is intended to prevent spurious stage failures in cases

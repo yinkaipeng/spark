@@ -27,4 +27,6 @@ BUG FIXES
   BUG-48230. yarn-client app hangs on shutdown
   BUG-47809. Application gets stuck with scala.MatchError
   BUG-47316. spark.history.provider isn't resolving to the history provider class: reinstate original classes as subclasses of the moved ones
+  BUG-75130. SPARK-14915 Tasks that fail due to CommitDeniedException (a side-effect of speculation) can cause job to never complete
+  BUG-75130. SPARK-14357 Tasks that fail due to CommitDeniedException (a side-effect of speculation) can cause job failure
 
