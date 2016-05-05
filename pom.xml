@@ -2499,18 +2499,8 @@
             <artifactId>hadoop-azure</artifactId>
             <version>${hadoop.version}</version>
           </dependency>
-          <dependency>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-yarn-server-timeline-plugins</artifactId>
-            <version>${hadoop.version}</version>
-            <scope>${hadoop.deps.scope}</scope>
-          </dependency>
         </dependencies>
       </dependencyManagement>
-      <modules>
-        <module>yarn-timeline/yarn-timeline-ats-plugin</module>
-        <module>yarn-timeline/yarn-timeline-history</module>
-      </modules>
     </profile>
     <!--
       This profile is enabled automatically by the sbt built. It changes the scope for the guava
