@@ -213,7 +213,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     }
   }
 
-  /** Perform shuffle cleanup. */
+  /** Perform shuffle cleanup, asynchronously. */
   def doCleanupShuffle(shuffleId: Int, blocking: Boolean): Unit = {
     try {
       logDebug("Cleaning shuffle " + shuffleId)
