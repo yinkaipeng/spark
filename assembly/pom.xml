@@ -211,7 +211,7 @@
         </dependency>
       </dependencies>
     </profile>
-    <profile>
+    <!--profile>
       <id>hwx-common</id>
       <dependencies>
         <dependency>
@@ -220,7 +220,7 @@
           <version>${project.version}</version>
         </dependency>
       </dependencies>
-    </profile>
+    </profile-->
     <profile>
       <id>bigtop-dist</id>
       <!-- This profile uses the assembly plugin to create a special "dist" package for BigTop
