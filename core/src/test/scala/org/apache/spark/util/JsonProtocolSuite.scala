@@ -919,6 +919,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    "Getting Result Time": 0,
       |    "Finish Time": 0,
       |    "Failed": false,
+      |    "Killed": false,
       |    "Accumulables": [
       |      {
       |        "ID": 1,
@@ -962,6 +963,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    "Getting Result Time": 0,
       |    "Finish Time": 0,
       |    "Failed": false,
+      |    "Killed": false,
       |    "Accumulables": [
       |      {
       |        "ID": 1,
@@ -1011,6 +1013,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    "Getting Result Time": 0,
       |    "Finish Time": 0,
       |    "Failed": false,
+      |    "Killed": false,
       |    "Accumulables": [
       |      {
       |        "ID": 1,
@@ -1100,6 +1103,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    "Getting Result Time": 0,
       |    "Finish Time": 0,
       |    "Failed": false,
+      |    "Killed": false,
       |    "Accumulables": [
       |      {
       |        "ID": 1,
@@ -1186,6 +1190,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       |    "Getting Result Time": 0,
       |    "Finish Time": 0,
       |    "Failed": false,
+      |    "Killed": false,
       |    "Accumulables": [
       |      {
       |        "ID": 1,

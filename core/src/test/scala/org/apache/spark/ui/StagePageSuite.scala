@@ -84,7 +84,7 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
           Some(peakExecutionMemory.toString), (peakExecutionMemory * taskId).toString, true)
         jobListener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
         jobListener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
-        taskInfo.markSuccessful()
+        taskInfo.markFinished(TaskState.FINISHED)
         jobListener.onTaskEnd(
           SparkListenerTaskEnd(0, 0, "result", Success, taskInfo, TaskMetrics.empty))
     }

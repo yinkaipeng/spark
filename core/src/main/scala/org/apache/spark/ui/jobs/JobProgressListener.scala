@@ -367,6 +367,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       taskEnd.reason match {
         case Success =>
           execSummary.succeededTasks += 1
+        case TaskKilled =>
+          execSummary.killedTasks += 1
         case _ =>
           execSummary.failedTasks += 1
       }
@@ -379,7 +381,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
             stageData.completedIndices.add(info.index)
             stageData.numCompleteTasks += 1
             (None, Option(taskEnd.taskMetrics))
-          case e: ExceptionFailure =>  // Handle ExceptionFailure because we might have metrics
+          case TaskKilled =>
+            stageData.numKilledTasks += 1
+            (Some(TaskKilled.toErrorString), None)
+          case e: ExceptionFailure => // Handle ExceptionFailure because we might have accumUpdates
             stageData.numFailedTasks += 1
             (Some(e.toErrorString), e.metrics)
           case e: TaskFailedReason =>  // All other failure cases
@@ -406,6 +411,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         taskEnd.reason match {
           case Success =>
             jobData.numCompletedTasks += 1
+          case TaskKilled =>
+            jobData.numKilledTasks += 1
           case _ =>
             jobData.numFailedTasks += 1
         }
