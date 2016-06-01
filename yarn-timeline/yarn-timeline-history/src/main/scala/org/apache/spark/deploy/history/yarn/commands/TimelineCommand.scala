@@ -18,8 +18,8 @@
 package org.apache.spark.deploy.history.yarn.commands
 
 import java.io.FileNotFoundException
+import java.util.concurrent.TimeUnit
 
-import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configured
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.Tool
@@ -27,7 +27,7 @@ import org.apache.hadoop.util.Tool
 import org.apache.spark.Logging
 import org.apache.spark.deploy.history.yarn.rest.UnauthorizedRequestException
 
-abstract class TimelineCommand extends Configured with Tool with Logging {
+private[spark] abstract class TimelineCommand extends Configured with Tool with Logging {
 
   import org.apache.spark.deploy.history.yarn.commands.TimelineCommand._
 
@@ -80,9 +80,30 @@ abstract class TimelineCommand extends Configured with Tool with Logging {
 
   }
 
+  /**
+   * Get a time configuration in milliseconds
+   * @param key configuration key
+   * @param defVal default value
+   * @return the time in millseconds
+   */
+  def millis(key: String, defVal: Long): Long = {
+    getConf.getTimeDuration(key, defVal, TimeUnit.MILLISECONDS)
+  }
+
+  /**
+   * Get a positive integer operation
+   * @param key configuration key
+   * @param defVal default value
+   * @return the value.
+   */
+  def intOption(key: String, defVal: Int): Int = {
+    val v = getConf.getInt(key, defVal)
+    require(v > 0, s"Option $key out of range: $v")
+    v
+  }
 }
 
-object TimelineCommand {
+private[spark] object TimelineCommand {
 
   val E_SUCCESS = 0
   val E_NOT_FOUND = 44

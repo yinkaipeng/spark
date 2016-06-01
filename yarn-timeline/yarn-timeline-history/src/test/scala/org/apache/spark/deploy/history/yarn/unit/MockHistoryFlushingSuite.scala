@@ -64,10 +64,10 @@ class MockHistoryFlushingSuite extends AbstractMockHistorySuite
       assert(timelineClient === service.timelineClient)
       val listener = new YarnEventListener(sc, service)
       listener.onApplicationStart(applicationStart)
-      awaitPostAttemptCount(service, 1)
+      awaitPostSuccessCount(service, 1)
       verify(timelineClient, times(1)).putEntities(any(classOf[TimelineEntity]))
       listener.onUnpersistRDD(SparkListenerUnpersistRDD(1))
-      // expecting two events
+      // expecting no new postings to be made
       awaitPostAttemptCount(service, 1)
 
       // now stop the service and await the final post
