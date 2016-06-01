@@ -23,10 +23,9 @@ import org.apache.commons.io.IOUtils
 import org.apache.hadoop.util.{ExitUtil, ToolRunner}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
-import org.apache.spark.Logging
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.publish.EntityConstants._
-import org.apache.spark.deploy.history.yarn.rest.{JerseyBinding}
+import org.apache.spark.deploy.history.yarn.rest.JerseyBinding
 import org.apache.spark.deploy.history.yarn.server.TimelineQueryClient
 import org.apache.spark.deploy.history.yarn.server.TimelineQueryClient._
 
@@ -37,7 +36,7 @@ import org.apache.spark.deploy.history.yarn.server.TimelineQueryClient._
  *
  * Everything goes to stdout
  */
-class Ls extends TimelineCommand {
+private[spark] class Ls extends TimelineCommand {
 
   import org.apache.spark.deploy.history.yarn.commands.TimelineCommand._
 
@@ -88,7 +87,7 @@ class Ls extends TimelineCommand {
   }
 }
 
-object Ls {
+private[spark] object Ls {
   def main(args: Array[String]): Unit = {
     ExitUtil.halt(ToolRunner.run(new YarnConfiguration(), new Ls(), args))
   }

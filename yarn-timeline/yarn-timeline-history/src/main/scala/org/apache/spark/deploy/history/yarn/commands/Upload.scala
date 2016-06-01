@@ -17,21 +17,30 @@
 
 package org.apache.spark.deploy.history.yarn.commands
 
-import java.io.{File, FileNotFoundException}
-import java.util.concurrent.TimeUnit
+import java.io.{FileNotFoundException, IOException, InputStream}
+import java.net.URI
+import java.util.Locale
 
+import scala.io.Source
+
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.{ExitUtil, ToolRunner}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.deploy.history.yarn.{AppAttemptDetails, YarnHistoryService, YarnTimelineUtils}
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 import org.apache.spark.deploy.history.yarn.publish.{EntityPublisher, SparkEventPublisher}
+import org.apache.spark.scheduler.{EventLoggingListener, SparkListenerEvent}
+import org.apache.spark.util.JsonProtocol
 
 /**
- * Upload: applicationId application-attempt file
+ * Upload: `applicationId application-attempt file`.
+ *
+ * Uploads a file to the history.
  */
-class Upload extends TimelineCommand {
+private[spark] class Upload extends TimelineCommand {
 
   import org.apache.spark.deploy.history.yarn.commands.TimelineCommand._
   import org.apache.spark.deploy.history.yarn.commands.Upload._
@@ -46,28 +55,40 @@ class Upload extends TimelineCommand {
       throw usage()
     }
     val appId = args.head
-    val attemptId = if (args(1) == Upload.NO_ATTEMPT) None else Some(args(1))
+    val attemptId = if (args(1).toLowerCase(Locale.ENGLISH) == Upload.NO_ATTEMPT)  {
+      None
+    } else {
+      Some(args(1))
+    }
     val filename = args(2)
 
-    uploadHistory(appId, attemptId, new File(filename))
+    uploadHistory(appId, attemptId, filename)
   }
 
-  def millis(key: String, defVal: Long): Long = {
-    getConf.getTimeDuration(key, defVal, TimeUnit.MILLISECONDS)
+
+  def usage(): CommandException = {
+    new CommandException(E_USAGE, Upload.USAGE)
   }
 
-  def intOption(key: String, defVal: Int): Int = {
-    val v = getConf.getInt(key, defVal)
-    require(v > 0, s"Option $key out of range: $v")
-    v
-  }
-
-  def uploadHistory(appId: String, attempt: Option[String], file: File)
+  /**
+   * Upload a history.
+   * @param appId application ID
+   * @param attempt attempt ID
+   * @param pathname path to the file
+   * @return the exit code.
+   */
+  def uploadHistory(appId: String, attempt: Option[String], pathname: String)
       : Int = {
-    if (!file.exists()) {
-      throw new FileNotFoundException(s"No file ${file.getCanonicalPath}")
-    }
     val config = getConf
+    val logPathname = new URI(pathname)
+    val logPath = new Path(logPathname)
+    val fs = logPath.getFileSystem(config)
+    // this will raise a FileNotFoundException or other IOException if the file isn't present
+    val status = fs.getFileStatus(logPath)
+    if (!status.isFile()) {
+      throw new FileNotFoundException(s"Not a file $pathname")
+    }
+
     val timelineVersion1_5 = timelineServiceV1_5Enabled(config)
     val applicationId = ConverterUtils.toApplicationId(appId)
     val attemptId = attempt.map(ConverterUtils.toApplicationAttemptId)
@@ -88,12 +109,19 @@ class Upload extends TimelineCommand {
     val batchSize = intOption(BATCH_SIZE, DEFAULT_BATCH_SIZE)
     val postQueueLimit = batchSize + intOption(POST_EVENT_LIMIT, DEFAULT_POST_EVENT_LIMIT)
     val sparkPublisher = new SparkEventPublisher(atsPublisher, batchSize, postQueueLimit)
+    val eventsIn = EventLoggingListener.openEventLog(logPath, fs)
     try {
       sparkPublisher.start()
 
-      // TODO: load in history file and replay to ATS
+      def process(ev: SparkListenerEvent): Unit = {
+        logDebug(s"$ev")
+        sparkPublisher.process(ev)
+      }
+      loadAndApply(pathname, eventsIn, process)
+      sparkPublisher.flush()
       sparkPublisher.stop();
     } finally {
+      eventsIn.close()
       // idempotent stop operation
       sparkPublisher.stop();
     }
@@ -101,14 +129,45 @@ class Upload extends TimelineCommand {
     E_SUCCESS
   }
 
-
-  def usage(): CommandException = {
-    new CommandException(E_USAGE, Upload.USAGE)
+  /**
+   * Load and process each event in the order maintained in the given stream.
+   *
+   * See: ReplayListenerBus
+   *
+   * @param logData Stream containing event log data.
+   * @param sourceName Filename (or other source identifier) from whence @logData is being read
+   */
+  def loadAndApply(sourceName: String, logData: InputStream, action: (SparkListenerEvent) => Unit): Unit = {
+    var currentLine: String = null
+    var lineNumber: Int = 1
+    try {
+      val lines = Source.fromInputStream(logData).getLines()
+      while (lines.hasNext) {
+        currentLine = lines.next()
+        val event = try {
+          JsonProtocol.sparkEventFromJson(parse(currentLine))
+        }
+        catch {
+          case e: Exception =>
+            logError(s"Exception parsing Spark event log: $sourceName", e)
+            logError(s"Line #$lineNumber: $currentLine\n")
+            throw e
+        }
+        action(event)
+        lineNumber += 1
+      }
+    } catch {
+      case ioe: IOException =>
+        throw ioe
+      case e: Exception =>
+        logError(s"Exception parsing Spark event log: $sourceName", e)
+        logError(s"Malformed line #$lineNumber: $currentLine\n")
+    }
   }
 }
 
-object Upload {
-  val NO_ATTEMPT = "--"
+private[spark] object Upload {
+  val NO_ATTEMPT = "none"
   val USAGE = s"Usage: upload <applicationId> [<attemptId> | $NO_ATTEMPT ] filename"
 
   def main(args: Array[String]): Unit = {
@@ -173,6 +232,5 @@ object Upload {
    * Name of a domain for the timeline.
    */
   val TIMELINE_DOMAIN = "yarn.timeline.domain"
-
 
 }
