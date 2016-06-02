@@ -137,7 +137,10 @@ private[spark] class Upload extends TimelineCommand {
    * @param logData Stream containing event log data.
    * @param sourceName Filename (or other source identifier) from whence @logData is being read
    */
-  def loadAndApply(sourceName: String, logData: InputStream, action: (SparkListenerEvent) => Unit): Unit = {
+  def loadAndApply(
+      sourceName: String,
+      logData: InputStream,
+      action: (SparkListenerEvent) => Unit): Unit = {
     var currentLine: String = null
     var lineNumber: Int = 1
     try {
