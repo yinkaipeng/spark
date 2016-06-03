@@ -19,7 +19,7 @@ package org.apache.spark.cloud.s3
 
 import scala.collection.mutable
 
-import org.apache.hadoop.fs.{FSDataInputStream, FileSystem, Path}
+import org.apache.hadoop.fs.{FileSystem, FSDataInputStream, Path}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.cloud.CloudSuite
@@ -36,7 +36,7 @@ private[cloud] class S3aCSVReadSuite extends CloudSuite with S3aTestSetup {
     if (!pathname.isEmpty) Some(new Path(pathname)) else None
   }
 
-  def hasCSVTestFile = CSV_TESTFILE.isDefined
+  private def hasCSVTestFile = CSV_TESTFILE.isDefined
 
   /**
    * Minimum number of lines, from `gunzip` + `wc -l` on day of first teste.
@@ -144,7 +144,7 @@ private[cloud] class S3aCSVReadSuite extends CloudSuite with S3aTestSetup {
       assert(-1 !== in.read())
     }
 
-    def readFully(offset: Long, len: Int) = {
+    def readFully(offset: Long, len: Int): Unit = {
       time(s"readFully($offset, byte[$len])") {
         val bytes = new Array[Byte](len)
         assert(-1 !== in.readFully(offset, bytes))

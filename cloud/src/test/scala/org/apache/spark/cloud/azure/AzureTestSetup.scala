@@ -27,7 +27,7 @@ import org.apache.spark.cloud.CloudSuite
 /**
  * Trait for S3A tests
  */
-trait AzureTestSetup extends CloudSuite {
+private[cloud] trait AzureTestSetup extends CloudSuite {
 
   override def enabled: Boolean = super.enabled && conf.getBoolean(AZURE_TESTS_ENABLED, false)
 
