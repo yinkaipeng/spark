@@ -19,11 +19,12 @@ package org.apache.spark.cloud.s3
 
 import scala.collection.mutable
 
-import org.apache.hadoop.fs.{FileSystem, FSDataInputStream, Path}
+import org.apache.hadoop.fs.{FSDataInputStream, FileSystem, Path}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.cloud.CloudSuite
 import org.apache.spark.cloud.common.ReadSample
+import org.apache.spark.cloud.s3.examples.S3ALineCount
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 
 /**
@@ -53,6 +54,15 @@ private[cloud] class S3aCSVReadSuite extends CloudSuite with S3aTestSetup {
     if (enabled) {
       initFS()
     }
+  }
+
+  ctest("S3ALineCount",
+    "S3A Line count",
+    "Execute the S3ALineCount example") {
+    val source = CSV_TESTFILE.get
+    val conf = newSparkConf(source)
+    S3ALineCount.innerMain(Array(source.toString), conf)
+    logInfo(s"Filesystem statistics ${getFilesystem(source)}")
   }
 
   ctest("CSVgz",
@@ -92,7 +102,6 @@ private[cloud] class S3aCSVReadSuite extends CloudSuite with S3aTestSetup {
       | This verifies that the URIs are directing to the correct FS""".stripMargin) {
     sc = new SparkContext("local", "test", newSparkConf())
     val source = CSV_TESTFILE.get
-    val input = sc.textFile(source.toString)
     validateCSV(sc, source)
     logInfo(s"Filesystem statistics ${getFilesystem(source)}")
   }

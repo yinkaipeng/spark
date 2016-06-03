@@ -269,6 +269,17 @@ private[cloud] abstract class CloudSuite extends SparkFunSuite with CloudTestKey
   }
 
   /**
+   * Override point for suites: a method which is called
+   * in all the `newSparkConf()` methods.
+   * This can be used to alter values for the configuration.
+   * It is called before the configuration read in from the command line
+   * is applied, so that tests can override the values applied in-code.
+   * @param sc spark configuration to alter
+   */
+  protected def addSuiteConfigurationOptions(sc: SparkConf): Unit = {
+  }
+
+  /**
    * Create a spark conf, using the current filesystem as the URI for the default FS.
    * All options loaded from the test configuration XML file will be added as hadoop options.
    * @return the configuration
@@ -286,13 +297,12 @@ private[cloud] abstract class CloudSuite extends SparkFunSuite with CloudTestKey
    */
   def newSparkConf(uri: URI): SparkConf = {
     val sc = new SparkConf(false)
-    def hconf(k: String, v: String) = {
-      sc.set("spark.hadoop." + k, v)
-    }
+    addSuiteConfigurationOptions(sc)
     conf.asScala.foreach { e =>
-      hconf(e.getKey, e.getValue)
+      hconf(sc, e.getKey, e.getValue)
     }
-    hconf(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY, uri.toString)
+    hconf(sc, CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY, uri.toString)
+    sc.setMaster("local")
     sc
   }
 
@@ -303,6 +313,16 @@ private[cloud] abstract class CloudSuite extends SparkFunSuite with CloudTestKey
    */
   def newSparkConf(path: Path): SparkConf = {
     newSparkConf(path.getFileSystem(conf).getUri)
+  }
+
+  /**
+   * Set a Hadoop configuration option in a spark configuration
+   * @param sc spark context
+   * @param k configuration key
+   * @param v configuration value
+   */
+  def hconf(sc: SparkConf, k: String, v: String): Unit = {
+    sc.set("spark.hadoop." + k, v)
   }
 
   /**
