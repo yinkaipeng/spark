@@ -1,6 +1,6 @@
 ---
 layout: global
-title: Integration with Cloud Infrastructures
+title: Integration with Cloud Storage
 ---
 
 <!---
@@ -16,9 +16,6 @@ title: Integration with Cloud Infrastructures
   See the License for the specific language governing permissions and
   limitations under the License. See accompanying LICENSE file.
 -->
-
-* This will become a table of contents (this text will be scraped).
-{:toc}
 
 ## Introduction
 
@@ -148,8 +145,18 @@ JAR. It needs the `azure-storage` JAR on the classpath.
 
 It is only present if Spark was built against Hadoop 2.7 or later.
 
-### Openstack Swift
+## Examples
 
+The `spark-cloud` module contains example spark applications to work with cloud infrastructure
+
+### Reading from Amazon S3 with s3a://
+
+```
+./bin/spark-submit org.apache.spark.cloud.s3.examples.S3ALineCount s3a://landsat-pds/scene_list.gz
+```
+
+If an argument is provided, it must identify a source text file. If no argument is provided
+the default path of `s3a://landsat-pds/scene_list.gz` is used.
 
 ## Testing Cloud integration
 
@@ -159,8 +166,8 @@ functionality integration and performance.
 ### Example Configuration for testing cloud data
 
 
-This is a configuration enabling the S3A and Azure test, referencing the secret credentials
-kept in another file.
+Here is an example configuration enabling the S3A and Azure tests, referencing the
+secret credentials kept in another file.
 
 ```xml
 <configuration>
