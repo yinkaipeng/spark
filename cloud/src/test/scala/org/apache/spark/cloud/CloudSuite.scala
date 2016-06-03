@@ -29,8 +29,8 @@ import org.apache.hadoop.fs.{CommonConfigurationKeysPublic, FileStatus, FileSyst
 import org.apache.hadoop.io.{NullWritable, Text}
 import org.scalatest.{BeforeAndAfter, Matchers}
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkFunSuite}
+import org.apache.spark.rdd.RDD
 
 /**
  * A cloud suite.
@@ -409,14 +409,4 @@ private[cloud] abstract class CloudSuite extends SparkFunSuite with CloudTestKey
     String.format(Locale.ENGLISH, "%,d ns", durationNanos.asInstanceOf[Object])
   }
 
-  /*  def readBytesToString(fs: FileSystem, path: Path, length: Int) : String  = {
-    val in = fs.open(path)
-    try {
-      val buf = new Array[Byte](length)
-      in.readFully(0, buf)
-      toChar(buf)
-    } finally {
-      in.close
-    }
-  }*/
 }
