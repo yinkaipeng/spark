@@ -152,11 +152,35 @@ The `spark-cloud` module contains example spark applications to work with cloud 
 ### Reading from Amazon S3 with s3a://
 
 ```
-./bin/spark-submit org.apache.spark.cloud.s3.examples.S3ALineCount s3a://landsat-pds/scene_list.gz
+dist/bin/spark-submit --class org.apache.spark.cloud.s3.examples.S3ALineCount \
+  --conf spark.hadoop.fs.s3a.access.key=$AWS_ACCESS_KEY_ID\
+  --conf spark.hadoop.fs.s3a.secret.key=$AWS_SECRET_ACCESS_KEY \
+  dist/lib/spark-assembly-1.6.1-hadoop2.9.0-SNAPSHOT.jar
 ```
 
 If an argument is provided, it must identify a source text file. If no argument is provided
 the default path of `s3a://landsat-pds/scene_list.gz` is used.
+
+## Troubleshooting
+
+Key common problems when working with cloud storage are
+
+1. Classpath setup
+1. Authentication
+
+### Classpath setup
+
+To communicate with an S3 object store, the amazon AWS libraries must be on the classpath.
+
+For Hadoop 2.6 and 2.7, this is
+
+amazon-
+
+Note that setting the environment variable `SPARK_PRINT_LAUNCH_COMMAND` to `1` will caise
+the arguments used to launch the spark
+```
+export SPARK_PRINT_LAUNCH_COMMAND 1
+```
 
 ## Testing Cloud integration
 
