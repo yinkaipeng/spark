@@ -43,13 +43,17 @@ object S3ALineCount extends Logging {
     var exitCode = 0
     try {
       val conf = new SparkConf()
-      // set a low block size for patitions
-      conf.set("spark.hadoop.fs.s3a.block.size", (2* 1024 * 1024).toString)
-
+      def cset(k: String, v: String): Unit = {
+        conf.set(s"spark.hadoop.$k", v)
+      }
+      // smaller block size to divide up work
+      cset("fs.s3a.block.size", (2 * 1024 * 1024).toString)
       exitCode = innerMain(args, conf)
     } catch {
       case e: Exception =>
         logError(s"Failed to execute line count", e)
+        val jcp = System.getProperty("java.class.path")
+        logInfo(s"Classpath =\n$jcp")
         exitCode = -1
     }
     System.exit(exitCode)
