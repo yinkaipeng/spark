@@ -73,12 +73,17 @@ object S3ALineCount extends Logging {
     val srcPath = new Path(srcURI)
     sparkConf.setAppName("S3AlineCount")
     val sc = new SparkContext(sparkConf)
-    val fs = FileSystem.get(srcURI, sc.hadoopConfiguration)
-    // this will throw an exception if the file is missing
-    val status = fs.getFileStatus(srcPath)
-    val input = sc.textFile(source)
-    val count = input.count()
-    logInfo(s"Read $srcURI: size = ${status.getLen} line count = ${count}")
+    try {
+      val fs = FileSystem.get(srcURI, sc.hadoopConfiguration)
+      // this will throw an exception if the file is missing
+      val status = fs.getFileStatus(srcPath)
+      val input = sc.textFile(source)
+      val count = input.count()
+      logInfo(s"Read $srcURI: size = ${status.getLen} line count = $count")
+      logInfo(s"File System = $fs")
+    } finally{
+      sc.stop()
+    }
     0
   }
 
