@@ -131,6 +131,15 @@
     </fileSet>
     <fileSet>
       <directory>
+        ${project.parent.basedir}/yarn-timeline/yarn-timeline-ats-plugin/target/
+      </directory>
+      <outputDirectory>/hdpLib</outputDirectory>
+      <includes>
+        <include>spark-yarn-timeline-ats-plugin*${project.version}.jar</include>
+      </includes>
+    </fileSet>
+    <fileSet>
+      <directory>
         ${project.parent.basedir}/lib_managed/jars
       </directory>
       <outputDirectory>/lib</outputDirectory>
