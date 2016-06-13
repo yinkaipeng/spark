@@ -81,7 +81,7 @@ object S3ALineCount extends Logging {
       val count = input.count()
       logInfo(s"Read $srcURI: size = ${status.getLen} line count = $count")
       logInfo(s"File System = $fs")
-    } finally{
+    } finally {
       sc.stop()
     }
     0
