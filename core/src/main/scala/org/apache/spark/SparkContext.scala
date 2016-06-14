@@ -1006,7 +1006,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     * @param valueClass Class of the values
     * @param minPartitions Minimum number of Hadoop Splits to generate.
     */
-  def hadoopRDD[K, V](
+  def hadoopRDD1[K, V](
        broadcastedConf: Broadcast[SerializableConfiguration],
        initLocalJobConfFuncOpt: Option[JobConf => Unit],
        inputFormatClass: Class[_ <: InputFormat[K, V]],

@@ -312,7 +312,7 @@ private[orc] case class OrcTableScan(
       classOf[OrcInputFormat]
         .asInstanceOf[Class[_ <: MapRedInputFormat[NullWritable, Writable]]]
 
-    val rdd = sqlContext.sparkContext.hadoopRDD(
+    val rdd = sqlContext.sparkContext.hadoopRDD1(
       broadcastedConf,
       Some(setInputPaths),
       inputFormatClass,
