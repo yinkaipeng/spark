@@ -17,7 +17,10 @@
 
 package org.apache.spark.cloud.s3
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.cloud.common.BasicIOTests
+import org.apache.spark.cloud.s3.examples.S3FileGenerator
 
 private[cloud] class S3aIOSuite extends BasicIOTests with S3aTestSetup {
 
@@ -30,4 +33,23 @@ private[cloud] class S3aIOSuite extends BasicIOTests with S3aTestSetup {
     }
   }
 
+  ctest("FileGeneratorUsage",
+    "S3A File Generator",
+    "Execute the S3FileGenerator example with a bad argument; expect a failure") {
+    val conf = newSparkConf()
+    conf.setAppName("FileGenerator")
+    assert(-2 === S3FileGenerator.action(conf, Array()))
+  }
+
+
+
+  ctest("FileGenerator",
+    "S3A File Generator",
+    "Execute the S3FileGenerator example") {
+    val conf = newSparkConf()
+    conf.setAppName("FileGenerator")
+    val destFile = new Path(TestDir, "filegenerator.txt")
+    assert(0 === S3FileGenerator.action(conf, Array(destFile.toString)))
+    filesystem.getFileStatus(destFile)
+  }
 }
