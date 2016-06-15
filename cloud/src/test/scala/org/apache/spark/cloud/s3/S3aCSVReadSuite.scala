@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.{FSDataInputStream, FileSystem, Path}
 import org.apache.spark.SparkContext
 import org.apache.spark.cloud.CloudSuite
 import org.apache.spark.cloud.common.ReadSample
-import org.apache.spark.cloud.s3.examples.S3ALineCount
+import org.apache.spark.cloud.s3.examples.S3LineCount
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 
 /**
@@ -59,17 +59,16 @@ private[cloud] class S3aCSVReadSuite extends CloudSuite with S3aTestSetup {
   ctest("S3ALineCount",
     "S3A Line count",
     "Execute the S3ALineCount example") {
-    val source = CSV_TESTFILE.get
-    val conf = newSparkConf(source)
-    S3ALineCount.innerMain(Array(source.toString), conf)
-    logInfo(s"Filesystem statistics ${getFilesystem(source)}")
+    val conf = newSparkConf(CSV_TESTFILE.get)
+    conf.setAppName("S3LineCount")
+    S3LineCount.action(conf, Array(CSV_TESTFILE.get.toString))
   }
 
   ctest("CSVgz",
     "Read compressed CSV",
     "Read compressed CSV files through the spark context") {
     val source = CSV_TESTFILE.get
-    sc = new SparkContext("local", "test", newSparkConf(source))
+    sc = new SparkContext("local", "CSVgz", newSparkConf(source))
     val sceneInfo = getFilesystem(source).getFileStatus(source)
     logInfo(s"Compressed size = ${sceneInfo.getLen}")
     validateCSV(sc, source)
