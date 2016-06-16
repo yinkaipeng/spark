@@ -24,20 +24,12 @@ import org.apache.hadoop.fs.{FSDataInputStream, FileSystem, Path}
 import org.apache.spark.SparkContext
 import org.apache.spark.cloud.CloudSuite
 import org.apache.spark.cloud.common.ReadSample
-import org.apache.spark.cloud.s3.examples.S3LineCount
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 
 /**
  * A suite of tests reading in the S3A CSV file.
  */
 private[cloud] class S3aCSVReadSuite extends CloudSuite with S3aTestSetup {
-
-  val CSV_TESTFILE: Option[Path] = {
-    val pathname = conf.get(S3A_CSVFILE_PATH, S3A_CSV_PATH_DEFAULT)
-    if (!pathname.isEmpty) Some(new Path(pathname)) else None
-  }
-
-  private def hasCSVTestFile = CSV_TESTFILE.isDefined
 
   /**
    * Minimum number of lines, from `gunzip` + `wc -l` on day of first teste.
@@ -56,12 +48,8 @@ private[cloud] class S3aCSVReadSuite extends CloudSuite with S3aTestSetup {
     }
   }
 
-  ctest("S3ALineCount",
-    "S3A Line count",
-    "Execute the S3ALineCount example") {
-    val conf = newSparkConf(CSV_TESTFILE.get)
-    conf.setAppName("S3LineCount")
-    S3LineCount.action(conf, Array(CSV_TESTFILE.get.toString))
+  after {
+    cleanFilesystemInTeardown()
   }
 
   ctest("CSVgz",

@@ -19,18 +19,14 @@ package org.apache.spark.cloud
 
 import java.io.{File, FileNotFoundException}
 import java.net.URI
-import java.util.Locale
 
 import scala.collection.JavaConverters._
-import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{CommonConfigurationKeysPublic, FileStatus, FileSystem, LocalFileSystem, Path}
-import org.apache.hadoop.io.{NullWritable, Text}
+import org.apache.hadoop.fs.{CommonConfigurationKeysPublic, FileStatus, FileSystem, LocalFileSystem, Path, PathFilter}
 import org.scalatest.{BeforeAndAfter, Matchers}
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkFunSuite}
-import org.apache.spark.rdd.RDD
 
 /**
  * A cloud suite.
@@ -39,7 +35,8 @@ import org.apache.spark.rdd.RDD
  * based on these details
  */
 private[cloud] abstract class CloudSuite extends SparkFunSuite with CloudTestKeys
-    with LocalSparkContext with BeforeAndAfter with Matchers {
+    with LocalSparkContext with BeforeAndAfter with Matchers with TimeOperations
+    with ObjectStoreOperations {
 
   /**
    *  Work under a test directory, so that cleanup works.
@@ -53,7 +50,6 @@ private[cloud] abstract class CloudSuite extends SparkFunSuite with CloudTestKey
       new Path("/" + testUniqueForkId, "test")
     }
   }
-
 
   /**
    * The configuration as loaded; may be undefined.
@@ -325,81 +321,7 @@ private[cloud] abstract class CloudSuite extends SparkFunSuite with CloudTestKey
     sc.set("spark.hadoop." + k, v)
   }
 
-  /**
-   * Measure the duration of an operation, log it with the text.
-   * @param operation operation description
-   * @param testFun function to execute
-   * @return the result
-   */
-  def duration[T](operation: String)(testFun: => T): T = {
-    val start = nanos
-    try {
-      testFun
-    } finally {
-      val end = nanos()
-      val d = end - start
-      logInfo(s"Duration of $operation = ${toHuman(d)}")
-    }
-  }
 
-  /**
-   * Measure the duration of an operation, log it.
-   * @param testFun function to execute
-   * @return the result and the operation duration in nanos
-   */
-  def duration2[T](testFun: => T): (T, Long, Long) = {
-    val start = nanos()
-    try {
-      var r = testFun
-      val end = nanos()
-      val d = end - start
-      (r, start, d)
-    } catch {
-      case ex: Exception =>
-        val end = nanos()
-        val d = end - start
-        logError("After ${toHuman(d)} ns: $ex", ex)
-        throw ex
-    }
-  }
-
-  /**
-   * Time in nanoseconds.
-   * @return the current time.
-   */
-  def nanos(): Long = {
-    System.nanoTime()
-  }
-
-  /**
-   * Save this RDD as a text file, using string representations of elements.
-   *
-   * There's a bit of convoluted-ness here, as this supports writing to any Hadoop FS,
-   * rather than the default one in the configuration ... this is addressed by creating a
-   * new configuration
-   */
-  def saveAsTextFile[T](rdd: RDD[T], path: Path, conf: Configuration): Unit = {
-    rdd.withScope {
-      val nullWritableClassTag = implicitly[ClassTag[NullWritable]]
-      val textClassTag = implicitly[ClassTag[Text]]
-      val r = rdd.mapPartitions { iter =>
-        val text = new Text()
-        iter.map { x =>
-          text.set(x.toString)
-          (NullWritable.get(), text)
-        }
-      }
-      val pathFS = FileSystem.get(path.toUri, conf)
-      val confWithTargetFS = new Configuration(conf)
-      confWithTargetFS.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY,
-        pathFS.getUri.toString)
-      val pairOps = RDD.rddToPairRDDFunctions(r)(nullWritableClassTag, textClassTag, null)
-      pairOps.saveAsNewAPIHadoopFile(path.toUri.toString,
-        pairOps.keyClass, pairOps.valueClass,
-        classOf[org.apache.hadoop.mapreduce.lib.output.TextOutputFormat[NullWritable, Text]],
-        confWithTargetFS)
-    }
-  }
 
   /**
    * Get the file status of a path
@@ -418,15 +340,6 @@ private[cloud] abstract class CloudSuite extends SparkFunSuite with CloudTestKey
    */
   def getFilesystem(path: Path): FileSystem = {
     FileSystem.get(path.toUri, conf)
-  }
-
-  /**
-   * Convert a time in nanoseconds into a human-readable form for logging
-   * @param durationNanos duration in nanoseconds
-   * @return a string describing the time
-   */
-  def toHuman(durationNanos: Long): String = {
-    String.format(Locale.ENGLISH, "%,d ns", durationNanos.asInstanceOf[Object])
   }
 
 }
