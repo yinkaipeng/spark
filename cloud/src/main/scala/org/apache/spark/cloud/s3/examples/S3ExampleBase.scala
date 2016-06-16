@@ -17,16 +17,20 @@
 
 package org.apache.spark.cloud.s3.examples
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.cloud.TimeOperations
+import org.apache.spark.SparkConf
 
 /**
  * Base Class for examples working with S3.
  */
-private[cloud] trait S3ExampleBase extends Logging {
+private[cloud] trait S3ExampleBase extends TimeOperations {
   /**
    * Default source of a public multi-MB CSV file.
    */
   val S3A_CSV_PATH_DEFAULT = "s3a://landsat-pds/scene_list.gz"
+
+  val EXIT_USAGE = -2
+  val EXIT_ERROR = -1
 
   /**
    * Execute an operation, using its return value as the System exit code.
@@ -42,10 +46,10 @@ private[cloud] trait S3ExampleBase extends Logging {
       exitCode = operation(conf, args)
     } catch {
       case e: Exception =>
-        logError(s"Failed to execute line count: $e", e)
+        logError(s"Failed to execute operation: $e", e)
         // in case this is caused by classpath problems, dump it out
         logInfo(s"Classpath =\n${System.getProperty("java.class.path")}")
-        exitCode = -1
+        exitCode = EXIT_ERROR
     }
     logInfo(s"Exit code = $exitCode")
     exit(exitCode)
@@ -57,7 +61,7 @@ private[cloud] trait S3ExampleBase extends Logging {
    * @param k key
    * @param v new value
    */
-  def cset(sparkConf: SparkConf, k: String, v: String): Unit = {
+  def hconf(sparkConf: SparkConf, k: String, v: String): Unit = {
     sparkConf.set(s"spark.hadoop.$k", v)
   }
 
@@ -69,4 +73,16 @@ private[cloud] trait S3ExampleBase extends Logging {
   def exit(exitCode: Int): Unit = {
     System.exit(exitCode)
   }
+
+  protected def intArg(args: Array[String], index: Int, defVal: Int): Int = {
+    if (args.length > index) args(index).toInt else defVal
+  }
+  protected def arg(args: Array[String], index: Int, defVal: String): String = {
+    if (args.length > index) args(index) else defVal
+  }
+
+  protected def arg(args: Array[String], index: Int): Option[String] = {
+    if (args.length > index) Some(args(index)) else None
+  }
+
 }

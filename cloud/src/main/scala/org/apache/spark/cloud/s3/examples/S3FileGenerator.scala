@@ -50,11 +50,10 @@ private[cloud] object S3FileGenerator extends S3ExampleBase {
     val l = args.length
     if (l < 1 || l > 2 ) {
       // wrong number of arguments
-      logError(USAGE)
-      return -2
+      return usage()
     }
     val dest = args(0)
-    val count = if (l == 2) Integer.valueOf(args(1)) else DEFAULT_COUNT
+    val count = intArg(args, 1, DEFAULT_COUNT)
     val destURI = new URI(dest)
     val destPath = new Path(destURI)
     logInfo(s"Dest file = $destURI; count=$count")
@@ -63,12 +62,20 @@ private[cloud] object S3FileGenerator extends S3ExampleBase {
     try {
       val fs = FileSystem.get(destURI, sc.hadoopConfiguration)
       // create the parent directories or fail
-      fs.mkdirs(destPath.getParent())
-      val numbers = sc.parallelize(1 to count)
-      numbers.saveAsTextFile(destPath.toUri.toString)
+      duration(s"save $count values") {
+        fs.mkdirs(destPath.getParent())
+        val numbers = sc.parallelize(1 to count)
+        numbers.saveAsTextFile(destPath.toUri.toString)
+      }
       val status = fs.getFileStatus(destPath)
       logInfo(s"Generated file $status")
       logInfo(s"File System = $fs")
+      // read it back
+      val input = sc.textFile(dest)
+      val c2 = duration(s" count $status") {
+        input.count()
+      }
+      logInfo(s"Read value = $c2")
     } finally {
       logInfo("Stopping Spark Context")
       sc.stop()
@@ -76,4 +83,8 @@ private[cloud] object S3FileGenerator extends S3ExampleBase {
     0
   }
 
+  def usage(): Int = {
+    logError(USAGE)
+    EXIT_USAGE
+  }
 }

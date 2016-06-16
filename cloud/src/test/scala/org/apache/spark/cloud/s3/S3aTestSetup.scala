@@ -32,6 +32,10 @@ private[cloud] trait S3aTestSetup extends CloudSuite {
 
   override def enabled: Boolean = super.enabled && conf.getBoolean(S3A_TESTS_ENABLED, false)
 
+  after {
+    cleanFilesystemInTeardown()
+  }
+
   def initFS(): FileSystem = {
     val id = requiredOption(AWS_ACCOUNT_ID)
     val secret = requiredOption(AWS_ACCOUNT_SECRET)
@@ -45,7 +49,4 @@ private[cloud] trait S3aTestSetup extends CloudSuite {
     createFilesystem(s3aURI)
   }
 
-  override protected def addSuiteConfigurationOptions(sc: SparkConf): Unit = {
-
-  }
 }
