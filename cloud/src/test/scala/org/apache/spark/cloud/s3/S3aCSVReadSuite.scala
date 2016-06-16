@@ -32,13 +32,6 @@ import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
  */
 private[cloud] class S3aCSVReadSuite extends CloudSuite with S3aTestSetup {
 
-  val CSV_TESTFILE: Option[Path] = {
-    val pathname = conf.get(S3A_CSVFILE_PATH, S3A_CSV_PATH_DEFAULT)
-    if (!pathname.isEmpty) Some(new Path(pathname)) else None
-  }
-
-  private def hasCSVTestFile = CSV_TESTFILE.isDefined
-
   /**
    * Minimum number of lines, from `gunzip` + `wc -l` on day of first teste.
    * This grows over time.
@@ -54,14 +47,6 @@ private[cloud] class S3aCSVReadSuite extends CloudSuite with S3aTestSetup {
     if (enabled) {
       initFS()
     }
-  }
-
-  ctest("S3ALineCount",
-    "S3A Line count",
-    "Execute the S3ALineCount example") {
-    val conf = newSparkConf(CSV_TESTFILE.get)
-    conf.setAppName("S3LineCount")
-    S3LineCount.action(conf, Array(CSV_TESTFILE.get.toString))
   }
 
   ctest("CSVgz",
