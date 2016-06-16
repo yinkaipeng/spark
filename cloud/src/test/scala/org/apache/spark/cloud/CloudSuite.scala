@@ -19,13 +19,12 @@ package org.apache.spark.cloud
 
 import java.io.{File, FileNotFoundException}
 import java.net.URI
-import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{CommonConfigurationKeysPublic, FileStatus, FileSystem, LocalFileSystem, Path}
+import org.apache.hadoop.fs.{CommonConfigurationKeysPublic, FileStatus, FileSystem, LocalFileSystem, Path, PathFilter}
 import org.apache.hadoop.io.{NullWritable, Text}
 import org.scalatest.{BeforeAndAfter, Matchers}
 
@@ -39,7 +38,7 @@ import org.apache.spark.rdd.RDD
  * based on these details
  */
 private[cloud] abstract class CloudSuite extends SparkFunSuite with CloudTestKeys
-    with LocalSparkContext with BeforeAndAfter with Matchers {
+    with LocalSparkContext with BeforeAndAfter with Matchers with TimeOperations {
 
   /**
    *  Work under a test directory, so that cleanup works.
@@ -53,7 +52,6 @@ private[cloud] abstract class CloudSuite extends SparkFunSuite with CloudTestKey
       new Path("/" + testUniqueForkId, "test")
     }
   }
-
 
   /**
    * The configuration as loaded; may be undefined.
@@ -325,51 +323,6 @@ private[cloud] abstract class CloudSuite extends SparkFunSuite with CloudTestKey
     sc.set("spark.hadoop." + k, v)
   }
 
-  /**
-   * Measure the duration of an operation, log it with the text.
-   * @param operation operation description
-   * @param testFun function to execute
-   * @return the result
-   */
-  def duration[T](operation: String)(testFun: => T): T = {
-    val start = nanos
-    try {
-      testFun
-    } finally {
-      val end = nanos()
-      val d = end - start
-      logInfo(s"Duration of $operation = ${toHuman(d)}")
-    }
-  }
-
-  /**
-   * Measure the duration of an operation, log it.
-   * @param testFun function to execute
-   * @return the result and the operation duration in nanos
-   */
-  def duration2[T](testFun: => T): (T, Long, Long) = {
-    val start = nanos()
-    try {
-      var r = testFun
-      val end = nanos()
-      val d = end - start
-      (r, start, d)
-    } catch {
-      case ex: Exception =>
-        val end = nanos()
-        val d = end - start
-        logError("After ${toHuman(d)} ns: $ex", ex)
-        throw ex
-    }
-  }
-
-  /**
-   * Time in nanoseconds.
-   * @return the current time.
-   */
-  def nanos(): Long = {
-    System.nanoTime()
-  }
 
   /**
    * Save this RDD as a text file, using string representations of elements.
@@ -421,12 +374,15 @@ private[cloud] abstract class CloudSuite extends SparkFunSuite with CloudTestKey
   }
 
   /**
-   * Convert a time in nanoseconds into a human-readable form for logging
-   * @param durationNanos duration in nanoseconds
-   * @return a string describing the time
+   * Take a predicate, generate a path filter from it
+   * @param filterPredicate predicate
+   * @return a filter which uses the predicate to decide whether to accept a file or not
    */
-  def toHuman(durationNanos: Long): String = {
-    String.format(Locale.ENGLISH, "%,d ns", durationNanos.asInstanceOf[Object])
+  def pathFilter(filterPredicate: Path => Boolean) : PathFilter = {
+    new PathFilter {
+      def accept(path: Path): Boolean = filterPredicate(path)
+    }
   }
+
 
 }
