@@ -26,7 +26,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 /**
  * Generate a file containing some numbers in the remote repository
  */
-private[cloud] object S3FileGenerator extends S3ExampleBase {
+object S3FileGenerator extends S3ExampleBase {
 
   private val USAGE = "Usage S3FileGenerator <filename> [count]"
   private val DEFAULT_COUNT: Integer = 1000

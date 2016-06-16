@@ -15,82 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.cloud.s3.examples
+package org.apache.spark.cloud
 
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{CommonConfigurationKeysPublic, FileSystem, Path}
+import org.apache.hadoop.fs.{CommonConfigurationKeysPublic, FileSystem, Path, PathFilter}
 import org.apache.hadoop.io.{NullWritable, Text}
 
-import org.apache.spark.cloud.TimeOperations
-import org.apache.spark.SparkConf
+import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 
 /**
- * Base Class for examples working with S3.
+ * Extra Hadoop operations for better
  */
-private[cloud] trait S3ExampleBase extends TimeOperations {
-  /**
-   * Default source of a public multi-MB CSV file.
-   */
-  val S3A_CSV_PATH_DEFAULT = "s3a://landsat-pds/scene_list.gz"
-
-  val EXIT_USAGE = -2
-  val EXIT_ERROR = -1
-
-  /**
-   * Execute an operation, using its return value as the System exit code.
-   * Exceptions are caught, logged and an exit code of -1 generated.
-   *
-   * @param operation operation to execute
-   * @param args list of arguments from the command line
-   */
-  protected def execute(operation: (SparkConf, Array[String]) => Int, args: Array[String]): Unit = {
-    var exitCode = 0
-    try {
-      val conf = new SparkConf()
-      exitCode = operation(conf, args)
-    } catch {
-      case e: Exception =>
-        logError(s"Failed to execute operation: $e", e)
-        // in case this is caused by classpath problems, dump it out
-        logInfo(s"Classpath =\n${System.getProperty("java.class.path")}")
-        exitCode = EXIT_ERROR
-    }
-    logInfo(s"Exit code = $exitCode")
-    exit(exitCode)
-  }
-
-  /**
-   * Set a hadoop option in a spark configuration
-   * @param sparkConf configuration to update
-   * @param k key
-   * @param v new value
-   */
-  def hconf(sparkConf: SparkConf, k: String, v: String): Unit = {
-    sparkConf.set(s"spark.hadoop.$k", v)
-  }
-
-  /**
-   * Exit the system.
-   * This may be overriden for tests: code must not assume that it never returns.
-   * @param exitCode exit code to exit with.
-   */
-  def exit(exitCode: Int): Unit = {
-    System.exit(exitCode)
-  }
-
-  protected def intArg(args: Array[String], index: Int, defVal: Int): Int = {
-    if (args.length > index) args(index).toInt else defVal
-  }
-  protected def arg(args: Array[String], index: Int, defVal: String): String = {
-    if (args.length > index) args(index) else defVal
-  }
-
-  protected def arg(args: Array[String], index: Int): Option[String] = {
-    if (args.length > index) Some(args(index)) else None
-  }
+private[cloud] trait ObjectStoreOperations extends Logging {
 
   /**
    * Save this RDD as a text file, using string representations of elements.
@@ -119,6 +58,17 @@ private[cloud] trait S3ExampleBase extends TimeOperations {
         pairOps.keyClass, pairOps.valueClass,
         classOf[org.apache.hadoop.mapreduce.lib.output.TextOutputFormat[NullWritable, Text]],
         confWithTargetFS)
+    }
+  }
+
+  /**
+   * Take a predicate, generate a path filter from it
+   * @param filterPredicate predicate
+   * @return a filter which uses the predicate to decide whether to accept a file or not
+   */
+  def pathFilter(filterPredicate: Path => Boolean): PathFilter = {
+    new PathFilter {
+      def accept(path: Path): Boolean = filterPredicate(path)
     }
   }
 }

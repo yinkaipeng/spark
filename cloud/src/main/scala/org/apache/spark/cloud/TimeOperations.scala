@@ -24,7 +24,7 @@ import org.apache.spark.Logging
 /**
  * Trait to add timing to operations.
  */
-trait TimeOperations extends Logging {
+private[cloud]trait TimeOperations extends Logging {
 
   /**
    * Convert a time in nanoseconds into a human-readable form for logging.

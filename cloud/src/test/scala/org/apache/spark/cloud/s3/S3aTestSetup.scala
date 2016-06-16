@@ -19,7 +19,7 @@ package org.apache.spark.cloud.s3
 
 import java.net.URI
 
-import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.fs.s3a.Constants
 
 import org.apache.spark.SparkConf
@@ -49,4 +49,10 @@ private[cloud] trait S3aTestSetup extends CloudSuite {
     createFilesystem(s3aURI)
   }
 
+  val CSV_TESTFILE: Option[Path] = {
+    val pathname = conf.get(S3A_CSVFILE_PATH, S3A_CSV_PATH_DEFAULT)
+    if (!pathname.isEmpty) Some(new Path(pathname)) else None
+  }
+
+  protected def hasCSVTestFile = CSV_TESTFILE.isDefined
 }

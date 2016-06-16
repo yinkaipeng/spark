@@ -21,15 +21,12 @@ import java.io.{File, FileNotFoundException}
 import java.net.URI
 
 import scala.collection.JavaConverters._
-import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{CommonConfigurationKeysPublic, FileStatus, FileSystem, LocalFileSystem, Path, PathFilter}
-import org.apache.hadoop.io.{NullWritable, Text}
 import org.scalatest.{BeforeAndAfter, Matchers}
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkFunSuite}
-import org.apache.spark.rdd.RDD
 
 /**
  * A cloud suite.
@@ -38,7 +35,8 @@ import org.apache.spark.rdd.RDD
  * based on these details
  */
 private[cloud] abstract class CloudSuite extends SparkFunSuite with CloudTestKeys
-    with LocalSparkContext with BeforeAndAfter with Matchers with TimeOperations {
+    with LocalSparkContext with BeforeAndAfter with Matchers with TimeOperations
+    with ObjectStoreOperations {
 
   /**
    *  Work under a test directory, so that cleanup works.
@@ -324,35 +322,6 @@ private[cloud] abstract class CloudSuite extends SparkFunSuite with CloudTestKey
   }
 
 
-  /**
-   * Save this RDD as a text file, using string representations of elements.
-   *
-   * There's a bit of convoluted-ness here, as this supports writing to any Hadoop FS,
-   * rather than the default one in the configuration ... this is addressed by creating a
-   * new configuration
-   */
-  def saveAsTextFile[T](rdd: RDD[T], path: Path, conf: Configuration): Unit = {
-    rdd.withScope {
-      val nullWritableClassTag = implicitly[ClassTag[NullWritable]]
-      val textClassTag = implicitly[ClassTag[Text]]
-      val r = rdd.mapPartitions { iter =>
-        val text = new Text()
-        iter.map { x =>
-          text.set(x.toString)
-          (NullWritable.get(), text)
-        }
-      }
-      val pathFS = FileSystem.get(path.toUri, conf)
-      val confWithTargetFS = new Configuration(conf)
-      confWithTargetFS.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY,
-        pathFS.getUri.toString)
-      val pairOps = RDD.rddToPairRDDFunctions(r)(nullWritableClassTag, textClassTag, null)
-      pairOps.saveAsNewAPIHadoopFile(path.toUri.toString,
-        pairOps.keyClass, pairOps.valueClass,
-        classOf[org.apache.hadoop.mapreduce.lib.output.TextOutputFormat[NullWritable, Text]],
-        confWithTargetFS)
-    }
-  }
 
   /**
    * Get the file status of a path
@@ -372,17 +341,5 @@ private[cloud] abstract class CloudSuite extends SparkFunSuite with CloudTestKey
   def getFilesystem(path: Path): FileSystem = {
     FileSystem.get(path.toUri, conf)
   }
-
-  /**
-   * Take a predicate, generate a path filter from it
-   * @param filterPredicate predicate
-   * @return a filter which uses the predicate to decide whether to accept a file or not
-   */
-  def pathFilter(filterPredicate: Path => Boolean) : PathFilter = {
-    new PathFilter {
-      def accept(path: Path): Boolean = filterPredicate(path)
-    }
-  }
-
 
 }

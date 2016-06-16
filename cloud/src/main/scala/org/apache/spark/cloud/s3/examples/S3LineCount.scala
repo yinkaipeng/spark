@@ -27,7 +27,7 @@ import org.apache.spark.{SparkConf, SparkContext}
  * A line count example which has a default reference of a public Amazon S3
  * CSV .gz file in the absence of anything on the command line.
  */
-private[cloud] object S3LineCount extends S3ExampleBase {
+object S3LineCount extends S3ExampleBase {
 
   /**
    * Read a file and print out some details.
@@ -73,10 +73,14 @@ private[cloud] object S3LineCount extends S3ExampleBase {
         "org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider")
     }
     logInfo(s"Data Source $srcURI")
+    dest.foreach { d =>
+      logInfo(s"Destination $d")
+    }
 
     val sc = new SparkContext(sparkConf)
     try {
       val fs = FileSystem.get(srcURI, sc.hadoopConfiguration)
+
       // this will throw an exception if the source file is missing
       val status = fs.getFileStatus(srcPath)
       val input = sc.textFile(source)
@@ -84,16 +88,19 @@ private[cloud] object S3LineCount extends S3ExampleBase {
         input.count()
       }
       logInfo(s"line count = $count")
+      logInfo(s"File System = $fs")
       dest.foreach { d =>
+        val destUri = new URI(d)
+        val destFs = FileSystem.get(destUri, sc.hadoopConfiguration)
         duration("save") {
-          val destPath = new Path(new URI(d))
-          fs.mkdirs(destPath.getParent())
-          input.saveAsTextFile(d)
-          val status = fs.getFileStatus(destPath)
-          logInfo(s"Generated file $status")
+          val destPath = new Path(destUri)
+          destFs.mkdirs(destPath.getParent())
+          saveAsTextFile(input, destPath, sc.hadoopConfiguration)
+          val status = destFs.getFileStatus(destPath)
+          logInfo(s"Output Dir $status")
+          logInfo(s"File System = $destFs")
         }
       }
-      logInfo(s"File System = $fs")
     } finally {
       logInfo("Stopping Spark Context")
       sc.stop()
