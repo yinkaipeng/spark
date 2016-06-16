@@ -26,6 +26,8 @@ private[cloud] class S3aIOSuite extends BasicIOTests with S3aTestSetup {
 
   init()
 
+  override def enabled: Boolean = super.enabled && conf.getBoolean(S3A_TESTS_ENABLED, false)
+
   def init(): Unit = {
     // propagate S3 credentials
     if (enabled) {

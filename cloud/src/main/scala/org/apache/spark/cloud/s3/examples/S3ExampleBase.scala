@@ -73,6 +73,16 @@ private[cloud] trait S3ExampleBase extends TimeOperations {
   }
 
   /**
+   * Set a long hadoop option in a spark configuration
+   * @param sparkConf configuration to update
+   * @param k key
+   * @param v new value
+   */
+  def hconf(sparkConf: SparkConf, k: String, v: Long): Unit = {
+    sparkConf.set(s"spark.hadoop.$k", v.toString)
+  }
+
+  /**
    * Exit the system.
    * This may be overriden for tests: code must not assume that it never returns.
    * @param exitCode exit code to exit with.

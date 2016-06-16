@@ -36,6 +36,10 @@ private[cloud] class S3aFileGeneratorSuite extends CloudSuite with S3aTestSetup 
     }
   }
 
+  after {
+    cleanFilesystemInTeardown()
+  }
+
   ctest("FileGeneratorUsage",
     "S3A File Generator",
     "Execute the S3FileGenerator example with a bad argument; expect a failure") {

@@ -43,6 +43,7 @@ private[cloud]trait TimeOperations extends Logging {
    */
   def duration[T](operation: String)(testFun: => T): T = {
     val start = nanos
+    logInfo(s"Starting $operation")
     try {
       testFun
     } finally {

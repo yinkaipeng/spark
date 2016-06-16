@@ -17,10 +17,10 @@
 
 package org.apache.spark.cloud.s3
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.cloud.CloudSuite
-import org.apache.spark.cloud.s3.examples.{S3FileGenerator, S3LineCount}
+import org.apache.spark.cloud.s3.examples.S3LineCount
 
 /**
  * Test the `S3LineCount` entry point.
@@ -38,14 +38,21 @@ private[cloud] class S3aLineCountSuite extends CloudSuite with S3aTestSetup {
 
   override def enabled: Boolean = super.enabled && hasCSVTestFile
 
-  ctest("S3ALineCount",
-    "S3A Line count",
-    "Execute the S3ALineCount example") {
+  after {
+    cleanFilesystemInTeardown()
+  }
+
+  ctest("S3ALineCountWriteback",
+    "S3A Line count with the results written back",
+    "Execute the S3ALineCount example with the results written back to" +
+        " the test filesystem. This test can take minutes.") {
     val sourceFile = CSV_TESTFILE.get
-    val conf = newSparkConf(sourceFile)
-    conf.setAppName("S3LineCount")
+    val sourceFS = FileSystem.get(sourceFile.toUri, conf)
+    val sourceInfo = sourceFS.getFileStatus(sourceFile)
+    val sparkConf = newSparkConf()
+    sparkConf.setAppName("S3LineCount")
     val destDir = filesystem.makeQualified(new Path(TestDir, "s3alinecount"))
-    assert(0 === S3LineCount.action(conf,
+    assert(0 === S3LineCount.action(sparkConf,
       Array(sourceFile.toString, destDir.toString)))
     val status = filesystem.getFileStatus(destDir)
     assert(status.isDirectory, s"Not a directory: $status")
@@ -58,9 +65,15 @@ private[cloud] class S3aLineCountSuite extends CloudSuite with S3aTestSetup {
       filenames = filenames + " " + f.getPath.getName
     }
     logInfo(s"total size = $size bytes from ${files.length} files: $filenames")
-    val sourceInfo = filesystem.getFileStatus(sourceFile)
     assert (size >= sourceInfo.getLen, s"output data $size smaller than source $sourceFile")
+  }
 
+  ctest("S3ALineCountDefaults",
+    "S3A Line count default values",
+    "Execute the S3ALineCount example with the default values (i.e. no arguments)") {
+    val sparkConf = newSparkConf()
+    sparkConf.setAppName("S3ALineCountDefaults")
+    assert(0 === S3LineCount.action(sparkConf, Array()))
   }
 
 }
