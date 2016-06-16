@@ -22,19 +22,12 @@ import java.net.URI
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.fs.s3a.Constants
 
-import org.apache.spark.SparkConf
 import org.apache.spark.cloud.CloudSuite
 
 /**
  * Trait for S3A tests
  */
 private[cloud] trait S3aTestSetup extends CloudSuite {
-
-  override def enabled: Boolean = super.enabled && conf.getBoolean(S3A_TESTS_ENABLED, false)
-
-  after {
-    cleanFilesystemInTeardown()
-  }
 
   def initFS(): FileSystem = {
     val id = requiredOption(AWS_ACCOUNT_ID)
@@ -43,7 +36,7 @@ private[cloud] trait S3aTestSetup extends CloudSuite {
     conf.set("fs.s3n.awsSecretAccessKey", secret)
     conf.set(Constants.BUFFER_DIR, localTmpDir.getAbsolutePath)
     // a block size of 1MB
-    conf.set("fs.s3a.block.size", (1024 * 1024).toString)
+    conf.set(S3AConstants.FS_S3A_BLOCK_SIZE, (1024 * 1024).toString)
     val s3aURI = new URI(requiredOption(S3A_TEST_URI))
     logDebug(s"Executing S3 tests against $s3aURI")
     createFilesystem(s3aURI)
@@ -55,4 +48,5 @@ private[cloud] trait S3aTestSetup extends CloudSuite {
   }
 
   protected def hasCSVTestFile = CSV_TESTFILE.isDefined
+
 }

@@ -22,6 +22,7 @@ import java.net.URI
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.cloud.s3.S3AConstants._
 
 /**
  * A line count example which has a default reference of a public Amazon S3
@@ -64,36 +65,49 @@ object S3LineCount extends S3ExampleBase {
     logInfo(s"Source file = $source")
     val srcURI = new URI(source)
     val srcPath = new Path(srcURI)
+    val _1MB = 1024 * 1024
     // smaller block size to divide up work
-    hconf(sparkConf, "fs.s3a.block.size", (2 * 1024 * 1024).toString)
+    val blockSize = _1MB
+    hconf(sparkConf, FS_S3A_BLOCK_SIZE, blockSize)
+    hconf(sparkConf, FAST_UPLOAD, "true")
+    hconf(sparkConf, MULTIPART_SIZE, MIN_PERMITTED_MULTIPART_SIZE)
+    hconf(sparkConf, MIN_MULTIPART_THRESHOLD, MIN_PERMITTED_MULTIPART_SIZE)
+    hconf(sparkConf, PURGE_EXISTING_MULTIPART, "true")
+    hconf(sparkConf, PURGE_EXISTING_MULTIPART_AGE, 10 * 60)
 
     // If there is no destination, switch to the anonymous provider.
     if (dest.isEmpty) {
-      hconf(sparkConf, "fs.s3a.aws.credentials.provider",
-        "org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider")
+      hconf(sparkConf, AWS_CREDENTIALS_PROVIDER,
+        ANONYMOUS_CREDENTIALS)
     }
     logInfo(s"Data Source $srcURI")
-    dest.foreach { d =>
-      logInfo(s"Destination $d")
-    }
 
     val sc = new SparkContext(sparkConf)
     try {
-      val fs = FileSystem.get(srcURI, sc.hadoopConfiguration)
+      val sourceFs = FileSystem.get(srcURI, sc.hadoopConfiguration)
 
       // this will throw an exception if the source file is missing
-      val status = fs.getFileStatus(srcPath)
-      val input = sc.textFile(source)
-      val count = duration(s" count $status") {
-        input.count()
+      val status = sourceFs.getFileStatus(srcPath)
+      logInfo(s"Source details: $status")
+      if (status.getBlockSize != blockSize) {
+        logWarning(s"Blocksize wrong: expected $blockSize  but got ${status.getBlockSize}")
       }
-      logInfo(s"line count = $count")
-      logInfo(s"File System = $fs")
-      dest.foreach { d =>
-        val destUri = new URI(d)
+      val input = sc.textFile(source)
+      if (dest.isEmpty) {
+        // no destination: just do a count
+        val count = duration(s" count $srcPath") {
+          input.count()
+        }
+        logInfo(s"line count = $count")
+        logInfo(s"File System = $sourceFs")
+      } else {
+        // destination provided
+        val destUri = new URI(dest.get)
+        logInfo(s"Destination $destUri")
         val destFs = FileSystem.get(destUri, sc.hadoopConfiguration)
         duration("save") {
           val destPath = new Path(destUri)
+          destFs.delete(destPath, true)
           destFs.mkdirs(destPath.getParent())
           saveAsTextFile(input, destPath, sc.hadoopConfiguration)
           val status = destFs.getFileStatus(destPath)
@@ -101,6 +115,7 @@ object S3LineCount extends S3ExampleBase {
           logInfo(s"File System = $destFs")
         }
       }
+
     } finally {
       logInfo("Stopping Spark Context")
       sc.stop()

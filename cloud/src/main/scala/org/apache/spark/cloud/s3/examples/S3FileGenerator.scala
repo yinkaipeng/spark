@@ -57,19 +57,21 @@ object S3FileGenerator extends S3ExampleBase {
     val destURI = new URI(dest)
     val destPath = new Path(destURI)
     logInfo(s"Dest file = $destURI; count=$count")
-
+    // smaller block size to divide up work
+    hconf(sparkConf, "fs.s3a.block.size", (1 * 1024 * 1024).toString)
     val sc = new SparkContext(sparkConf)
     try {
-      val fs = FileSystem.get(destURI, sc.hadoopConfiguration)
+      val destFs = FileSystem.get(destURI, sc.hadoopConfiguration)
       // create the parent directories or fail
       duration(s"save $count values") {
-        fs.mkdirs(destPath.getParent())
+        destFs.delete(destPath, true)
+        destFs.mkdirs(destPath.getParent())
         val numbers = sc.parallelize(1 to count)
         numbers.saveAsTextFile(destPath.toUri.toString)
       }
-      val status = fs.getFileStatus(destPath)
+      val status = destFs.getFileStatus(destPath)
       logInfo(s"Generated file $status")
-      logInfo(s"File System = $fs")
+      logInfo(s"File System = $destFs")
       // read it back
       val input = sc.textFile(dest)
       val c2 = duration(s" count $status") {

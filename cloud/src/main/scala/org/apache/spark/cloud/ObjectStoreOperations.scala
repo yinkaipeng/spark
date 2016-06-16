@@ -27,7 +27,7 @@ import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 
 /**
- * Extra Hadoop operations for better
+ * Extra Hadoop operations for object store integration.
  */
 private[cloud] trait ObjectStoreOperations extends Logging {
 

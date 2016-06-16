@@ -24,7 +24,6 @@ import org.apache.hadoop.fs.{FSDataInputStream, FileSystem, Path}
 import org.apache.spark.SparkContext
 import org.apache.spark.cloud.CloudSuite
 import org.apache.spark.cloud.common.ReadSample
-import org.apache.spark.cloud.s3.examples.S3LineCount
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 
 /**
@@ -47,6 +46,10 @@ private[cloud] class S3aCSVReadSuite extends CloudSuite with S3aTestSetup {
     if (enabled) {
       initFS()
     }
+  }
+
+  after {
+    cleanFilesystemInTeardown()
   }
 
   ctest("CSVgz",
