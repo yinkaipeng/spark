@@ -24,6 +24,7 @@ import java.util.List;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.*;
 import org.slf4j.Logger;
@@ -191,12 +192,21 @@ public class YarnShuffleService extends AuxiliaryService {
 
   private File findRegisteredExecutorFile(String[] localDirs) {
     for (String dir: localDirs) {
-      File f = new File(dir, "registeredExecutors.ldb");
+      File f = new File(new Path(dir + File.separator + getName()).toUri().getPath(),
+        "registeredExecutors.ldb");
       if (f.exists()) {
         return f;
       }
     }
-    return new File(localDirs[0], "registeredExecutors.ldb");
+
+    File parent = new File(new Path(localDirs[0] + File.separator + getName()).toUri().getPath());
+    try {
+      parent.mkdir();
+    } catch (Exception e) {
+      logger.error("Exception when creating folder {}", parent, e);
+    }
+
+    return new File(parent, "registeredExecutors.ldb");
   }
 
   /**
