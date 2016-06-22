@@ -15,14 +15,23 @@
  * limitations under the License.
  */
 
-import sbt._
-import sbt.Keys._
+package org.apache.spark.ui.scope
 
-/**
- * This plugin project is there because we use our custom fork of sbt-pom-reader plugin. This is
- * a plugin project so that this gets compiled first and is available on the classpath for SBT build.
- */
-object SparkPluginDef extends Build {
-  lazy val root = Project("plugins", file(".")) dependsOn(sbtPomReader)
-  lazy val sbtPomReader = uri("https://github.com/ScrapCodes/sbt-pom-reader.git#ignore_artifact_id")
+import org.apache.spark.SparkFunSuite
+
+class RDDOperationGraphSuite extends SparkFunSuite {
+  test("Test simple cluster equals") {
+    // create a 2-cluster chain with a child
+    val c1 = new RDDOperationCluster("1", "Bender")
+    val c2 = new RDDOperationCluster("2", "Hal")
+    c1.attachChildCluster(c2)
+    c1.attachChildNode(new RDDOperationNode(3, "Marvin", false, "collect!"))
+
+    // create an equal cluster, but without the child node
+    val c1copy = new RDDOperationCluster("1", "Bender")
+    val c2copy = new RDDOperationCluster("2", "Hal")
+    c1copy.attachChildCluster(c2copy)
+
+    assert(c1 == c1copy)
+  }
 }

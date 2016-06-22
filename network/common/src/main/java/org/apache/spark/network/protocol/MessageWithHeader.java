@@ -18,6 +18,7 @@
 package org.apache.spark.network.protocol;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import javax.annotation.Nullable;
 
@@ -35,13 +36,14 @@ import org.apache.spark.network.buffer.ManagedBuffer;
  * The header must be a ByteBuf, while the body can be a ByteBuf or a FileRegion.
  */
 class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
-
   @Nullable private final ManagedBuffer managedBuffer;
   private final ByteBuf header;
   private final int headerLength;
   private final Object body;
   private final long bodyLength;
   private long totalBytesTransferred;
+
+  private static final int NIO_BUFFER_LIMIT = 256 * 1024;
 
   /**
    * Construct a new MessageWithHeader.
@@ -128,8 +130,27 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
   }
 
   private int copyByteBuf(ByteBuf buf, WritableByteChannel target) throws IOException {
-    int written = target.write(buf.nioBuffer());
+    ByteBuffer buffer = buf.nioBuffer();
+    int written = (buffer.remaining() <= NIO_BUFFER_LIMIT) ?
+      target.write(buffer) : writeNioBuffer(target, buffer);
     buf.skipBytes(written);
     return written;
+  }
+
+  private int writeNioBuffer(
+      WritableByteChannel writeCh,
+      ByteBuffer buf) throws IOException {
+    int originalLimit = buf.limit();
+    int ret = 0;
+
+    try {
+      int ioSize = Math.min(buf.remaining(), NIO_BUFFER_LIMIT);
+      buf.limit(buf.position() + ioSize);
+      ret = writeCh.write(buf);
+    } finally {
+      buf.limit(originalLimit);
+    }
+
+    return ret;
   }
 }

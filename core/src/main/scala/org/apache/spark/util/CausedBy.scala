@@ -15,25 +15,22 @@
  * limitations under the License.
  */
 
-package test.org.apache.spark;
-
-import org.apache.spark.TaskContext;
-import org.apache.spark.util.TaskCompletionListener;
-
+package org.apache.spark.util
 
 /**
- * A simple implementation of TaskCompletionListener that makes sure TaskCompletionListener and
- * TaskContext is Java friendly.
+ * Extractor Object for pulling out the root cause of an error.
+ * If the error contains no cause, it will return the error itself.
+ *
+ * Usage:
+ * try {
+ *   ...
+ * } catch {
+ *   case CausedBy(ex: CommitDeniedException) => ...
+ * }
  */
-public class JavaTaskCompletionListenerImpl implements TaskCompletionListener {
+private[spark] object CausedBy {
 
-  @Override
-  public void onTaskCompletion(TaskContext context) {
-    context.isCompleted();
-    context.isInterrupted();
-    context.stageId();
-    context.partitionId();
-    context.isRunningLocally();
-    context.addTaskCompletionListener(this);
+  def unapply(e: Throwable): Option[Throwable] = {
+    Option(e.getCause).flatMap(cause => unapply(cause)).orElse(Some(e))
   }
 }
