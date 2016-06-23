@@ -55,7 +55,7 @@ private[hive] object SparkSQLEnv extends Logging {
 
       sparkContext = new SparkContext(sparkConf)
       sparkContext.addSparkListener(new StatsReportListener())
-      hiveContext = new HiveContext(sparkContext)
+      hiveContext = pluginContext(sparkConf, sparkContext)
 
       hiveContext.metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
       hiveContext.metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
@@ -71,6 +71,21 @@ private[hive] object SparkSQLEnv extends Logging {
     }
   }
 
+  private def pluginContext (sparkConf: SparkConf, sc: SparkContext): HiveContext = {
+    val clsName = sparkConf.getOption("spark.sql.context")
+      .getOrElse("org.apache.spark.sql.hive.llap.LlapContext")
+    val ctx = {
+      try {
+        val ctor = Utils.classForName(clsName).getConstructor(classOf[SparkContext])
+        ctor.newInstance(sc).asInstanceOf[HiveContext]
+      } catch {
+        case _: Throwable =>
+          logInfo(s"Cannot initialize $clsName, fallback to HiveContext")
+          new HiveContext(sc)
+      }
+    }
+    ctx
+  }
   /** Cleans up and shuts down the Spark SQL environments. */
   def stop() {
     logDebug("Shutting down Spark SQL Environment")
