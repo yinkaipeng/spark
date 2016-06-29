@@ -62,3 +62,4 @@ BUG FIXES
   SPARK-14062   Fix log4j and upload metrics.properties automatically with distributed cache
   SPARK-11182   HDFS Delegation Token will be expired when calling "UserGroupInformation.getCurrentUser.addCredentials" in HA mode
   SPARK-7889    Jobs progress of apps on complete page of HistoryServer shows uncompleted
+  SPARK-15990   Add rolling log aggregation support for Spark on yarn
