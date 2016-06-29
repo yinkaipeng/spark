@@ -70,3 +70,4 @@ BUG FIXES
   SPARK-16214 fix the denominator of SparkPi
   SPARK-16077 Python UDF may fail because of six
   SPARK-16193 Address flaky ExternalAppendOnlyMapSuite spilling tests
+  SPARK-15990   Add rolling log aggregation support for Spark on yarn
