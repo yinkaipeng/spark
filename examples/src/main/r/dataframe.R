@@ -33,13 +33,8 @@ printSchema(df)
 #  |-- name: string (nullable = true)
 #  |-- age: double (nullable = true)
 
-# Create a DataFrame from a JSON file
-path <- file.path(Sys.getenv("SPARK_HOME"), "examples/src/main/resources/people.json")
-peopleDF <- read.json(sqlContext, path)
-printSchema(peopleDF)
-
 # Register this DataFrame as a table.
-registerTempTable(peopleDF, "people")
+registerTempTable(df, "people")
 
 # SQL statements can be run by using the sql methods provided by sqlContext
 teenagers <- sql(sqlContext, "SELECT name FROM people WHERE age >= 13 AND age <= 19")
