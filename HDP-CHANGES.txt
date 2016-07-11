@@ -30,6 +30,8 @@ IMPROVEMENTS
   SPARK-11315 Add YARN extension service to publish Spark events to YARN timeline service (part of SPARK-1537)
   SPARK-11323 Add History Service Provider to service application histories from YARN timeline server (part of SPARK-1537)
   SPARK-6717 Clear shuffle files after checkpointing in ALS
+  SPARK-11563 Use RpcEnv to transfer generated classes in spark-shell
+  SPARK-12967 NettyRPC races with SparkContext.stop() and throws exception
 
 BUG FIXES
 
@@ -62,4 +64,12 @@ BUG FIXES
   SPARK-14062   Fix log4j and upload metrics.properties automatically with distributed cache
   SPARK-11182   HDFS Delegation Token will be expired when calling "UserGroupInformation.getCurrentUser.addCredentials" in HA mode
   SPARK-7889    Jobs progress of apps on complete page of HistoryServer shows uncompleted
+  SPARK-15067 YARN executors are launched with fixed perm gen size
+  SPARK-13278 Launcher fails to start with JDK 9 EA
+  SPARK-13902 Make DAGScheduler not to create duplicate stage
+  SPARK-6005 Flaky test: o.a.s.streaming.kafka.DirectKafkaStreamSuite.offset recovery
+  SPARK-15606 Driver hang in o.a.s.DistributedSuite on 2 core machine
+  SPARK-16214 fix the denominator of SparkPi
+  SPARK-16077 Python UDF may fail because of six
+  SPARK-16193 Address flaky ExternalAppendOnlyMapSuite spilling tests
   SPARK-15990   Add rolling log aggregation support for Spark on yarn
