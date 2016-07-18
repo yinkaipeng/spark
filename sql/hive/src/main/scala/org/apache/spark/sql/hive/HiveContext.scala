@@ -236,6 +236,17 @@ class HiveContext private[hive](
   defaultOverrides()
 
   /**
+   * set/get current session user
+   */
+  var user: String = null
+  def setUser(userName: String) : Unit = {
+    user = userName
+  }
+  def getUser() : String = {
+    user
+  }
+
+  /**
    * The copy of the Hive client that is used to retrieve metadata from the Hive MetaStore.
    * The version of the Hive client that is used here must match the metastore that is configured
    * in the hive-site.xml file.

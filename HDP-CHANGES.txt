@@ -5,7 +5,7 @@ INCOMPATIBLE CHANGES
 NEW FEATURES
 
 IMPROVEMENTS
-
+  BUG-58572.   spark-llap: validate security scenarios
   BUG-54962.   (SPARK-14113) Consider marking JobConf closure-cleaning in HadoopRDD as optional.
   SPARK-14091  Consider improving performance of SparkContext.getCallSite().
   SPARK-12948  OrcRelation uses HadoopRDD which can broadcast conf objects frequently.
