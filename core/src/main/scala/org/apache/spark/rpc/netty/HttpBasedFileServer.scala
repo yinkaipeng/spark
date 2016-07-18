@@ -34,11 +34,6 @@ private[netty] class HttpBasedFileServer(conf: SparkConf, securityManager: Secur
     getFileServer().addJar(file)
   }
 
-  override def addDirectory(baseUri: String, path: File): String = {
-    val fixedBaseUri = validateDirectoryUri(baseUri)
-    getFileServer().addDirectory(fixedBaseUri, path.getAbsolutePath())
-  }
-
   def shutdown(): Unit = {
     if (httpFileServer != null) {
       httpFileServer.stop()
