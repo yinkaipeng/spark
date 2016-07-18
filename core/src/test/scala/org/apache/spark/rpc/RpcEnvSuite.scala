@@ -778,29 +778,10 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     val jar = new File(tempDir, "jar")
     Files.write(UUID.randomUUID().toString(), jar, UTF_8)
 
-    val dir1 = new File(tempDir, "dir1")
-    assert(dir1.mkdir())
-    val subFile1 = new File(dir1, "file1")
-    Files.write(UUID.randomUUID().toString(), subFile1, UTF_8)
-
-    val dir2 = new File(tempDir, "dir2")
-    assert(dir2.mkdir())
-    val subFile2 = new File(dir2, "file2")
-    Files.write(UUID.randomUUID().toString(), subFile2, UTF_8)
-
     val fileUri = env.fileServer.addFile(file)
     val fileWithSpecialCharsUri = env.fileServer.addFile(fileWithSpecialChars)
     val emptyUri = env.fileServer.addFile(empty)
     val jarUri = env.fileServer.addJar(jar)
-    val dir1Uri = env.fileServer.addDirectory("/dir1", dir1)
-    val dir2Uri = env.fileServer.addDirectory("/dir2", dir2)
-
-    // Try registering directories with invalid names.
-    Seq("/files", "/jars").foreach { uri =>
-      intercept[IllegalArgumentException] {
-        env.fileServer.addDirectory(uri, dir1)
-      }
-    }
 
     val destDir = Utils.createTempDir()
     val sm = new SecurityManager(conf)
@@ -810,9 +791,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       (file, fileUri),
       (fileWithSpecialChars, fileWithSpecialCharsUri),
       (empty, emptyUri),
-      (jar, jarUri),
-      (subFile1, dir1Uri + "/file1"),
-      (subFile2, dir2Uri + "/file2"))
+      (jar, jarUri))
     files.foreach { case (f, uri) =>
       val destFile = new File(destDir, f.getName())
       Utils.fetchFile(uri, destDir, conf, sm, hc, 0L, false)
@@ -820,7 +799,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
 
     // Try to download files that do not exist.
-    Seq("files", "jars", "dir1").foreach { root =>
+    Seq("files", "jars").foreach { root =>
       intercept[Exception] {
         val uri = env.address.toSparkURL + s"/$root/doesNotExist"
         Utils.fetchFile(uri, destDir, conf, sm, hc, 0L, false)
