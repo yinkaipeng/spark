@@ -31,7 +31,6 @@ IMPROVEMENTS
   SPARK-11315  Add YARN extension service to publish Spark events to YARN timeline service (part of SPARK-1537)
   SPARK-11323  Add History Service Provider to service application histories from YARN timeline server (part of SPARK-1537)
   SPARK-6717   Clear shuffle files after checkpointing in ALS
-  SPARK-11563  Use RpcEnv to transfer generated classes in spark-shell
   SPARK-12967  NettyRPC races with SparkContext.stop() and throws exception
 
 BUG FIXES
