@@ -212,7 +212,6 @@ crashes.
 explicitly (`sc.stop()`), or in Python using the `with SparkContext() as sc:` construct
 to handle the Spark Context setup and tear down.
 
-<<<<<<< HEAD
 ## Integration with the YARN Timeline Server
 
 Spark Applications can be configured to publish events to the YARN Timeline Server, from where
