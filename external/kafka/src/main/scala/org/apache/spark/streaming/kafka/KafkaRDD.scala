@@ -28,7 +28,7 @@ import org.apache.spark.util.NextIterator
 import kafka.api.{FetchRequestBuilder, FetchResponse}
 import kafka.common.{ErrorMapping, TopicAndPartition}
 import kafka.consumer.SimpleConsumer
-import kafka.message.{MessageAndMetadata, MessageAndOffset}
+import kafka.message.{MessageAndMetadata, MessageAndOffset, Message}
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
 
@@ -220,7 +220,8 @@ class KafkaRDD[
         } else {
           requestOffset = item.nextOffset
           messageHandler(new MessageAndMetadata(
-            part.topic, part.partition, item.message, item.offset, keyDecoder, valueDecoder))
+            topic = part.topic, partition = part.partition, rawMessage = item.message,
+            offset = item.offset, keyDecoder = keyDecoder, valueDecoder = valueDecoder))
         }
       }
     }

@@ -251,6 +251,33 @@ private[spark] class Client(
       appContext.setResource(capability)
     }
 
+    sparkConf.getOption("spark.yarn.rolledLog.includePattern").foreach { includePattern =>
+      try {
+        val logAggregationContext = Records.newRecord(
+          Utils.classForName("org.apache.hadoop.yarn.api.records.LogAggregationContext"))
+          .asInstanceOf[Object]
+
+        val setRolledLogsIncludePatternMethod =
+          logAggregationContext.getClass.getMethod("setRolledLogsIncludePattern", classOf[String])
+        setRolledLogsIncludePatternMethod.invoke(logAggregationContext, includePattern)
+
+        sparkConf.getOption("spark.yarn.rolledLog.excludePattern").foreach { excludePattern =>
+          val setRolledLogsExcludePatternMethod =
+            logAggregationContext.getClass.getMethod("setRolledLogsExcludePattern", classOf[String])
+          setRolledLogsExcludePatternMethod.invoke(logAggregationContext, excludePattern)
+        }
+
+        val setLogAggregationContextMethod =
+          appContext.getClass.getMethod("setLogAggregationContext",
+            Utils.classForName("org.apache.hadoop.yarn.api.records.LogAggregationContext"))
+        setLogAggregationContextMethod.invoke(appContext, logAggregationContext)
+      } catch {
+        case NonFatal(e) =>
+          logWarning(s"Ignoring spark.yarn.rolledLog.includePattern because the version of YARN " +
+            s"does not support it", e)
+      }
+    }
+
     appContext
   }
 
@@ -937,7 +964,6 @@ private[spark] class Client(
     amContainer.setApplicationACLs(
       YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager).asJava)
     setupSecurityToken(amContainer)
-    UserGroupInformation.getCurrentUser().addCredentials(credentials)
 
     amContainer
   }
@@ -968,7 +994,8 @@ private[spark] class Client(
       // were the credentials from the environment?
       credentialsFromEnvironment = YarnSparkHadoopUtil.get.environmentCredentialsFile().isDefined
     }
-    credentials = UserGroupInformation.getCurrentUser.getCredentials
+    // Defensive copy of the credentials
+    credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
   }
 
   /**

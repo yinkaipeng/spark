@@ -25,6 +25,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.{Logging, SparkFunSuite}
 import org.apache.spark.deploy.history.yarn.YarnHistoryService
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
+import org.apache.spark.deploy.history.yarn.publish.EntityConstants
 import org.apache.spark.deploy.history.yarn.testtools.ExtraAssertions
 import org.apache.spark.deploy.history.yarn.testtools.YarnTestUtils._
 import org.apache.spark.scheduler.{AccumulableInfo, JobSucceeded, SparkListenerBlockUpdated, SparkListenerEvent, SparkListenerJobEnd, SparkListenerStageCompleted, SparkListenerStageSubmitted, SparkListenerTaskGettingResult, SparkListenerTaskStart, StageInfo, TaskInfo, TaskLocality}
@@ -58,7 +59,7 @@ class EventMarshallingSuite extends SparkFunSuite
 
   test("unmarshall entity type") {
     val event = new TimelineEvent
-    event.setEventType(YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
+    event.setEventType(EntityConstants.SPARK_SUMMARY_ENTITY_TYPE)
     val ex = intercept[IOException] {
       toSparkEvent(event)
     }

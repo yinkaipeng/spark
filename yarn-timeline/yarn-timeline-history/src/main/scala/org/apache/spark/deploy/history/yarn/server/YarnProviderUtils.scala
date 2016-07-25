@@ -24,8 +24,8 @@ import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.Logging
-import org.apache.spark.deploy.history.yarn.YarnHistoryService._
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
+import org.apache.spark.deploy.history.yarn.publish.EntityConstants._
 
 /**
  * Utils on the history server-side.
@@ -37,6 +37,11 @@ private[spark] object YarnProviderUtils extends Logging {
    */
   val UNSET_TIME_VALUE = 0L
 
+  /**
+   * A little const which implements policy: if true it means the spark attempt ID is
+   * the ID to use for attempt IDs. Otherwise the YARN attempt ID (which has guaranteed
+   * uniqueness in the cluster) is used
+   */
   val ENTITY_ID_IS_SPARK_ATTEMPT_ID = false
 
   /**

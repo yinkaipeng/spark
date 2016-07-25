@@ -318,6 +318,14 @@ If you need a reference to the proper location to put log files in the YARN so t
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.executor.failuresValidityInterval</code></td>
+  <td>(none)</td>
+  <td>
+  Defines the validity interval for executor failure tracking.
+  Executor failures which are older than the validity interval will be ignored.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.submit.waitAppCompletion</code></td>
   <td><code>true</code></td>
   <td>
@@ -404,6 +412,30 @@ If you need a reference to the proper location to put log files in the YARN so t
   application being run.
   <p/>
   Currently supported services are: <code>hive</code>, <code>hbase</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.rolledLog.includePattern</code></td>
+  <td>(none)</td>
+  <td>
+  Java Regex to filter the log files which match the defined include pattern
+  and those log files will be aggregated in a rolling fashion.
+  This will be used with YARN's rolling log aggregation, to enable this feature in YARN side
+  <code>yarn.nodemanager.log-aggregation.roll-monitoring-interval-seconds</code> should be
+  configured in yarn-site.xml.
+  This feature can only be used with Hadoop 2.6.1+. The Spark log4j appender needs be changed to use
+  FileAppender or another appender that can handle the files being removed while its running. Based
+  on the file name configured in the log4j configuration (like spark.log), the user should set the
+  regex (spark*) to include all the log files that need to be aggregated.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.rolledLog.excludePattern</code></td>
+  <td>(none)</td>
+  <td>
+  Java Regex to filter the log files which match the defined exclude pattern
+  and those log files will not be aggregated in a rolling fashion. If the log file
+  name matches both the include and the exclude pattern, this file will be excluded eventually.
   </td>
 </tr>
 </table>

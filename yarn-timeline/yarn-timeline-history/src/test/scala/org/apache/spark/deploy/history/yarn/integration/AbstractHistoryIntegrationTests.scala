@@ -19,6 +19,7 @@ package org.apache.spark.deploy.history.yarn.integration
 
 import java.io.{File, IOException}
 import java.net.URL
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.logging.Logger
 
 import scala.collection.mutable
@@ -39,13 +40,14 @@ import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.deploy.history.yarn.YarnHistoryService._
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.history.yarn.server.TimelineQueryClient._
 import org.apache.spark.status.api.v1.{JobData, StageData}
-import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.history.{ApplicationHistoryProvider, FsHistoryProvider, HistoryServer}
-import org.apache.spark.deploy.history.yarn.{YarnHistoryService, YarnTimelineUtils}
+import org.apache.spark.deploy.history.yarn.{ExtendedMetricsSource, YarnHistoryService, YarnTimelineUtils}
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
+import org.apache.spark.deploy.history.yarn.publish.EntityConstants._
+import org.apache.spark.deploy.history.yarn.publish.PublishMetricNames._
 import org.apache.spark.deploy.history.yarn.rest.JerseyBinding._
 import org.apache.spark.deploy.history.yarn.rest.{HttpOperationResponse, SpnegoUrlConnector}
 import org.apache.spark.deploy.history.yarn.server.{TimelineQueryClient, YarnHistoryProvider}
@@ -270,7 +272,7 @@ abstract class AbstractHistoryIntegrationTests
 
   def dumpTimelineEntities(queryClient: TimelineQueryClient)(): Unit = {
     logError("-- Dumping timeline entities --")
-    val entities = queryClient.listEntities(YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
+    val entities = queryClient.listEntities(SPARK_SUMMARY_ENTITY_TYPE)
     entities.foreach { e =>
       logError(describeEntity(e))
     }
@@ -383,7 +385,7 @@ abstract class AbstractHistoryIntegrationTests
     historyService.asyncFlush()
     awaitEmptyQueue(history, delay)
     assert(0 === history.postFailures, s"Post failure count: $history")
-    assert(0 === history.eventsDropped, s"Dropped events: $history")
+    assert(0 === historyMetric(SPARK_EVENTS_DROPPED), s"Dropped events: $history")
   }
 
   /**
@@ -893,6 +895,7 @@ abstract class AbstractHistoryIntegrationTests
 
     conf.setLong(TIMELINE_SERVICE_ENTITYGROUP_FS_STORE_SCAN_INTERVAL_SECONDS, 1)
     conf.setLong(TIMELINE_SERVICE_ENTITYGROUP_FS_STORE_UNKNOWN_ACTIVE_SECONDS, 10)
+    conf.setLong(TIMELINE_SERVICE_ENTITYGROUP_FS_STORE_THREADS, 4)
 
     conf.setLong(YARN_CLIENT_APPLICATION_CLIENT_PROTOCOL_POLL_INTERVAL_MS, 100)
     conf.getLong(YARN_CLIENT_APPLICATION_CLIENT_PROTOCOL_POLL_TIMEOUT_MS, 1000)
@@ -901,7 +904,7 @@ abstract class AbstractHistoryIntegrationTests
 
     conf.set(TIMELINE_SERVICE_ENTITYGROUP_FS_STORE_SUMMARY_ENTITY_TYPES,
       "YARN_APPLICATION,YARN_APPLICATION_ATTEMPT,YARN_CONTAINER,"
-          + YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
+          + SPARK_SUMMARY_ENTITY_TYPE)
     // reset current app map
     FSTimelineStoreForTesting.reset()
   }
@@ -936,14 +939,41 @@ abstract class AbstractHistoryIntegrationTests
       SPARK_SUMMARY_ENTITY_TYPE
     }
   }
+
+  /**
+   * Look up any named metric from the history service, return its
+   * long value. The metric must exist
+   * @param name metric name
+   * @return its value
+   */
+  def historyMetric(name: String): Long = {
+    assert(historyService.lookup(name).isDefined, s"No metric $name")
+    historyService.metricValue(name)
+  }
+
+  /**
+   * Assert that a history service metric has a given value
+   * @param name metric name
+   * @param expected expected value
+   */
+  def assertHistoryMetricHasValue(name: String, expected:Long): Unit = {
+    assertMetricHasValue(historyService, name, expected)
+  }
+
 }
 
+/**
+ * Any static fields and methods to span test suites
+ */
 private object AbstractHistoryIntegrationTests {
-  private var counter: Int = 0
+  private var counter = new AtomicInteger(0)
 
+  /**
+   * A factory of filenames unique across the lifespan of the JVM.
+   * There is no attempt to hold such a guarantee across test runs
+   * @return the next filename to use
+   */
   private def nextFilename(): String = {
-    val c = counter
-    counter += 1
-    Integer.toString(counter, 16)
+    Integer.toString(counter.getAndIncrement(), 16)
   }
 }

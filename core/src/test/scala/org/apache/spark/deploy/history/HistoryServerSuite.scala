@@ -74,7 +74,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set("spark.testing", "true")
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
-    val securityManager = new SecurityManager(conf)
+    val securityManager = HistoryServer.createSecurityManager(conf)
 
     server = new HistoryServer(conf, provider, securityManager, 18080)
     server.initialize()
@@ -141,8 +141,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "stage task list from multi-attempt app json(2)" ->
       "applications/local-1426533911241/2/stages/0/0/taskList",
 
-    "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
-    "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
+    "rdd list storage json" -> "applications/local-1422981780767/storage/rdd"
+    // Todo: enable this test when logging the even of onBlockUpdated. See: SPARK-13845
+    // "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
   )
 
   // run a bunch of characterization tests -- just verify the behavior is the same as what is saved
@@ -294,6 +295,17 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     val urls = response \\ "@href" map (_.toString)
     val siteRelativeLinks = urls filter (_.startsWith("/"))
     all (siteRelativeLinks) should startWith (uiRoot)
+  }
+
+  /**
+   * Verify that the security manager needed for the history server can be instantiated
+   * even if spark.authenticate is set
+   */
+  test("SecurityManagerStartsWithSecureShuffle") {
+    val conf = new SparkConf()
+        .set("spark.testing", "true")
+        .set(SecurityManager.SPARK_AUTH_CONF, "true")
+    HistoryServer.createSecurityManager(conf)
   }
 
   test("incomplete apps get refreshed") {

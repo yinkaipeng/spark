@@ -26,6 +26,7 @@ import org.mockito.Mockito._
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.history.yarn.YarnEventListener
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
+import org.apache.spark.deploy.history.yarn.publish.PublishMetricNames
 import org.apache.spark.deploy.history.yarn.testtools.YarnTestUtils._
 import org.apache.spark.scheduler.SparkListenerJobStart
 
@@ -62,7 +63,7 @@ class MockHistoryBulkPostingSuite extends AbstractMockHistorySuite {
       }
       // events dropped
       awaitAtLeast(batchSize, TEST_STARTUP_DELAY,
-        () => service.eventsDropped,
+        () => service.metricValue(PublishMetricNames.SPARK_EVENTS_DROPPED),
         service.toString())
 
       // posts failed

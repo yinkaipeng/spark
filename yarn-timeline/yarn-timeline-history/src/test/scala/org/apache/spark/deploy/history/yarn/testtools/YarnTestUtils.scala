@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.history.yarn.testtools
 
-import java.io.{InputStream, IOException}
+import java.io.{IOException, InputStream}
 import java.net.URL
 import java.text.SimpleDateFormat
 
@@ -33,6 +33,8 @@ import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.history.yarn.YarnHistoryService._
+import org.apache.spark.deploy.history.yarn.publish.EntityConstants._
+import org.apache.spark.deploy.history.yarn.publish.PublishMetricNames
 import org.apache.spark.deploy.history.yarn.{YarnHistoryService, YarnTimelineUtils}
 import org.apache.spark.scheduler.{JobFailed, JobSucceeded, SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerEnvironmentUpdate, SparkListenerEvent, SparkListenerJobEnd, SparkListenerJobStart}
 import org.apache.spark.util.Utils
@@ -83,7 +85,7 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
   /**
    * Time to wait for anything to start/state to be reached
    */
-  val TEST_STARTUP_DELAY = 5000
+  val TEST_STARTUP_DELAY = 20000
 
   /** probes during service shutdown need to handle delayed posting */
   val SERVICE_SHUTDOWN_DELAY = 10000
@@ -91,7 +93,7 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
   /**
    * Time to wait for timeline scans before failing
    */
-  val TIMELINE_SCAN_DELAY = 2000
+  val TIMELINE_SCAN_DELAY = 10000
 
   def newApplicationId(clusterTimestamp: Long, id: Int): ApplicationId = {
     ApplicationId.newInstance(clusterTimestamp, id)
@@ -431,7 +433,6 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
         val message = s"event count mismatch; $details;"
         logError(message)
         fail(message)
-        fail(s"Expected $details")
         }
     }
 
@@ -498,7 +499,8 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
     spinForState(s"awaiting flush count of $count",
       interval = 50,
       timeout = timeout,
-      probe = () => outcomeFromBool(historyService.getFlushCount >= count),
+      probe = () => outcomeFromBool(
+        historyService.metricValue(PublishMetricNames.SPARK_EVENTS_FLUSH_COUNT) >= count),
       failure = (_, _, _) => fail(s"flush count not $count after $timeout mS in $historyService"))
   }
 
@@ -604,7 +606,7 @@ object YarnTestUtils extends ExtraAssertions with FreePortFinder {
    */
   def awaitSequenceSize[T](
       expectedSize: Int,
-      message: String,
+      message: => String,
       timeout: Long,
       operation: () => Seq[T]): Seq[T] = {
     // last list fetched

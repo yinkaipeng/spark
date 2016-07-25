@@ -24,7 +24,7 @@ import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity
 import org.scalatest.Assertions
 
 import org.apache.spark.Logging
-import org.apache.spark.deploy.history.yarn.YarnHistoryService
+import org.apache.spark.deploy.history.yarn.{ExtendedMetricsSource, YarnHistoryService}
 import org.apache.spark.deploy.history.yarn.YarnTimelineUtils._
 
 /**
@@ -250,4 +250,16 @@ trait ExtraAssertions extends Logging with Assertions {
         fail(s"No entry for key $key")
     }
   }
+
+  /**
+   * Assert that a metric has a given value
+   * @param source metric source
+   * @param name metric name
+   * @param expected expected value
+   */
+  def assertMetricHasValue(source: ExtendedMetricsSource, name: String, expected: Long): Unit = {
+    assert(source.lookup(name).isDefined, s"No metric $name  in $source")
+    assert(expected === source.metricValue(name), s"In $source")
+  }
+
 }

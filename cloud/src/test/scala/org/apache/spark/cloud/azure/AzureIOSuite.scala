@@ -15,19 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.cloud.azure
 
-import java.util.EventListener
+import org.apache.spark.cloud.common.BasicIOTests
 
-import org.apache.spark.TaskContext
-import org.apache.spark.annotation.DeveloperApi
+private[cloud] class AzureIOSuite extends BasicIOTests with AzureTestSetup {
 
-/**
- * :: DeveloperApi ::
- *
- * Listener providing a callback function to invoke when a task's execution completes.
- */
-@DeveloperApi
-trait TaskCompletionListener extends EventListener {
-  def onTaskCompletion(context: TaskContext)
+  init()
+
+  def init(): Unit = {
+    // propagate credentials
+    if (enabled) {
+      initFS()
+    }
+  }
+
 }

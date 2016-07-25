@@ -38,7 +38,7 @@ import org.json4s.JsonAST.{JArray, JBool, JDecimal, JDouble, JInt, JNothing, JNu
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.Logging
-import org.apache.spark.deploy.history.yarn.YarnHistoryService._
+import org.apache.spark.deploy.history.yarn.publish.EntityConstants._
 import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerEvent, SparkListenerExecutorAdded, SparkListenerExecutorRemoved, SparkListenerJobEnd, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerStageSubmitted}
 import org.apache.spark.util.{JsonProtocol, Utils}
 
@@ -280,6 +280,19 @@ private[yarn] object YarnTimelineUtils extends Logging {
   }
 
   /**
+   * Get the time when an entity was last updated
+   * @param entity entity
+   * @return the value of the update time, or `None`
+   */
+  def lastUpdatedTime(entity: TimelineEntity): Option[Long] = {
+    entity.getOtherInfo.asScala.get("lastUpdated") match {
+      case Some(l) if l.isInstanceOf[Long] => Some(l.asInstanceOf[Long])
+      case _ =>
+        None
+    }
+  }
+
+  /**
    * Convert a `java.lang.Long` reference to a string value, or, if the reference is null,
    * to text declaring that the named field is empty.
    *
@@ -361,7 +374,7 @@ private[yarn] object YarnTimelineUtils extends Logging {
   def createYarnTimelineClient(hadoopConfiguration: Configuration): TimelineClient = {
     val client = TimelineClient.createTimelineClient()
     hadoopConfiguration.set("yarn.timeline-service.entity-group-fs-store.summary-entity-types",
-      YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
+      SPARK_SUMMARY_ENTITY_TYPE)
     client.init(hadoopConfiguration)
     client.start()
     client
@@ -421,7 +434,7 @@ private[yarn] object YarnTimelineUtils extends Logging {
    * @return
    */
   def timelineWebappUri(conf: Configuration): URI = {
-    timelineWebappUri(conf, YarnHistoryService.SPARK_SUMMARY_ENTITY_TYPE)
+    timelineWebappUri(conf, SPARK_SUMMARY_ENTITY_TYPE)
   }
 
   /**
@@ -717,8 +730,52 @@ private[yarn] object YarnTimelineUtils extends Logging {
   }
 
   /**
-   * Generate the entity ID from the application and attempt ID.
-   * Current policy is to use the attemptId, falling back to the YARN application ID.
+   * Generate the timeline entity.
+   *
+   * @param entityType the entity type to declare the entity as
+   * @param yarnDetails yarn attempt details
+   * @param startTime time in milliseconds when this entity was started (must be non zero)
+   * @param endTime time in milliseconds when this entity was last updated (0 means not ended)
+   * @param lastUpdated time in milliseconds when this entity was last updated (0 leaves unset)
+   * @return the timeline entity
+   */
+  def createTimelineEntity(
+      entityType: String,
+      yarnDetails: AppAttemptDetails,
+      startTime: Long,
+      endTime: Long,
+      lastUpdated: Long,
+      entityCount : Long): TimelineEntity = {
+    require(entityType != null, "no entityType Id")
+    require(yarnDetails.appId != null, "no application Id")
+    require(startTime > 0, "no start time")
+
+    val entity = new TimelineEntity()
+    val entityId = buildEntityId(yarnDetails.appId, yarnDetails.attemptId)
+    val appIdField = yarnDetails.appId.toString
+    entity.setEntityType(entityType)
+    entity.setEntityId(entityId)
+    // add app/attempt ID information
+    addFilterAndField(entity, FIELD_APPLICATION_ID, appIdField)
+    yarnDetails.groupId.foreach { id =>
+      entity.addOtherInfo(FIELD_GROUP_INSTANCE_ID, id)
+    }
+    entity.addOtherInfo(FIELD_SPARK_VERSION, org.apache.spark.SPARK_VERSION)
+    entity.addOtherInfo(FIELD_ENTITY_VERSION, entityCount)
+    started(entity, startTime)
+    if (endTime != 0) {
+      entity.addPrimaryFilter(FILTER_APP_END, FILTER_APP_END_VALUE)
+      entity.addOtherInfo(FIELD_END_TIME, endTime)
+    }
+    if (lastUpdated != 0) {
+      entity.addOtherInfo(FIELD_LAST_UPDATED, lastUpdated)
+    }
+    entity
+  }
+
+  /**
+   * Generate the timeline entity, adding in the spark details as filters.
+   *
    * @param entityType the entity type to declare the entity as
    * @param yarnDetails yarn attempt details
    * @param sparkDetails application details submitted in the application start event
@@ -734,37 +791,30 @@ private[yarn] object YarnTimelineUtils extends Logging {
       startTime: Long,
       endTime: Long,
       lastUpdated: Long,
-      entityCount : Long): TimelineEntity = {
-    require(entityType != null, "no entityType Id")
-    require(yarnDetails.appId != null, "no application Id")
-    require(sparkDetails.appName != null, "no application name")
-    require(startTime > 0, "no start time")
+      entityCount: Long): TimelineEntity = {
+    val entity = createTimelineEntity(entityType, yarnDetails, startTime, endTime,
+      lastUpdated, entityCount)
+    addSparkAttemptDetails(entity, sparkDetails)
+    entity
+  }
 
-    val entity = new TimelineEntity()
-    val entityId = buildEntityId(yarnDetails.appId, yarnDetails.attemptId)
-    val appIdField = buildApplicationIdField(yarnDetails.appId)
-    entity.setEntityType(entityType)
-    entity.setEntityId(entityId)
-    // add app/attempt ID information
-    addFilterAndField(entity, FIELD_APPLICATION_ID, appIdField)
+  /**
+   * AAdd details about a spark attempt to an entity
+   * @param entity entity to update
+   * @param sparkDetails details to patch
+   */
+  def addSparkAttemptDetails(
+      entity: TimelineEntity,
+      sparkDetails: SparkAppAttemptDetails): Unit = {
+    require(sparkDetails.appName != null, "no application name")
+    require(sparkDetails.sparkApplicationAttemptId != null,
+      "no sparkApplicationAttemptId")
+    require(sparkDetails.sparkApplicationAttemptId != null,
+      "no username")
     addFilterAndField(entity, FIELD_APP_USER, sparkDetails.userName)
     entity.addOtherInfo(FIELD_ATTEMPT_ID,
       buildApplicationAttemptIdField(sparkDetails.sparkApplicationAttemptId))
     entity.addOtherInfo(FIELD_APP_NAME, sparkDetails.appName)
-    yarnDetails.groupId.foreach { id =>
-      entity.addOtherInfo(FIELD_GROUP_INSTANCE_ID, id)
-    }
-    entity.addOtherInfo(FIELD_SPARK_VERSION, org.apache.spark.SPARK_VERSION)
-    entity.addOtherInfo(FIELD_ENTITY_VERSION, entityCount)
-    started(entity, startTime)
-    if (endTime != 0) {
-      entity.addPrimaryFilter(FILTER_APP_END, FILTER_APP_END_VALUE)
-      entity.addOtherInfo(FIELD_END_TIME, endTime)
-    }
-    if (lastUpdated != 0) {
-      entity.addOtherInfo(FIELD_LAST_UPDATED, lastUpdated)
-    }
-    entity
   }
 
   /**

@@ -15,25 +15,24 @@
  * limitations under the License.
  */
 
-package test.org.apache.spark;
+package org.apache.spark.cloud.azure
 
-import org.apache.spark.TaskContext;
-import org.apache.spark.util.TaskCompletionListener;
+import java.net.URI
 
+import org.apache.hadoop.fs.FileSystem
+
+import org.apache.spark.cloud.CloudSuite
 
 /**
- * A simple implementation of TaskCompletionListener that makes sure TaskCompletionListener and
- * TaskContext is Java friendly.
+ * Trait for S3A tests
  */
-public class JavaTaskCompletionListenerImpl implements TaskCompletionListener {
+private[cloud] trait AzureTestSetup extends CloudSuite {
 
-  @Override
-  public void onTaskCompletion(TaskContext context) {
-    context.isCompleted();
-    context.isInterrupted();
-    context.stageId();
-    context.partitionId();
-    context.isRunningLocally();
-    context.addTaskCompletionListener(this);
+  override def enabled: Boolean = super.enabled && conf.getBoolean(AZURE_TESTS_ENABLED, false)
+
+  def initFS(): FileSystem = {
+    val uri = new URI(requiredOption(AZURE_TEST_URI))
+    logDebug(s"Executing S3 tests against $uri")
+    createFilesystem(uri)
   }
 }

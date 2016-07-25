@@ -15,14 +15,22 @@
  * limitations under the License.
  */
 
-import sbt._
-import sbt.Keys._
+package org.apache.spark.deploy.history.yarn.publish
 
-/**
- * This plugin project is there because we use our custom fork of sbt-pom-reader plugin. This is
- * a plugin project so that this gets compiled first and is available on the classpath for SBT build.
- */
-object SparkPluginDef extends Build {
-  lazy val root = Project("plugins", file(".")) dependsOn(sbtPomReader)
-  lazy val sbtPomReader = uri("https://github.com/ScrapCodes/sbt-pom-reader.git#ignore_artifact_id")
+import java.util.concurrent.atomic.AtomicBoolean
+
+import org.apache.spark.Logging
+import org.apache.spark.deploy.history.yarn.{ExtendedMetricsSource, TimeSource}
+
+abstract class AbstractPublisher extends Logging with TimeSource with ExtendedMetricsSource{
+
+  private val started = new AtomicBoolean(false)
+
+  def start(): Unit = {
+    if (started.getAndSet(true)) {
+      throw new IllegalStateException(s"service is already started: $this")
+    }
+  }
+
+
 }

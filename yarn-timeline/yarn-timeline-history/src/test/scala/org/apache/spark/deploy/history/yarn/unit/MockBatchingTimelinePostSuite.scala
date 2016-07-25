@@ -28,7 +28,7 @@ import org.apache.spark.deploy.history.yarn.testtools.YarnTestUtils._
  * Mock tests with Batch size 1.
  */
 class MockBatchingTimelinePostSuite extends AbstractMockHistorySuite
-    with TimelineSingleEntryBatchSize {
+    with TimelineSingleEntryBatchSize   {
 
   test("retry upload on failure") {
     describe("mock failures, verify retry count incremented")
@@ -45,7 +45,9 @@ class MockBatchingTimelinePostSuite extends AbstractMockHistorySuite
     service.stop()
     awaitServiceThreadStopped(service, TEST_STARTUP_DELAY)
     // there should have been three flushed
-    assert(eventsPosted === service.getFlushCount, s"expected $eventsPosted flushed for $service" )
+    assert(eventsPosted === service.flushCount,
+      s"expected $eventsPosted flushed for $service" )
+
     verify(timelineClient, times(service.postAttempts.toInt))
       .putEntities(any(classOf[TimelineEntity]))
   }
