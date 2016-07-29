@@ -81,3 +81,4 @@ BUG FIXES
   (Jira in Apache Spark is IN PROGRESS)
   SPARK-15844   HistoryServer doesn't come up if spark.authenticate = true
   SPARK-7481    Add spark-cloud module to pull in aws+azure object store FS accessors; test integration
+  SPARK-16664   Fix persist call on Data frames with more than 200 columns
