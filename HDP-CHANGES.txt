@@ -76,6 +76,8 @@ BUG FIXES
   SPARK-16193   Address flaky ExternalAppendOnlyMapSuite spilling tests
   SPARK-15990   Add rolling log aggregation support for Spark on yarn
   SPARK-6735    Add window based executor failure tracking mechanism for long running service
+  (Spark 2.1 backport)
+  SPARK-16110   Can't set Python via spark-submit for YARN cluster mode when PYSPARK_PYTHON & PYSPARK_DRIVER_PYTHON are set
   (Jira in Apache Spark is IN PROGRESS)
   SPARK-15844   HistoryServer doesn't come up if spark.authenticate = true
   SPARK-7481    Add spark-cloud module to pull in aws+azure object store FS accessors; test integration
