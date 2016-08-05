@@ -44,6 +44,7 @@ BUG FIXES
   BUG-59418. changes to KafkaRDD MessageAndMetadata to use named params.
   BUG-57586. Add plugin jar to hdpLib for rpm
   BUG-60859. Fix Spark Streaming Kafka unit test issue
+  BUG-57104. (SPARK-14845) spark.files in properties file is not distributed to driver in yarn-cluster mode
   (Spark 2.0 backport)
   SPARK-6847    Stack overflow on updateStateByKey which followed by a stream with checkpoint set
   SPARK-10582   using dynamic-executor-allocation, if AM failed, the new AM will be started. But the new AM does not allocate executors to driver
@@ -74,9 +75,9 @@ BUG FIXES
   SPARK-16214   fix the denominator of SparkPi
   SPARK-16077   Python UDF may fail because of six
   SPARK-16193   Address flaky ExternalAppendOnlyMapSuite spilling tests
-  SPARK-15990   Add rolling log aggregation support for Spark on yarn
   SPARK-6735    Add window based executor failure tracking mechanism for long running service
   (Spark 2.1 backport)
+  SPARK-15990   Add rolling log aggregation support for Spark on yarn
   SPARK-16110   Can't set Python via spark-submit for YARN cluster mode when PYSPARK_PYTHON & PYSPARK_DRIVER_PYTHON are set
   (Jira in Apache Spark is IN PROGRESS)
   SPARK-15844   HistoryServer doesn't come up if spark.authenticate = true
