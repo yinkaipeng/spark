@@ -82,3 +82,97 @@ BUG FIXES
   (Jira in Apache Spark is IN PROGRESS)
   SPARK-15844   HistoryServer doesn't come up if spark.authenticate = true
   SPARK-7481    Add spark-cloud module to pull in aws+azure object store FS accessors; test integration
+  BUG-60827     Fix build failure
+  SPARK-10722   RDDBlockId not found in driver-heartbeater
+  SPARK-11327   Dispatcher does not respect all args from the Submit request
+  SPARK-11507   Add compact in Matrices fromBreeze
+  SPARK-11515   QuantileDiscretizer should take random seed
+  SPARK-11563   Use RpcEnv to transfer REPL-generated classes.
+  SPARK-12655   GraphX does not unpersist RDDs
+  SPARK-12712   Fix failure in ./dev/test-dependencies when run against empty .m2 cache
+  SPARK-12941   Spark-SQL JDBC Oracle dialect fails to map string datatypes to Oracle VARCHAR datatype mapping
+  SPARK-13023   Fix handling of root module in modules_to_test()
+  SPARK-13207   Make partitioning discovery ignore _SUCCESS files.
+  SPARK-13227   Risky apply() in OpenHashMap
+  SPARK-13242   Codegen fallback in case-when if there many branches
+  SPARK-13327   Added parameter validations for colnames
+  SPARK-14290   Fully utilize the network bandwidth for Netty RPC by avoid significant underlying memory copy
+  SPARK-13352   BlockFetch does not scale well on large block
+  SPARK-13444   QuantileDiscretizer chooses bad splits on large DataFrames
+  SPARK-13465   Add a task failure listener to TaskContext
+  SPARK-13519   Driver should tell Executor to stop itself when cleaning executor's state
+  SPARK-13522   Fix the exit log place for heartbeat
+  SPARK-13566   Avoid deadlock between BlockManager and Executor Thread
+  SPARK-13599   Remove transitive groovy dependencies from spark-hive and spark-hiveserver (branch 1.6)
+  SPARK-13601   Use 1 partition in tests to avoid race conditions
+  SPARK-13622   Issue creating level db for YARN shuffle service
+  SPARK-13631   Thread-safe getLocationsWithLargestOutputs
+  SPARK-13648   Add Hive Cli to classes for isolated classloader
+  SPARK-13652   Copy ByteBuffer in sendRpcSync as it will be recycled
+  SPARK-13663   Upgrade Snappy Java to 1.1.2.1
+  SPARK-13697   Fix the missing module name of TransformFunctionSerializer.loads
+  SPARK-13705   UpdateStateByKey Operation documentation incorrectly refers to StatefulNetworkWordCount
+  SPARK-13711   Don't call SparkUncaughtExceptionHandler in AppClient as it's in driver
+  SPARK-13755   Escape quotes in SQL plan visualization node labels
+  SPARK-13772   Fix data type mismatch for decimal
+  SPARK-13803   Restore the changes in SPARK-3411
+  SPARK-13806   Fix rounding mode of negative float/double
+  SPARK-13810   Add Port Configuration Suggestions on Bind Exceptions
+  SPARK-13845   Using onBlockUpdated to replace onTaskEnd avioding driver OOM
+  SPARK-13901   Correct the logDebug information when jump to the next locality level
+  SPARK-13958   Executor OOM due to unbounded growth of pointer array in Sorter
+  SPARK-14006   Fix SparkR lint-r test errors in branch-1.6
+  SPARK-14058   Incorrect docstring in Window.order
+  SPARK-14074   Specify commit sha1 ID when using install_github to install intr package
+  SPARK-14107   Add seed as named argument to GBTs in pyspark
+  SPARK-14138   Fix generated SpecificColumnarIterator code can exceed JVM size limit for cached DataFrames
+  SPARK-14149   Log exceptions in tryOrIOException
+  SPARK-14159   Fixed bug in StringIndexer + related issue in RFormula - 1.6 backport
+  SPARK-14187   Fix incorrect use of binarySearch in SparseMatrix
+  SPARK-14204   Register driverClass rather than user-specified class
+  SPARK-14219   Fix `pickRandomVertex` not to fall into infinite loops for graphs with one vertex
+  SPARK-14232   Fix event timeline display issue when an executor is removed with a multiple line reason
+  SPARK-14242   Avoid copy in compositeBuffer for frame decoder
+  SPARK-14243   Update task metrics when removing blocks
+  SPARK-14261   Memory leak in Spark Thrift Server
+  SPARK-14298   LDA should support disable checkpoint
+  SPARK-14322   Use treeAggregate instead of reduce in OnlineLDAOptimizer
+  SPARK-14357   Properly handle the root cause being a commit denied exception
+  SPARK-14363   Fix executor OOM due to memory leak in the Sorter
+  SPARK-14368   Support python.spark.worker.memory with upper-case unit
+  SPARK-14454   Better exception handling while marking tasks as failed
+  SPARK-14468   Always enable OutputCommitCoordinator
+  SPARK-14495   Fix resolution failure of having clause with distinct aggregate function
+  SPARK-14544   Improve performance of SQL UI tab
+  SPARK-14563   Use a random table name instead of __THIS__ in SQLTransformer
+  SPARK-14618   Updated RegressionEvaluator.metricName param doc
+  SPARK-14665   Fixed bug with StopWordsRemover default stopwords
+  SPARK-14671   Pipeline setStages should handle subclasses of PipelineStage
+  SPARK-14679   Fix UI DAG visualization OOM
+  SPARK-14739   Fix Vectors parser bugs
+  SPARK-14757   Fix nullability bug in EqualNullSafe codegen
+  SPARK-14787   Upgrade Joda-Time library from 2.9 to 2.9.3
+  SPARK-14897   Upgrade Jetty to latest version of 8
+  SPARK-14915   Fix incorrect resolution of merge conflict in commit bf3c0608f1779b4dd837b8289ec1d4516e145aea
+  SPARK-14915   Don't re-queue a task if another attempt has already succeeded
+  SPARK-14965   Indicate an exception is thrown for a missing struct field
+  SPARK-15165   Codegen can break because toCommentSafeString is not actually safe
+  SPARK-15205   Codegen can compile the same source code more than twice
+  SPARK-15209   Fix display of job descriptions with single quotes in web UI timeline
+  SPARK-15223   Fix wrongly named config reference
+  SPARK-15260   Atomically resize memory pools (branch 1.6)
+  SPARK-15262   Synchronize block manager / scheduler executor state
+  SPARK-15528   Fix race condition in NumberConverter
+  SPARK-15601   CircularBuffer's toString() to print only the contents written if buffer isn't full
+  SPARK-15723   SimpleDateParamSuite test is locale-fragile and relies on deprecated short TZ name
+  SPARK-15736   Gracefully handle loss of DiskStore files
+  SPARK-15754   Not letting the credentials containing hdfs delegation tokens to be added in current user credential
+  SPARK-15827   Publish Spark's forked sbt-pom-reader to Maven Central
+  SPARK-15892   Backport correctly merging AFTAggregators to branch 1.6
+  SPARK-15915   Logical plans should use subqueries eliminated plan when override sameResult
+  SPARK-15975   Fix improper Popen retcode code handling in dev/run-tests
+  SPARK-16035   Fix SparseVector parser assertion for end parenthesis
+  SPARK-7581    User guide for spark.ml PolynomialExpansion
+
+
+
