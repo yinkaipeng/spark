@@ -56,7 +56,6 @@ abstract class AbstractCommandBuilder {
   // The merged configuration for the application. Cached to avoid having to read / parse
   // properties files multiple times.
   private Map<String, String> effectiveConfig;
-  private static final String HDP_CLIENT_HOME = "/usr/hdp/current/hadoop-client";
 
   public AbstractCommandBuilder() {
     this.appArgs = new ArrayList<String>();
@@ -215,8 +214,8 @@ abstract class AbstractCommandBuilder {
       libdir = new File(sparkHome, "lib_managed/jars");
     }
 
-    if (libdir.isDirectory() && libdir.listFiles() != null) {
-      for (File jar :  libdir.listFiles()) {
+    if (libdir.isDirectory()) {
+      for (File jar : libdir.listFiles()) {
         if (jar.getName().startsWith("datanucleus-")) {
           addToClassPath(cp, jar.getAbsolutePath());
         }
@@ -234,29 +233,15 @@ abstract class AbstractCommandBuilder {
     if (lzo != null) {
       addToClassPath(cp, lzo);
     }
-    // load in the AWS libraries
-    if (!isWindows()) {
-      // look for an environment variable pointing to the client dir
-      String hdpClientDir = getenv("_HDP_CLIENT_DIR");
-      if (hdpClientDir != null) {
-        // it was defined. If so, validate
-        File clientDir = new File(hdpClientDir);
-        checkState(clientDir.isDirectory(),
-            "Directory set in _HDP_CLIENT_DIR not found: \"%s\"", hdpClientDir);
-      } else {
-        // default value; may or may not be present
-        hdpClientDir = "/usr/hdp/current/hadoop-client";
-      }
-      File clientLibDir = new File(hdpClientDir, "lib");
-      // add the amazon libraries if present
-      addJar(cp, clientLibDir, "aws-java-sdk-s3-.*\\.jar");
-      addJar(cp, clientLibDir, "aws-java-sdk-core-.*\\.jar");
-      addJar(cp, clientLibDir, "aws-java-sdk-kms-.*\\.jar");
-    }
 
     // Add Azure wasb paths only on linux sku
     if (isHumboldt() && !isWindows()){
       try {
+        String hadoopClientHome = "/usr/hdp/current/hadoop-client";
+        File azureJar = new File(hadoopClientHome, "hadoop-azure.jar");
+        checkState(azureJar.isFile(), "Library directory '%s' does not exist.",
+            azureJar.getAbsolutePath());
+        addToClassPath(cp, "/usr/hdp/current/hadoop-client/hadoop-azure.jar");
         // find first matched azure-storage jar at hadoop-client/lib
         // i.e. /usr/hdp/current/hadoop-client/lib/azure-storage-2.2.0.jar
         String azureStorageJar = findAzureStorageJar();
@@ -392,42 +377,23 @@ abstract class AbstractCommandBuilder {
   }
 
   private String findAzureStorageJar() {
-    return findClientJar(new File(HDP_CLIENT_HOME, "lib"), "azure-storage.*\\.jar");
-  }
-
-  /**
-   * Find a JAR in the HDP client lib dir
-   * @param regex regexp of the library
-   * @return the path or ""
-   */
-  private String findClientJar(File libdir, String regex) {
+    String hadoopClientHome = "/usr/hdp/current/hadoop-client";
+    File libdir;
+    libdir = new File(hadoopClientHome, "lib");
     checkState(libdir.isDirectory(), "Library directory '%s' does not exist.",
           libdir.getAbsolutePath());
 
-    final Pattern re = Pattern.compile(regex);
+    final Pattern re = Pattern.compile("azure-storage.*\\.jar");
     FileFilter filter = new FileFilter() {
       @Override
       public boolean accept(File file) {
         return file.isFile() && re.matcher(file.getName()).matches();
       }
     };
-    File[] files = libdir.listFiles(filter);
+    File[] azureStorageJars = libdir.listFiles(filter);
     // return first jar if found, else return empty string
-    return files != null && files.length > 0 ?
-      files[0].getAbsolutePath() : "";
-  }
-
-  /**
-   * Find a client JAR from its regexp, then add it
-   * @param cp classpath
-   * @param regex regexp of the library
-   */
-  private void addJar(List<String> cp, File libDir, String regex) {
-    try {
-      addToClassPath(cp, findClientJar(libDir, regex));
-    } catch (IllegalStateException e) {
-      // ignored
-    }
+    return azureStorageJars != null && azureStorageJars.length > 0 ?
+      azureStorageJars[0].getAbsolutePath() : "";
   }
 
   private String findAssembly() {
