@@ -173,6 +173,7 @@ BUG FIXES
   SPARK-15975   Fix improper Popen retcode code handling in dev/run-tests
   SPARK-16035   Fix SparseVector parser assertion for end parenthesis
   SPARK-7581    User guide for spark.ml PolynomialExpansion
+  SPARK-11301   Fix case sensitivity for filter on partitioned columns
 
 
 
