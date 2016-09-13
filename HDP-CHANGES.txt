@@ -23,7 +23,6 @@ IMPROVEMENTS
   BUG-47650.   Spark streaming is not using internal kafka build
   BUG-47901.   fix scalastyle check
   BUG-47814.   ported ConfigCheck
-  BUG-30990.   Resolving symlinks in bin/spark-* scripts
   HOTFIX-31    adding R to assembly descriptor, copying to /R/lib/SparkR
   HOTFIX-25    disable mqtt assembly builds unless -Pmqtt-assembly set
   SPARK-11314  Add service API and test service for Yarn Cluster schedulers
