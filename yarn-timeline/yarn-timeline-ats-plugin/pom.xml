@@ -29,7 +29,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.10</artifactId>
-    <version>1.6.2</version>
+    <version>1.6.2.2.4.4.0-10</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
   <groupId>org.apache.spark</groupId>
@@ -39,12 +39,12 @@
   <description>
     This is a minimal pure-Java JAR which needs to be added to the
     YARN ATS classpath in order for it to successfully process histories
-    published to it via the cluster's filesystem —that is, the ATS1.5 API.
+    published to it via the cluster's filesystem &#8212;that is, the ATS1.5 API.
 
     It is not intended for incorporation in any assembly JAR, and is only
     used by the yarn-timeline-history module at test time.
   </description>
-  <version>1.6.2</version>
+  <version>1.6.2.2.4.4.0-10</version>
   <properties>
     <sbt.project.name>spark-yarn-timeline-ats-plugin</sbt.project.name>
   </properties>
@@ -69,7 +69,7 @@
         </configuration>
         <executions>
           <execution>
-            <phase/>
+            <phase />
           </execution>
         </executions>
       </plugin>
