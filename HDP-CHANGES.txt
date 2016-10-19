@@ -45,6 +45,12 @@ BUG FIXES
   BUG-57586. Add plugin jar to hdpLib for rpm
   BUG-60859. Fix Spark Streaming Kafka unit test issue
   BUG-57104. (SPARK-14845) spark.files in properties file is not distributed to driver in yarn-cluster mode
+  (Spark 1.6.3 backport)
+  SPARK-6005    Flaky test: o.a.s.streaming.kafka.DirectKafkaStreamSuite.offset recovery
+  SPARK-11301   Fix case sensitivity for filter on partitioned columns
+  SPARK-15606   Driver hang in o.a.s.DistributedSuite on 2 core machine
+  SPARK-16077   Python UDF may fail because of six
+  SPARK-16664   Fix persist call on Data frames with more than 200 columns
   (Spark 2.0 backport)
   SPARK-6847    Stack overflow on updateStateByKey which followed by a stream with checkpoint set
   SPARK-10582   using dynamic-executor-allocation, if AM failed, the new AM will be started. But the new AM does not allocate executors to driver
@@ -65,23 +71,18 @@ BUG FIXES
   SPARK-12241   Improve failure reporting in Yarn client obtainTokenForHBase()
   SPARK-13885   Fix attempt id regression for Spark running on Yarn
   SPARK-14062   Fix log4j and upload metrics.properties automatically with distributed cache
-  SPARK-11182   HDFS Delegation Token will be expired when calling "UserGroupInformation.getCurrentUser.addCredentials" in HA mode
   SPARK-7889    Jobs progress of apps on complete page of HistoryServer shows uncompleted
   SPARK-15067   YARN executors are launched with fixed perm gen size
   SPARK-13278   Launcher fails to start with JDK 9 EA
   SPARK-13902   Make DAGScheduler not to create duplicate stage
-  SPARK-6005    Flaky test: o.a.s.streaming.kafka.DirectKafkaStreamSuite.offset recovery
-  SPARK-15606   Driver hang in o.a.s.DistributedSuite on 2 core machine
   SPARK-16214   fix the denominator of SparkPi
-  SPARK-16077   Python UDF may fail because of six
   SPARK-16193   Address flaky ExternalAppendOnlyMapSuite spilling tests
   SPARK-6735    Add window based executor failure tracking mechanism for long running service
+  SPARK-17512   Avoid formatting to python path for yarn and mesos cluster mode
   (Spark 2.1 backport)
   SPARK-15990   Add rolling log aggregation support for Spark on yarn
   SPARK-16110   Can't set Python via spark-submit for YARN cluster mode when PYSPARK_PYTHON & PYSPARK_DRIVER_PYTHON are set
-  SPARK-17512   Avoid formatting to python path for yarn and mesos cluster mode
   (Jira in Apache Spark is IN PROGRESS)
+  SPARK-11182   HDFS Delegation Token will be expired when calling "UserGroupInformation.getCurrentUser.addCredentials" in HA mode
   SPARK-15844   HistoryServer doesn't come up if spark.authenticate = true
   SPARK-7481    Add spark-cloud module to pull in aws+azure object store FS accessors; test integration
-  SPARK-11301   Fix case sensitivity for filter on partitioned columns
-  SPARK-16664   Fix persist call on Data frames with more than 200 columns
