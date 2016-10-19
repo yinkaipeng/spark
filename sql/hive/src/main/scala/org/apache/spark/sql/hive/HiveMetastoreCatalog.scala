@@ -563,9 +563,28 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
 
       val cached = getCached(tableIdentifier, paths, metastoreSchema, Some(partitionSpec))
       val orcRelation = cached.getOrElse {
-        val created = LogicalRelation(
-          new OrcRelation(
-            paths.toArray, None, Some(partitionSpec), None, orcOptions)(hive))
+        // At this point, it is unknown whether valid files are present in the dir.
+        // Also we can not pass metastoreSchema directly to OrcRelation
+        // as ORC files created in old Hive could have _col1, _col2 etc. Directly
+        // passing metastoreSchema would cause backward comparability issues.
+        // Even though paths are available, it is possible that no files are present inside dir.
+        // In such cases, we catch the exception and pass metastoreSchema.
+        val orcRelation = if (paths.isEmpty) {
+          // Use metastore schema
+          new OrcRelation(paths.toArray,
+            Some(metastoreSchema), Some(partitionSpec), None, orcOptions)(hive)
+        } else {
+          try {
+            new OrcRelation(
+              paths.toArray, None, Some(partitionSpec), None, orcOptions)(hive)
+          } catch {
+            case _: IllegalArgumentException =>
+              // Files are not present in ORC dataset. use metastore schema
+              new OrcRelation(paths.toArray,
+                Some(metastoreSchema), Some(partitionSpec), None, orcOptions)(hive)
+          }
+        }
+        val created = LogicalRelation(orcRelation)
         cachedDataSourceTables.put(tableIdentifier, created)
         created
       }
@@ -576,8 +595,16 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
 
       val cached = getCached(tableIdentifier, paths, metastoreSchema, None)
       val orcRelation = cached.getOrElse {
-        val created = LogicalRelation(
-          new OrcRelation(paths.toArray, None, None, None, orcOptions)(hive))
+        // At this point, it is unknown on whether valid files are present in the dir.
+        val relation = try {
+          new OrcRelation(paths.toArray, None, None, None, orcOptions)(hive)
+        } catch {
+          case _: IllegalArgumentException =>
+            // Files are not present in ORC dataset. use metastore schema
+            new OrcRelation(paths.toArray,
+              Some(metastoreSchema), None, None, orcOptions)(hive)
+        }
+        val created = LogicalRelation(relation)
         cachedDataSourceTables.put(tableIdentifier, created)
         created
       }
