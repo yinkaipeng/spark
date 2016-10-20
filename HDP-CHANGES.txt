@@ -1,4 +1,4 @@
-Changes only in Hortonworks github and not in Apache SPARK-1.6.2 and hence not covered by CHANGES.txt.
+Changes only in Hortonworks github and not in Apache SPARK-1.6.3 and hence not covered by CHANGES.txt.
 
 INCOMPATIBLE CHANGES
 
@@ -69,11 +69,6 @@ BUG FIXES
   SPARK-15067   YARN executors are launched with fixed perm gen size
   SPARK-13278   Launcher fails to start with JDK 9 EA
   SPARK-13902   Make DAGScheduler not to create duplicate stage
-  SPARK-6005    Flaky test: o.a.s.streaming.kafka.DirectKafkaStreamSuite.offset recovery
-  SPARK-15606   Driver hang in o.a.s.DistributedSuite on 2 core machine
-  SPARK-16214   fix the denominator of SparkPi
-  SPARK-16077   Python UDF may fail because of six
-  SPARK-16193   Address flaky ExternalAppendOnlyMapSuite spilling tests
   SPARK-6735    Add window based executor failure tracking mechanism for long running service
   (Spark 2.1 backport)
   SPARK-15990   Add rolling log aggregation support for Spark on yarn
@@ -82,4 +77,3 @@ BUG FIXES
   (Jira in Apache Spark is IN PROGRESS)
   SPARK-15844   HistoryServer doesn't come up if spark.authenticate = true
   SPARK-7481    Add spark-cloud module to pull in aws+azure object store FS accessors; test integration
-  SPARK-16664   Fix persist call on Data frames with more than 200 columns
