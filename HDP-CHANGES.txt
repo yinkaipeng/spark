@@ -33,7 +33,8 @@ IMPROVEMENTS
   SPARK-12967  NettyRPC races with SparkContext.stop() and throws exception
 
 BUG FIXES
-
+  
+  BUG-70068. (SPARK-18160). spark.files & spark.jars should not be passed to driver in yarn mode
   SPARK-174. (Internal) Use metastore schema instead of inferring schema for ORC in HiveMetastoreCatalog
   BUG-57104. spark.files in properties file is not distributed to driver in yarn-cluster mode
   BUG-48230. yarn-client app hangs on shutdown
