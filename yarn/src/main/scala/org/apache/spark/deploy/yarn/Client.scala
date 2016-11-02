@@ -1166,6 +1166,10 @@ object Client extends Logging {
     if (!Utils.isDynamicAllocationEnabled(sparkConf)) {
       sparkConf.setIfMissing("spark.executor.instances", args.numExecutors.toString)
     }
+    // SparkSubmit would use yarn cache to distribute files & jars in yarn mode,
+    // so remove them from sparkConf here for yarn mode.
+    sparkConf.remove("spark.jars")
+    sparkConf.remove("spark.files")
     new Client(args, sparkConf).run()
   }
 
