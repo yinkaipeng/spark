@@ -1,4 +1,4 @@
-Changes only in Hortonworks github and not in Apache SPARK-1.6.2 and hence not covered by CHANGES.txt.
+Changes only in Hortonworks github and not in Apache SPARK-1.6.3 and hence not covered by CHANGES.txt.
 
 INCOMPATIBLE CHANGES
 
@@ -23,7 +23,6 @@ IMPROVEMENTS
   BUG-47650.   Spark streaming is not using internal kafka build
   BUG-47901.   fix scalastyle check
   BUG-47814.   ported ConfigCheck
-  BUG-30990.   Resolving symlinks in bin/spark-* scripts
   HOTFIX-31    adding R to assembly descriptor, copying to /R/lib/SparkR
   HOTFIX-25    disable mqtt assembly builds unless -Pmqtt-assembly set
   SPARK-11314  Add service API and test service for Yarn Cluster schedulers
@@ -46,12 +45,6 @@ BUG FIXES
   BUG-57586. Add plugin jar to hdpLib for rpm
   BUG-60859. Fix Spark Streaming Kafka unit test issue
   BUG-57104. (SPARK-14845) spark.files in properties file is not distributed to driver in yarn-cluster mode
-  (Spark 1.6.3 backport)
-  SPARK-6005    Flaky test: o.a.s.streaming.kafka.DirectKafkaStreamSuite.offset recovery
-  SPARK-11301   Fix case sensitivity for filter on partitioned columns
-  SPARK-15606   Driver hang in o.a.s.DistributedSuite on 2 core machine
-  SPARK-16077   Python UDF may fail because of six
-  SPARK-16664   Fix persist call on Data frames with more than 200 columns
   (Spark 2.0 backport)
   SPARK-6847    Stack overflow on updateStateByKey which followed by a stream with checkpoint set
   SPARK-10582   using dynamic-executor-allocation, if AM failed, the new AM will be started. But the new AM does not allocate executors to driver
