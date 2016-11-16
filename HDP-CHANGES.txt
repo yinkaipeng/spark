@@ -34,6 +34,7 @@ IMPROVEMENTS
 
 BUG FIXES
 
+  SPARK-174. (Internal) Use metastore schema instead of inferring schema for ORC in HiveMetastoreCatalog
   BUG-57104. spark.files in properties file is not distributed to driver in yarn-cluster mode
   BUG-48230. yarn-client app hangs on shutdown
   BUG-47809. Application gets stuck with scala.MatchError
