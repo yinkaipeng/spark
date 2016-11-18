@@ -71,6 +71,7 @@ BUG FIXES
   SPARK-13278   Launcher fails to start with JDK 9 EA
   SPARK-13902   Make DAGScheduler not to create duplicate stage
   SPARK-6735    Add window based executor failure tracking mechanism for long running service
+  SPARK-15705   Change the default value of spark.sql.hive.convertMetastoreOrc to false
   (Spark 2.1 backport)
   SPARK-15990   Add rolling log aggregation support for Spark on yarn
   SPARK-16110   Can't set Python via spark-submit for YARN cluster mode when PYSPARK_PYTHON & PYSPARK_DRIVER_PYTHON are set
