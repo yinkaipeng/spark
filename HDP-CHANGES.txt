@@ -73,6 +73,7 @@ BUG FIXES
   SPARK-16193   Address flaky ExternalAppendOnlyMapSuite spilling tests
   SPARK-6735    Add window based executor failure tracking mechanism for long running service
   SPARK-17512   Avoid formatting to python path for yarn and mesos cluster mode
+  SPARK-15705   Change the default value of spark.sql.hive.convertMetastoreOrc to false
   (Spark 2.1 backport)
   SPARK-15990   Add rolling log aggregation support for Spark on yarn
   SPARK-16110   Can't set Python via spark-submit for YARN cluster mode when PYSPARK_PYTHON & PYSPARK_DRIVER_PYTHON are set
