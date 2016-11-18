@@ -710,7 +710,7 @@ private[hive] object HiveContext {
       "the built in support.")
 
   val CONVERT_METASTORE_ORC = booleanConf("spark.sql.hive.convertMetastoreOrc",
-    defaultValue = Some(true),
+    defaultValue = Some(false),
     doc = "When set to false, Spark SQL will use the Hive SerDe for orc tables instead of " +
       "the built in support.")
 
