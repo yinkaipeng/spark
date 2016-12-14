@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy
 
-import java.io.{ByteArrayInputStream, DataInputStream}
 import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
 import java.util.{Arrays, Comparator}
@@ -31,11 +30,11 @@ import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
-import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.JobContext
 import org.apache.hadoop.mapreduce.{TaskAttemptContext => MapReduceTaskAttemptContext}
 import org.apache.hadoop.mapreduce.{TaskAttemptID => MapReduceTaskAttemptID}
+import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.annotation.DeveloperApi
@@ -332,10 +331,9 @@ class SparkHadoopUtil extends Logging {
       sparkConf.getLong("spark.yarn.token.renewal.interval", (24 hours).toMillis)
 
     credentials.getAllTokens.asScala
-      .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
+      .filter(_.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier])
       .map { t =>
-        val identifier = new DelegationTokenIdentifier()
-        identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
+        val identifier = t.decodeIdentifier().asInstanceOf[AbstractDelegationTokenIdentifier]
         (identifier.getIssueDate + fraction * renewalInterval).toLong - now
       }.foldLeft(0L)(math.max)
   }

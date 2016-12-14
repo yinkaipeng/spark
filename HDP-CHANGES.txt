@@ -46,6 +46,7 @@ BUG FIXES
   BUG-57586. Add plugin jar to hdpLib for rpm
   BUG-60859. Fix Spark Streaming Kafka unit test issue
   BUG-57104. (SPARK-14845) spark.files in properties file is not distributed to driver in yarn-cluster mode
+  SPARK-191. internal-bug: fix HDFS delegation token cannot be found issue
   (Spark 2.0 backport)
   SPARK-6847    Stack overflow on updateStateByKey which followed by a stream with checkpoint set
   SPARK-10582   using dynamic-executor-allocation, if AM failed, the new AM will be started. But the new AM does not allocate executors to driver
