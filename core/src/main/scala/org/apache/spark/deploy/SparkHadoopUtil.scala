@@ -332,7 +332,7 @@ class SparkHadoopUtil extends Logging {
       sparkConf.getLong("spark.yarn.token.renewal.interval", (24 hours).toMillis)
 
     credentials.getAllTokens.asScala
-      .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
+      .filter(_.decodeIdentifier().isInstanceOf[DelegationTokenIdentifier])
       .map { t =>
         val identifier = new DelegationTokenIdentifier()
         identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))

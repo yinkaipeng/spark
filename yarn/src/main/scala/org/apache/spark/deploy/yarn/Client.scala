@@ -622,13 +622,16 @@ private[spark] class Client(
     val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + stagingDirPath
     YarnSparkHadoopUtil.get.obtainTokensForNamenodes(
       nns, hadoopConf, creds, Some(sparkConf.get("spark.yarn.principal")))
-    val t = creds.getAllTokens.asScala
-      .filter(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
-      .head
-    val newExpiration = t.renew(hadoopConf)
-    val identifier = new DelegationTokenIdentifier()
-    identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
-    val interval = newExpiration - identifier.getIssueDate
+    val interval = creds.getAllTokens.asScala.filter { t =>
+      t.decodeIdentifier().isInstanceOf[DelegationTokenIdentifier]
+    }.map { t =>
+      Try {
+        val newExpiration = t.renew(hadoopConf)
+        val identifier = new DelegationTokenIdentifier()
+        identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
+        newExpiration - identifier.getIssueDate
+      }.toOption.getOrElse(Long.MaxValue)
+    }.foldLeft(Long.MaxValue)(math.min)
     logInfo(s"Renewal Interval set to $interval")
     interval
   }
