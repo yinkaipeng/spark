@@ -17,18 +17,16 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.{ByteArrayInputStream, DataInputStream, File, FileOutputStream, IOException,
-  OutputStreamWriter}
-import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
+import java.io.{File, FileOutputStream, IOException, OutputStreamWriter}
+import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
-import java.security.PrivilegedExceptionAction
 import java.util.{Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.reflect.runtime.universe
-import scala.util.{Try, Success, Failure}
+import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import com.google.common.base.Charsets.UTF_8
@@ -37,13 +35,13 @@ import com.google.common.io.Files
 
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.MRJobConfig
+import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.hadoop.security.token.{TokenIdentifier, Token}
+import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
@@ -623,12 +621,11 @@ private[spark] class Client(
     YarnSparkHadoopUtil.get.obtainTokensForNamenodes(
       nns, hadoopConf, creds, Some(sparkConf.get("spark.yarn.principal")))
     val interval = creds.getAllTokens.asScala.filter { t =>
-      t.decodeIdentifier().isInstanceOf[DelegationTokenIdentifier]
+      t.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier]
     }.map { t =>
       Try {
         val newExpiration = t.renew(hadoopConf)
-        val identifier = new DelegationTokenIdentifier()
-        identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
+        val identifier = t.decodeIdentifier().asInstanceOf[AbstractDelegationTokenIdentifier]
         newExpiration - identifier.getIssueDate
       }.toOption.getOrElse(Long.MaxValue)
     }.foldLeft(Long.MaxValue)(math.min)
