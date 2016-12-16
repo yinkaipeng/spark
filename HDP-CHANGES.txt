@@ -67,7 +67,6 @@ BUG FIXES
   SPARK-12241   Improve failure reporting in Yarn client obtainTokenForHBase()
   SPARK-13885   Fix attempt id regression for Spark running on Yarn
   SPARK-14062   Fix log4j and upload metrics.properties automatically with distributed cache
-  SPARK-11182   HDFS Delegation Token will be expired when calling "UserGroupInformation.getCurrentUser.addCredentials" in HA mode
   SPARK-7889    Jobs progress of apps on complete page of HistoryServer shows uncompleted
   SPARK-15067   YARN executors are launched with fixed perm gen size
   SPARK-13278   Launcher fails to start with JDK 9 EA
