@@ -26,6 +26,7 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
+  <groupId>org.apache.spark</groupId>
   <artifactId>spark-hive-thriftserver_2.10</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Hive Thrift Server</name>
@@ -78,16 +79,6 @@
     <dependency>
       <groupId>com.sun.jersey</groupId>
       <artifactId>jersey-server</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.cloudera.livy</groupId>
-      <artifactId>livy-rsc</artifactId>
-      <version>0.3.0-SNAPSHOT</version>
-    </dependency>
-    <dependency>
-      <groupId>com.cloudera.livy</groupId>
-      <artifactId>livy-api</artifactId>
-      <version>0.3.0-SNAPSHOT</version>
     </dependency>
     <!-- Added for selenium: -->
     <dependency>

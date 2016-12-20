@@ -272,12 +272,10 @@ private[hive] class HiveThriftServer2(hiveContext: HiveContext)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
 
-    val thriftCliService = {
-      if (isHTTPTransportMode(hiveConf)) {
-        new SparkCLIServices.SparkThriftHttpCLIService(sparkSqlCliService)
-      } else {
-        new SparkCLIServices.SparkThriftBinaryCLIService(sparkSqlCliService)
-      }
+    val thriftCliService = if (isHTTPTransportMode(hiveConf)) {
+      new ThriftHttpCLIService(sparkSqlCliService)
+    } else {
+      new ThriftBinaryCLIService(sparkSqlCliService)
     }
 
     setSuperField(this, "thriftCLIService", thriftCliService)

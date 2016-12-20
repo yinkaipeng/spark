@@ -188,7 +188,7 @@ private[hive] class SparkExecuteStatementOperation(
     }
   }
 
-  protected def execute(): Unit = {
+  private def execute(): Unit = {
     statementId = UUID.randomUUID().toString
     logInfo(s"Running query '$statement' with $statementId")
     setState(OperationState.RUNNING)

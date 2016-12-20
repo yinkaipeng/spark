@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.thriftserver
 import java.io.IOException
 import java.util.{List => JList}
 import javax.security.auth.login.LoginException
-import java.util.{Map => JMap}
 
 import scala.collection.JavaConverters._
 
@@ -33,7 +32,7 @@ import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli._
 import org.apache.hive.service.server.HiveServer2
 import org.apache.hive.service.{AbstractService, Service, ServiceException}
-import org.apache.hive.service.cli.thrift.TProtocolVersion
+
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 
@@ -62,22 +61,6 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
 
     initCompositeService(hiveConf)
   }
-
-  override def openSessionWithImpersonation(
-      protocol: TProtocolVersion,
-      username: String,
-      password: String,
-      ipAddress: String,
-      configuration: JMap[String, String],
-      delegationToken: String): SessionHandle = {
-    val sessionHandle = getSessionManager().openSession(
-      TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V5, username, password, null, configuration,
-      true, delegationToken);
-
-    sessionHandle;
-  }
-
-  override def initCompositeService(hiveConf: HiveConf): Unit = super.initCompositeService(hiveConf)
 
   override def getInfo(sessionHandle: SessionHandle, getInfoType: GetInfoType): GetInfoValue = {
     getInfoType match {

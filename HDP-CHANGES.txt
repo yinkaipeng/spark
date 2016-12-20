@@ -5,7 +5,6 @@ INCOMPATIBLE CHANGES
 NEW FEATURES
 
 IMPROVEMENTS
-  RMP-7143.    Add support for doAs in STS. Specifically : BUG-69804, BUG-69843, BUG-69980, BUG-69981, BUG-70062, BUG-70332, BUG-70333, BUG-70355, BUG-70409
   BUG-58572.   spark-llap: validate security scenarios
   BUG-54962.   (SPARK-14113) Consider marking JobConf closure-cleaning in HadoopRDD as optional.
   SPARK-14091  Consider improving performance of SparkContext.getCallSite().
