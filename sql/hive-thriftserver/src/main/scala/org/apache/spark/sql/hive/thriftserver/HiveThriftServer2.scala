@@ -267,20 +267,30 @@ private[hive] class HiveThriftServer2(hiveContext: HiveContext)
   // started, and then once only.
   private val started = new AtomicBoolean(false)
 
-  override def init(hiveConf: HiveConf) {
+  override def init(hiveConf: HiveConf): Unit = synchronized {
     val sparkSqlCliService = new SparkSQLCLIService(this, hiveContext)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
 
-    val thriftCliService = if (isHTTPTransportMode(hiveConf)) {
-      new ThriftHttpCLIService(sparkSqlCliService)
-    } else {
-      new ThriftBinaryCLIService(sparkSqlCliService)
+    val thriftCliService = {
+      if (isHTTPTransportMode(hiveConf)) {
+        new SparkCLIServices.SparkThriftHttpCLIService(sparkSqlCliService)
+      } else {
+        new SparkCLIServices.SparkThriftBinaryCLIService(sparkSqlCliService)
+      }
     }
 
     setSuperField(this, "thriftCLIService", thriftCliService)
     addService(thriftCliService)
     initCompositeService(hiveConf)
+
+    // Add a shutdown hook for catching SIGTERM & SIGINT
+    val hiveServer2 = this
+    Runtime.getRuntime.addShutdownHook(new Thread() {
+      override def run() {
+        hiveServer2.stop()
+      }
+    })
   }
 
   private def isHTTPTransportMode(hiveConf: HiveConf): Boolean = {

@@ -39,8 +39,6 @@ private[hive] class SparkSQLDriver(
   private[hive] var tableSchema: Schema = _
   private[hive] var hiveResponse: Seq[String] = _
 
-  override def init(): Unit = {
-  }
 
   private def getResultSetSchema(query: context.QueryExecution): Schema = {
     val analyzed = query.analyzed
