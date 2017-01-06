@@ -81,3 +81,6 @@ BUG FIXES
   (Jira in Apache Spark is IN PROGRESS)
   SPARK-15844   HistoryServer doesn't come up if spark.authenticate = true
   SPARK-7481    Add spark-cloud module to pull in aws+azure object store FS accessors; test integration
+  (Spark 2.2 backport)
+  SPARK-19033  HistoryServer still uses old ACLs even if ACLs are updated
+
