@@ -33,6 +33,7 @@ import org.apache.spark.sql.hive.thriftserver.rpc.RpcClient
 
 private[hive] class SparkExecuteRemoteStatementOperation(
     parentSession: HiveSession,
+    parentSessionId: String,
     statement: String,
     confOverlay: JMap[String, String],
     runInBackground: Boolean = true)
@@ -49,7 +50,7 @@ private[hive] class SparkExecuteRemoteStatementOperation(
 
     // maxRowsL here typically maps to java.sql.Statement.getFetchSize, which is an int
     val maxRows = maxRowsL.toInt
-    rpcClient.fetchResult(statementId, maxRows).get()
+    rpcClient.fetchResult(statementId, maxRows).get().toRowSet
   }
 
   override def runInternal(): Unit = {
@@ -113,7 +114,7 @@ private[hive] class SparkExecuteRemoteStatementOperation(
     setState(OperationState.RUNNING)
 
     try {
-      rpcClient.executeSql(statementId, statement).get()
+      rpcClient.executeSql(parentSessionId, statementId, statement).get()
     } catch {
       case e: Throwable =>
         val currentState = getStatus().getState()

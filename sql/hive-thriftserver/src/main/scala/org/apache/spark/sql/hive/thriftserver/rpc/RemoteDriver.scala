@@ -17,15 +17,19 @@
 
 package org.apache.spark.sql.hive.thriftserver.rpc
 
+import java.lang.{Boolean => JBoolean}
 import java.sql.{Date, Timestamp}
-import java.util.{Arrays => JArrays, UUID, HashMap => JHashMap}
+import java.util.{UUID, Arrays => JArrays, HashMap => JHashMap}
 
 import com.cloudera.livy.rsc.RSCConf
 import com.cloudera.livy.rsc.driver.{BypassJobWrapper, RSCDriver}
 import com.cloudera.livy.{Job, JobContext}
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.metastore.api.FieldSchema
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hive.service.cli._
 import org.apache.spark.api.java.JavaSparkContext
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Row => SparkRow}
@@ -41,9 +45,13 @@ class RemoteDriver(sparkConf: SparkConf, rscConf: RSCConf)
 
   import RemoteDriver._
 
+  private val sessionIdToHiveContext = new JHashMap[String, HiveContext]()
+
   private val statementIdToDf = new JHashMap[String, DataFrame]()
   private val statementIdToResultIter = new JHashMap[String, Iterator[SparkRow]]()
   private val statementIdToDataTypes = new JHashMap[String, Array[DataType]]()
+
+  private val tokenDistributer = new YarnDelegationTokenDistributer(sparkConf)
 
 
   override def initializeContext(): JavaSparkContext = {
@@ -134,9 +142,60 @@ class RemoteDriver(sparkConf: SparkConf, rscConf: RSCConf)
     statementIdToResultIter.remove(statementId)
     statementIdToDataTypes.remove(statementId)
   }
+
+  def updateCredentials(newCredentials: Credentials): Unit = {
+    if (! SparkHadoopUtil.get.isYarnMode()) {
+      // Should not be called in non-yarn mode. Not making it fatal to
+      // help with code evolution
+      logError("Ignoring credentials update when yarn mode = false")
+      return
+    }
+
+    if (! UserGroupInformation.isSecurityEnabled) {
+      logError("ugi security not enabled, ignoring credential update")
+      return
+    }
+
+    // Add to ugi before distributing the tokens.
+    UserGroupInformation.getCurrentUser.addCredentials(newCredentials)
+    tokenDistributer.distributeTokens(newCredentials)
+  }
+
+  private def registerSession(userName: String, jobContext: JobContext, parentSessionId: String,
+      duplicateAllowed: Boolean): Unit = synchronized {
+
+    if (! sessionIdToHiveContext.containsKey(parentSessionId)) {
+      val ctx = jobContext.hivectx().newSession()
+
+      ctx.setUser(userName)
+      ctx.setConf("spark.sql.hive.version", HiveContext.hiveExecutionVersion)
+
+      sessionIdToHiveContext.put(parentSessionId, ctx)
+    } else if (! duplicateAllowed) {
+      logError(s"Duplicate registerSession for parentSessionId = $parentSessionId")
+    }
+  }
+
+  private def unregisterSession(jobContext: JobContext, parentSessionId: String,
+      defaultSession: Boolean): Unit = synchronized {
+
+    // Do not remove default session
+    if (! defaultSession) {
+      val removed = sessionIdToHiveContext.remove(parentSessionId)
+      if (null == removed) {
+        logError(s"Unable to remove registered session for parentSessionId = $parentSessionId")
+      }
+    }
+  }
+
+  private def getHiveContext(parentSessionId: String): HiveContext = synchronized {
+    sessionIdToHiveContext.get(parentSessionId)
+  }
 }
 
 object RemoteDriver extends Logging {
+
+  val SHARED_SINGLE_SESSION = "shared-single-session"
 
   private val jobGroupLock = new java.lang.Object()
 
@@ -146,6 +205,26 @@ object RemoteDriver extends Logging {
   driverField.setAccessible(true)
 
   private val emptyArray = new Array[Byte](0)
+
+  // DelegationTokenDistributer is available only in yarn module - so use reflection to create
+  // and invoke its methods.
+  private class YarnDelegationTokenDistributer(sparkConf: SparkConf) {
+    // Must be called only in yarn mode - else the reflection based code will fail
+    assert (SparkHadoopUtil.get.isYarnMode())
+
+    private val distributerInstance = {
+      val cls = SparkUtils.classForName("org.apache.spark.deploy.yarn.DelegationTokenDistributer")
+      cls.getConstructor(classOf[SparkConf], classOf[Configuration]).newInstance(
+        sparkConf, SparkHadoopUtil.get.newConfiguration(sparkConf))
+    }
+
+    private val distributeTokensMethod = distributerInstance.getClass.getMethod(
+      "distributeTokens", classOf[Credentials])
+
+    def distributeTokens(creds: Credentials): Unit = {
+      distributeTokensMethod.invoke(distributerInstance, creds)
+    }
+  }
 
   class ForceHiveInitJob extends Job[Array[Byte]]() {
     override def call(jobContext: JobContext): Array[Byte] = {
@@ -159,7 +238,8 @@ object RemoteDriver extends Logging {
     driverField.get(jobContext).asInstanceOf[RemoteDriver]
 
 
-  def createSqlStatementRequest(statementId: String, statement: String): Job[Boolean] = {
+  def createSqlStatementRequest(parentSessionId: String, statementId: String,
+      statement: String): Job[Boolean] = {
 
     new Job[Boolean] {
       override def call(jobContext: JobContext): Boolean = {
@@ -173,11 +253,16 @@ object RemoteDriver extends Logging {
         val driver = getDriver(jobContext)
 
         try {
-          val result = jobContext.hivectx().sql(statement)
+          val hiveContext = driver.getHiveContext(parentSessionId)
+          if (null == hiveContext) {
+            logError(s"Unable to find hive context for $parentSessionId")
+            throw new IllegalStateException(s"parent session for $parentSessionId not found")
+          }
+          val result = hiveContext.sql(statement)
           logDebug(s"Query dataframe result: $result , ${result.queryExecution.toString()}")
 
           val iter = {
-            val useIncrementalCollect = jobContext.hivectx().getConf(
+            val useIncrementalCollect = hiveContext.getConf(
               "spark.sql.thriftServer.incrementalCollect", "false").toBoolean
             if (useIncrementalCollect) {
               result.rdd.toLocalIterator
@@ -200,10 +285,48 @@ object RemoteDriver extends Logging {
     }
   }
 
+  def createRegisterSessionRequest(userName: String, parentSessionId: String): Job[Boolean] = {
 
-  def createFetchQueryOutputRequest(statementId: String, maxRows: Int): Job[RowBasedSet] = {
-    new Job[RowBasedSet] {
-      override def call(jobContext: JobContext): RowBasedSet = {
+    new Job[Boolean] {
+      override def call(jobContext: JobContext): Boolean = {
+
+        logDebug(s"RegisterSessionRequest. parentSessionId = $parentSessionId")
+
+        assert(jobContext.getClass == jobContextImplClazz)
+        val driver = getDriver(jobContext)
+
+        driver.registerSession(userName, jobContext, parentSessionId,
+          RemoteDriver.SHARED_SINGLE_SESSION.equals(parentSessionId))
+
+        true
+      }
+    }
+  }
+
+  def createUnregisterSessionRequest(parentSessionId: String): Job[Boolean] = {
+
+    new Job[Boolean] {
+      override def call(jobContext: JobContext): Boolean = {
+
+        logDebug(s"UnregisterSessionRequest. parentSessionId = $parentSessionId")
+
+        assert(jobContext.getClass == jobContextImplClazz)
+        val driver = getDriver(jobContext)
+
+        driver.unregisterSession(jobContext, parentSessionId,
+          RemoteDriver.SHARED_SINGLE_SESSION.equals(parentSessionId))
+
+        true
+      }
+    }
+  }
+
+
+  def createFetchQueryOutputRequest(statementId: String,
+      maxRows: Int): Job[ResultSetWrapper] = {
+
+    new Job[ResultSetWrapper] {
+      override def call(jobContext: JobContext): ResultSetWrapper = {
 
         logDebug(s"FetchQueryOutputRequest. maxRows = $maxRows")
         assert(jobContext.getClass == jobContextImplClazz)
@@ -217,7 +340,7 @@ object RemoteDriver extends Logging {
         }
 
         val schema = driver.getResultSchema(statementId)
-        val resultRowSet = new RowBasedSet(schema)
+        val resultRowSet = ResultSetWrapper.create(schema)
 
         if (!iter.hasNext) {
           resultRowSet
@@ -304,6 +427,23 @@ object RemoteDriver extends Logging {
         // or dataframe
         driver.clearState(statementId)
         true
+      }
+    }
+  }
+
+  def createUpdateTokensRequest(serializedCreds: Array[Byte]): Job[JBoolean] = {
+    new Job[JBoolean] {
+      override def call(jobContext: JobContext): JBoolean = {
+        logInfo("Updating credentials through UpdateTokensRequest")
+        assert(jobContext.getClass == jobContextImplClazz)
+        val driver = getDriver(jobContext)
+
+        val newCredentials = new Credentials()
+        RpcUtil.deserializeFromBytes(newCredentials, serializedCreds)
+
+        driver.updateCredentials(newCredentials)
+
+        JBoolean.TRUE
       }
     }
   }

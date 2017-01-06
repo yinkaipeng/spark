@@ -17,20 +17,24 @@
 
 package org.apache.spark.sql.hive.thriftserver.server
 
+import java.lang.{Boolean => JBoolean}
+import java.util.concurrent.TimeUnit
 import java.util.{Map => JMap}
 
+import com.cloudera.livy.JobHandle
 import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils}
 
-import scala.collection.mutable.{Map, Set}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, Operation}
 import org.apache.hive.service.cli.operation.OperationManager
 import org.apache.hive.service.cli.session.HiveSession
 import org.apache.spark.Logging
 import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.sql.hive.thriftserver.{ReflectionUtils, SparkExecuteRemoteStatementOperation, SparkExecuteStatementOperation, SparkSQLEnv}
-import org.apache.spark.sql.hive.thriftserver.rpc.RpcClient
+import org.apache.spark.sql.hive.thriftserver._
+import org.apache.spark.sql.hive.thriftserver.rpc.{RpcClient, RpcUtil}
 
 /**
  * Executes queries using Spark SQL, and maintains a list of handles to active queries.
@@ -38,6 +42,10 @@ import org.apache.spark.sql.hive.thriftserver.rpc.RpcClient
 private[thriftserver] class SparkSQLOperationManager()
   extends OperationManager with Logging {
 
+  // Amount of time to wait for credential update to be propagated to rsc
+  private val credentialUpdateTimeout = SparkSQLEnv.sparkContext.conf.getTimeAsMs(
+    "spark.sql.hive.thriftServer.remote.credential.update.timeout", "30s"
+  )
 
   private var impersonationEnabled: Boolean = _
   private var clusterModeEnabled: Boolean = _
@@ -45,12 +53,15 @@ private[thriftserver] class SparkSQLOperationManager()
   private val handleToOperation = ReflectionUtils
     .getSuperField[JMap[OperationHandle, Operation]](this, "handleToOperation")
 
-  private val sessionToActivePool = Map[SessionHandle, String]()
-  private val sessionToContexts = Map[SessionHandle, HiveContext]()
+  private val sessionToActivePool = HashMap[SessionHandle, String]()
+  private val sessionToContexts = HashMap[SessionHandle, HiveContext]()
 
-  private val sessionToRpcHandle = Map[SessionHandle, String]()
-  private val rpcHandleToSessions = Map[String, Set[SessionHandle]]()
-  private val rpcHandleToRpcClient = Map[String, RpcClient]()
+  // rpc handle identifies an rpc connection, while sessionId identifies a session
+  // within the rpc session associated with the sessionhandle
+  private val sessionToRpcHandleAndSessionId = HashMap[SessionHandle, (String, String)]()
+  private val rpcHandleToSessions = HashMap[String, HashSet[SessionHandle]]()
+  // We need the launch user and the rpc client for an rpc handle
+  private val rpcHandleToUserAndRpcClient = HashMap[String, (String, RpcClient)]()
 
   installSignalHandler()
 
@@ -62,23 +73,34 @@ private[thriftserver] class SparkSQLOperationManager()
     })
   }
 
-  private def closeAll(): Unit = synchronized {
-    sessionToContexts.clear()
-    sessionToActivePool.clear()
+  private def closeAll(): Unit = {
 
-    sessionToRpcHandle.clear()
-    rpcHandleToSessions.clear()
-    try {
-      rpcHandleToRpcClient.foreach(v => {
-        try {
-          v._2.stop(true)
-        } catch {
-          case ex: Exception => logInfo("Exception stopping rpc session", ex)
-        }
-      })
-    } finally {
-      rpcHandleToRpcClient.clear()
+    // close the sessions outside the synchronized block
+    val rpcHandleAndClient = synchronized {
+      logInfo("closing all contexts and clients")
+      sessionToContexts.clear()
+      sessionToActivePool.clear()
+
+      sessionToRpcHandleAndSessionId.clear()
+      rpcHandleToSessions.clear()
+
+      val clients = rpcHandleToUserAndRpcClient.map(v => (v._1, v._2._2))
+      rpcHandleToUserAndRpcClient.clear()
+      clients
     }
+
+    rpcHandleAndClient.foreach(v =>
+      try {
+        logInfo("Closing rpc connection for rpc handle = " + v._1)
+        v._2.stop(true)
+      } catch {
+        case ex: Exception => logInfo("Exception stopping rpc session", ex)
+      })
+  }
+
+  override def stop(): Unit = {
+    closeAll()
+    super.stop()
   }
 
 
@@ -94,66 +116,73 @@ private[thriftserver] class SparkSQLOperationManager()
 
   def addSessionContext(session: SessionHandle, context: HiveContext): Unit = synchronized {
     assert (! runInCluster)
-    require(! sessionToRpcHandle.contains(session), "Session already has a rpc context")
+    require(! sessionToRpcHandleAndSessionId.contains(session), "Session already has a rpc ctx")
 
     val prev = sessionToContexts.put(session, context)
     assert(prev.isEmpty || prev.get == context)
   }
 
-  def addSessionRpcClient(session: SessionHandle, rpcHandle: String,
-      clientBuilder: () => RpcClient): Unit = synchronized {
+  // returns: was remote rsc session created
+  def addSessionRpcClient(user: String, sessionHandle: SessionHandle, remoteSessionId: String,
+      rpcHandle: String, clientBuilder: () => RpcClient): Boolean = synchronized {
+
     assert (runInCluster)
-    require(! sessionToContexts.contains(session), "Session already has a local context")
+    require(! sessionToContexts.contains(sessionHandle), "Session already has a local context")
 
-    logInfo("addSessionRpcClient session = " + session)
+    logInfo("addSessionRpcClient sessionHandle = " + sessionHandle)
 
-    val existingRpcHandle = sessionToRpcHandle.get(session)
+    val existingRpcHandleAndSessionIdOpt = sessionToRpcHandleAndSessionId.get(sessionHandle)
 
     // This typically should not happen, but exists for completeness sake.
-    if (existingRpcHandle.isDefined) {
-      assert(rpcHandleToRpcClient.contains(rpcHandle))
-      logInfo("Exists for session = " + session)
-      return
+    if (existingRpcHandleAndSessionIdOpt.isDefined) {
+      val existingId = existingRpcHandleAndSessionIdOpt.get._2
+      assert (rpcHandleToUserAndRpcClient.contains(rpcHandle))
+
+      logInfo(s"Session already exists for sessionHandle = $sessionHandle with id = $existingId")
+      // reuse rpc and session
+      return false
     }
 
-    // Check if we can reuse an existing rpc based on session handle
-    val existingRpcSessionOpt = rpcHandleToRpcClient.get(rpcHandle)
+    // Check if we can reuse an existing rpc based on sessionHandle
+    val existingRpcSessionOpt = rpcHandleToUserAndRpcClient.get(rpcHandle)
     if (existingRpcSessionOpt.isDefined) {
 
       // If existing rpc session is stale, then create a new one
       // (but dont rewire existing to this).
-      val rpcClient = existingRpcSessionOpt.get
+      val rpcClient = existingRpcSessionOpt.get._2
       if (! rpcClient.isClosed) {
         // register the new session handle with it.
         val sessionHandles = rpcHandleToSessions.get(rpcHandle)
         assert(sessionHandles.isDefined)
-        sessionHandles.get.add(session)
-        sessionToRpcHandle.put(session, rpcHandle)
-        logInfo("Reusing existing with handle = " + rpcHandle + " for session = " + session)
-        return
+        sessionHandles.get.add(sessionHandle)
+        sessionToRpcHandleAndSessionId.put(sessionHandle, (rpcHandle, remoteSessionId))
+        logInfo(s"Reusing existing with handle = $rpcHandle for sessionHandle = $sessionHandle")
+
+        // Reuse rpc
+        return false
       } else {
         // suffix to indicate stale.
         val newStaleHandleKey = rpcHandle + ", rpc-state = stale"
         logInfo("Found stale/closed rpc connection. rewiring existing sessions")
 
-        rpcHandleToRpcClient.remove(rpcHandle)
+        rpcHandleToUserAndRpcClient.remove(rpcHandle)
 
         // rewrite all to new rpc handle.
-        // Note: session handle is untouched - but what it points to is modified.
-        rpcHandleToRpcClient.put(newStaleHandleKey, rpcClient)
+        // Note: sessionHandle is untouched - but what it points to is modified.
+        rpcHandleToUserAndRpcClient.put(newStaleHandleKey, (user, rpcClient))
 
-        rpcHandleToSessions.get(rpcHandle).foreach {
-          set => {
-            set.foreach {
-              handle => {
-                logInfo("Rewiring stale/closed rpc connection for handle = " + handle +
-                  " to " + newStaleHandleKey)
-                sessionToRpcHandle.put(handle, newStaleHandleKey)
-              }
+        rpcHandleToSessions.get(rpcHandle).foreach { set =>
+          set.foreach { handle =>
+            logInfo("Rewiring stale/closed rpc connection for handle = " + handle +
+              " to " + newStaleHandleKey)
+            val currentOpt = sessionToRpcHandleAndSessionId.get(handle)
+            if (currentOpt.isDefined) {
+              // No need to re-wire sessionId
+              sessionToRpcHandleAndSessionId.put(handle, (newStaleHandleKey, currentOpt.get._2))
             }
-            rpcHandleToSessions.remove(rpcHandle)
-            rpcHandleToSessions.put(newStaleHandleKey, set)
           }
+          rpcHandleToSessions.remove(rpcHandle)
+          rpcHandleToSessions.put(newStaleHandleKey, set)
         }
       }
     }
@@ -161,88 +190,188 @@ private[thriftserver] class SparkSQLOperationManager()
     // Create and add new.
     val newRpcClient = clientBuilder()
 
-    rpcHandleToRpcClient.put(rpcHandle, newRpcClient)
-    rpcHandleToSessions.put(rpcHandle, Set(session))
-    sessionToRpcHandle.put(session, rpcHandle)
-    logInfo("New rpc session created for session = " + session + ", with handle = " + rpcHandle)
+    rpcHandleToUserAndRpcClient.put(rpcHandle, (user, newRpcClient))
+    rpcHandleToSessions.put(rpcHandle, HashSet(sessionHandle))
+    sessionToRpcHandleAndSessionId.put(sessionHandle, (rpcHandle, remoteSessionId))
+    logInfo(s"New rpc session created for sessionHandle= $sessionHandle, with handle= $rpcHandle")
+
+    // new rpc session
+    true
   }
 
-  def closeSession(sessionHandle: SessionHandle): Unit = synchronized {
-    logInfo("Closing session = " + sessionHandle)
-    sessionToActivePool -= sessionHandle
+  def closeSession(sessionHandle: SessionHandle): Unit = {
+    val rpcToStop: Option[RpcClient] = synchronized {
+      logInfo("Closing session = " + sessionHandle)
 
-    if (runInCluster) {
-      val rpcHandleOpt = sessionToRpcHandle.remove(sessionHandle)
-      if (rpcHandleOpt.isDefined) {
-        val rpcHandle = rpcHandleOpt.get
-        val sessions = rpcHandleToSessions.get(rpcHandle).
-          map(set => { set.remove(sessionHandle); set })
+      if (runInCluster) {
+        assert (! sessionToActivePool.contains(sessionHandle))
+        assert (! sessionToContexts.contains(sessionHandle))
+        val removedRpcHandleAndSessionIdOpt = sessionToRpcHandleAndSessionId.remove(sessionHandle)
 
-        if (sessions.isEmpty || sessions.get.isEmpty) {
-          logInfo("Closing rpc session for handle = " + rpcHandle)
-          val rpcOpt = rpcHandleToRpcClient.get(rpcHandle)
-          if (rpcOpt.isDefined) rpcOpt.get.stop(true)
-          rpcHandleToRpcClient.remove(rpcHandle)
-          rpcHandleToSessions.remove(rpcHandle)
+        if (removedRpcHandleAndSessionIdOpt.isDefined) {
+          val rpcHandle = removedRpcHandleAndSessionIdOpt.get._1
+          val removedSessionId = removedRpcHandleAndSessionIdOpt.get._2
+
+
+          val sessions = rpcHandleToSessions.get(rpcHandle).
+            map { set => {set.remove(sessionHandle); set } }
+
+          if (sessions.isEmpty || sessions.get.isEmpty) {
+            logInfo("Closing rpc session for handle = " + rpcHandle)
+            val rpcDataOpt = rpcHandleToUserAndRpcClient.remove(rpcHandle)
+            rpcHandleToSessions.remove(rpcHandle)
+
+            rpcDataOpt.map(_._2)
+          } else {
+            // unregister the closed sessionId
+            rpcHandleToUserAndRpcClient.get(rpcHandle).
+              foreach(rpc => unregisterRemoteSessionId(removedSessionId, rpc._2))
+            None
+          }
+        } else {
+          None
         }
+      } else {
+        sessionToActivePool -= sessionHandle
+        sessionToContexts.remove(sessionHandle)
+        assert (! sessionToRpcHandleAndSessionId.contains(sessionHandle))
+        None
       }
-      assert (! sessionToContexts.contains(sessionHandle))
-    } else {
-      sessionToContexts.remove(sessionHandle)
-      assert (! sessionToRpcHandle.contains(sessionHandle))
     }
+
+    // stop rpc outside of synchronized block
+    rpcToStop.foreach(_.stop(true))
   }
 
-  private def lookupRpcClientForSessionHandle(handle: SessionHandle): RpcClient = synchronized {
+  private def getSessionIdAndRpcClient(handle: SessionHandle): (String, RpcClient) = synchronized {
+
     assert(runInCluster)
-    val rpcHandleOpt = sessionToRpcHandle.get(handle)
-    if (rpcHandleOpt.isEmpty) {
+    val rpcHandleAndSessionId = sessionToRpcHandleAndSessionId.get(handle)
+    if (rpcHandleAndSessionId.isEmpty) {
       throw new IllegalArgumentException("session not found for " + handle)
     }
 
-    val rpcClientOpt = rpcHandleToRpcClient.get(rpcHandleOpt.get)
-    if (rpcClientOpt.isEmpty) {
+    val rpcHandle = rpcHandleAndSessionId.get._1
+    val sessionId = rpcHandleAndSessionId.get._2
+
+    val userAndRpcClientOpt = rpcHandleToUserAndRpcClient.get(rpcHandle)
+    if (userAndRpcClientOpt.isEmpty) {
       throw new IllegalArgumentException("Unable to retrieve rpc conn for session " + handle +
-        " from rpc handle " + rpcHandleOpt.get)
+        " from rpc handle " + rpcHandle)
     }
 
-    assert (rpcHandleToSessions.contains(rpcHandleOpt.get))
-    assert (rpcHandleToSessions(rpcHandleOpt.get).contains(handle))
+    assert (rpcHandleToSessions.contains(rpcHandle))
+    assert (rpcHandleToSessions(rpcHandle).contains(handle))
 
-    rpcClientOpt.get
+    (sessionId, userAndRpcClientOpt.get._2)
   }
 
   override def newExecuteStatementOperation(
       parentSession: HiveSession,
       statement: String,
       confOverlay: JMap[String, String],
-      async: Boolean): ExecuteStatementOperation = synchronized {
+      async: Boolean): ExecuteStatementOperation = {
 
     val state = SessionState.get()
 
-    var operation: ExecuteStatementOperation = null
+    val operation = {
+      if (runInCluster) {
+        val (parentSessionId, rpcClient) = getSessionIdAndRpcClient(parentSession.getSessionHandle)
 
-    if (runInCluster) {
-      val rpcClient = lookupRpcClientForSessionHandle(parentSession.getSessionHandle)
+        val op = new SparkExecuteRemoteStatementOperation(parentSession, parentSessionId,
+          statement, confOverlay, async)(rpcClient)
+        logDebug(s"Created Operation for $statement with session=$parentSession, " +
+          s"runInBackground=$async")
 
-
-      operation = new SparkExecuteRemoteStatementOperation(parentSession, statement, confOverlay,
-        async)(rpcClient)
-      logDebug(s"Created Operation for $statement with session=$parentSession, " +
-        s"runInBackground=$async")
-    } else {
-      val hiveContext = sessionToContexts(parentSession.getSessionHandle)
-      val runInBackground = async && hiveContext.hiveThriftServerAsync
-      operation = new SparkExecuteStatementOperation(parentSession, statement, confOverlay,
-        runInBackground)(hiveContext, sessionToActivePool)
-      logDebug(s"Created Operation for $statement with session=$parentSession, " +
-        s"runInBackground=$runInBackground")
+        op
+      } else {
+        synchronized {
+          val hiveContext = sessionToContexts(parentSession.getSessionHandle)
+          val runInBackground = async && hiveContext.hiveThriftServerAsync
+          val op = new SparkExecuteStatementOperation(parentSession, statement, confOverlay,
+            runInBackground)(hiveContext, sessionToActivePool)
+          logDebug(s"Created Operation for $statement with session=$parentSession, " +
+            s"runInBackground=$runInBackground")
+          op
+        }
+      }
     }
 
     // parent (private) operation handleToOperation happens with lock on 'this'
-    this.synchronized {
+    synchronized {
       handleToOperation.put(operation.getHandle, operation)
     }
     operation
+  }
+
+  def registerRemoteSessionId(launcherUser: String, sessionHandle: SessionHandle,
+      remoteSessionId: String): Unit = {
+    assert(runInCluster)
+    val (parentSessionId, rpcClient) = getSessionIdAndRpcClient(sessionHandle)
+    assert (parentSessionId == remoteSessionId)
+
+    rpcClient.executeRegisterSession(launcherUser, remoteSessionId).get()
+  }
+
+  private def unregisterRemoteSessionId(sessionId: String, rpcClient: RpcClient): Unit = {
+    SparkCLIServices.invokeSafelyUnit(() => rpcClient.executeUnregisterSession(sessionId).get())
+  }
+
+  def updateAllRscTokens(loggedInUGI: UserGroupInformation, renewer: String): Unit = {
+
+    assert (UserGroupInformation.isSecurityEnabled)
+
+    // Get the creds outside synchronized block since it can be expensive
+    // we dont want to block everyone on this.
+    val userToRpcClients = {
+      val userAndRpcArray = synchronized {
+        rpcHandleToUserAndRpcClient.values.filter(!_._2.isClosed).toArray
+      }
+
+      // Minimize number of tokens we have to acquire by doing it once for each user
+      // and not once per each rpc client
+      val map = new HashMap[String, ArrayBuffer[RpcClient]]()
+      userAndRpcArray.foreach { case (user, rpc) =>
+        map.getOrElseUpdate(user, new ArrayBuffer[RpcClient]()) += rpc
+      }
+      map
+    }
+
+    def processUser(user: String, rpcClients: ArrayBuffer[RpcClient]): List[JobHandle[JBoolean]] = {
+      try {
+        logInfo(s"Processing credentials for $user")
+        val proxyUgi = UserGroupInformation.createProxyUser(user, loggedInUGI)
+        val creds = new Credentials()
+        SparkCLIServices.fetchCredentials(proxyUgi, creds, renewer)
+
+        val data = RpcUtil.serializeToBytes(creds)
+
+        rpcClients.filter(! _.isClosed).
+          map(rpc => SparkCLIServices.invokeSafely(() => rpc.updateCredentials(data), null)).
+          filter(_ != null).toList
+      } catch {
+        case ex: Exception =>
+          logInfo(s"Unable to fetch credentials for $user", ex)
+          List()
+      }
+    }
+
+    val userToHandles = userToRpcClients.map {
+      case (user, rpcClients) => user -> processUser(user, rpcClients)
+    }.filter(_._2.nonEmpty)
+
+    logInfo(s"Waiting for ${userToHandles.map(_._2.length).sum} rpc's to respond, " +
+      s"users = ${userToHandles.size}")
+
+    val updateCount: Int = {
+      userToHandles.flatMap(_._2).map { handle =>
+        SparkCLIServices.invokeSafely(() => {
+          handle.get(credentialUpdateTimeout, TimeUnit.MILLISECONDS)
+          true
+        }, false)
+      }.count(v => v)
+    }
+
+    logInfo(s"Clients notifying of successful credential update within timeout = $updateCount")
   }
 }

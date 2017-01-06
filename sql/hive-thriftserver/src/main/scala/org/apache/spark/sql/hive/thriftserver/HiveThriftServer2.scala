@@ -17,18 +17,20 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.lang.{Boolean => JBoolean}
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
 
 import org.apache.commons.logging.LogFactory
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
-import org.apache.hive.service.server.{HiveServerServerOptionsProcessor, HiveServer2}
-
+import org.apache.hive.service.server.{HiveServer2, HiveServerServerOptionsProcessor}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
 import org.apache.spark.sql.SQLConf
@@ -36,7 +38,7 @@ import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
 import org.apache.spark.util.{ShutdownHookManager, Utils}
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.{Logging, SparkConf, SparkContext}
 
 
 /**
@@ -66,7 +68,46 @@ object HiveThriftServer2 extends Logging {
     }
   }
 
+  // Required to properly leverage yarn submodule - this is typically set by Client
+  // which is not applicable in case of spark Thrift server
+  private def setYarnMode(): Unit = {
+
+    var enableYarnMode = false
+    if (! JBoolean.getBoolean("SPARK_YARN_MODE")) {
+      try {
+
+        // This is a hack to see if any yarn configuration is set, to see if Spark Thrift server
+        // is in yarn mode or not.
+        def isYarnPropertiesSet(): Boolean = {
+          val sparkConf = new SparkConf(loadDefaults = true)
+          // A private escape hatch to set yarn mode explicitly
+          val yarnModeOpt = sparkConf.getOption("spark.sql.thriftServer.yarnMode")
+          if (yarnModeOpt.isDefined) {
+            return yarnModeOpt.get.toBoolean
+          }
+
+          new Configuration().iterator.asScala.exists(v => v.toString.startsWith("yarn."))
+        }
+
+        // If class present and yarn specific properties are present, enable yarn mode
+        if (isYarnPropertiesSet()) {
+          val cl = Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
+          enableYarnMode = null != cl
+        }
+      } catch {
+        case NonFatal(th) => logDebug("Unable to infer yarn mode", th)
+        case th: ClassNotFoundException => logDebug("Unable to infer yarn mode", th)
+      }
+    }
+
+    if (enableYarnMode) {
+      logInfo("YARN mode enabled for Spark Thrift Server")
+      System.setProperty("SPARK_YARN_MODE", "true")
+    }
+  }
+
   def main(args: Array[String]) {
+    setYarnMode()
     val optionsProcessor = new HiveServerServerOptionsProcessor("HiveThriftServer2")
     if (!optionsProcessor.process(args)) {
       System.exit(-1)
