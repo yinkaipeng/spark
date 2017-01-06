@@ -77,6 +77,7 @@ private[spark] class Client(
   private val isClusterMode = args.isClusterMode
 
   private var loginFromKeytab = false
+  private var externalCredentialUpdate = false
   private var credentialsFromEnvironment = false;
   private var principal: String = null
   private var keytab: String = null
@@ -618,8 +619,21 @@ private[spark] class Client(
     // user as renewer.
     val creds = new Credentials()
     val nns = YarnSparkHadoopUtil.get.getNameNodesToAccess(sparkConf) + stagingDirPath
-    YarnSparkHadoopUtil.get.obtainTokensForNamenodes(
-      nns, hadoopConf, creds, Some(sparkConf.get("spark.yarn.principal")))
+
+    val principal = {
+      val optPrincipal = sparkConf.getOption("spark.yarn.principal")
+      if (optPrincipal.isDefined) {
+        optPrincipal.get
+      } else {
+        // Use ugi if externalCredentialUpdate is enabled, else preserve behavior
+        if (externalCredentialUpdate) {
+          UserGroupInformation.getCurrentUser.getUserName
+        } else {
+          throw new NoSuchElementException("spark.yarn.principal")
+        }
+      }
+    }
+    YarnSparkHadoopUtil.get.obtainTokensForNamenodes(nns, hadoopConf, creds, Some(principal))
     val interval = creds.getAllTokens.asScala.filter { t =>
       t.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier]
     }.map { t =>
@@ -646,7 +660,7 @@ private[spark] class Client(
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDir
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
-    if (loginFromKeytab) {
+    if (loginFromKeytab || externalCredentialUpdate) {
       val remoteFs = FileSystem.get(hadoopConf)
       val stagingDirPath = new Path(remoteFs.getHomeDirectory, stagingDir)
       val credentialsFile = "credentials-" + UUID.randomUUID().toString
@@ -973,7 +987,13 @@ private[spark] class Client(
 
   def setupCredentials(): Unit = {
     loginFromKeytab = args.principal != null || sparkConf.contains("spark.yarn.principal")
+    externalCredentialUpdate = sparkConf.getBoolean(
+      "spark.yarn.credentials.external.update", defaultValue = false)
+
     if (loginFromKeytab) {
+      require(! externalCredentialUpdate,
+        "external credential update cannot be enabled with keytab login")
+
       principal =
         if (args.principal != null) args.principal else sparkConf.get("spark.yarn.principal")
       keytab = {
