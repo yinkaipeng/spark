@@ -373,6 +373,7 @@ private[spark] class Client(
       YarnSparkHadoopUtil.get.obtainTokensForNamenodes(nns, hadoopConf, credentials)
       YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
       YarnSparkHadoopUtil.get.obtainTokenForHBase(sparkConf, hadoopConf, credentials)
+      YarnSparkHadoopUtil.get.obtainTokenForHiveServer2(sparkConf, hadoopConf, credentials)
       // list all credentials at debug; useful for diagnostics.
       if (credentials != null) {
         logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))

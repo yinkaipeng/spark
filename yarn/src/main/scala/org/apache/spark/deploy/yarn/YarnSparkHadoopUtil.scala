@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.Date
+import java.sql.{Connection, DriverManager}
 import java.util.regex.Matcher
 import java.util.regex.Pattern
 
@@ -31,6 +32,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 import scala.reflect.runtime._
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -144,9 +146,9 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     * Obtains token for the Hive metastore and adds them to the credentials.
     */
   def obtainTokenForHiveMetastore(
-                                   sparkConf: SparkConf,
-                                   conf: Configuration,
-                                   credentials: Credentials) {
+      sparkConf: SparkConf,
+      conf: Configuration,
+      credentials: Credentials) {
     if (shouldGetTokens(sparkConf, "hive") && UserGroupInformation.isSecurityEnabled) {
       YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(conf).foreach {
         credentials.addToken(new Text("hive.server2.delegation.token"), _)
@@ -158,9 +160,9 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     * Obtain a security token for HBase.
     */
   def obtainTokenForHBase(
-                           sparkConf: SparkConf,
-                           conf: Configuration,
-                           credentials: Credentials): Unit = {
+      sparkConf: SparkConf,
+      conf: Configuration,
+      credentials: Credentials): Unit = {
     if (shouldGetTokens(sparkConf, "hbase") && UserGroupInformation.isSecurityEnabled) {
       YarnSparkHadoopUtil.get.obtainTokenForHBase(conf).foreach { token =>
         credentials.addToken(token.getService, token)
@@ -170,12 +172,30 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   /**
-    * Return whether delegation tokens should be retrieved for the given service when security is
-    * enabled. By default, tokens are retrieved, but that behavior can be changed by setting
-    * a service-specific configuration.
-    */
+   * Obtain token for HiveServer2 and add to the credentials.
+   */
+   def obtainTokenForHiveServer2(sparkConf: SparkConf,
+       conf: Configuration,
+       credentials: Credentials): Unit = {
+     if (shouldGetTokens(sparkConf, "hiveserver2") && UserGroupInformation.isSecurityEnabled) {
+       YarnSparkHadoopUtil.get.obtainTokenForHiveServer2(sparkConf, conf).foreach { token =>
+         credentials.addToken(new Text("hive.jdbc.delegation.token"), token)
+         logInfo(s"Add HiveServer2 delegation token $token to credentials")
+       }
+     }
+   }
+
+  /**
+   * Return whether delegation tokens should be retrieved for the given service when security is
+   * enabled. By default, tokens are retrieved, but that behavior can be changed by setting
+   * a service-specific configuration.
+   */
   private def shouldGetTokens(conf: SparkConf, service: String): Boolean = {
-    conf.getBoolean(s"spark.yarn.security.tokens.${service}.enabled", true)
+    if (service == "hiveserver2") {
+      conf.getBoolean(s"spark.yarn.security.tokens.${service}.enabled", false)
+    } else {
+      conf.getBoolean(s"spark.yarn.security.tokens.${service}.enabled", true)
+    }
   }
 
   private[spark] override def startExecutorDelegationTokenRenewer(sparkConf: SparkConf): Unit = {
@@ -392,6 +412,64 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     }
   }
 
+  /**
+   * Obtain delegation token from HiveServer2, this requires "hive.server2.thrift.bind.host" and
+   * "hive.server2.thrift.port" to be set in hive-site.xml, also
+   * "hive.server2.authentication.kerberos.principal" should be configured, besides
+   * the valid tgt should be in login user's cache.
+   */
+  def obtainTokenForHiveServer2(sparkConf: SparkConf, conf: Configuration
+    ): Option[Token[DelegationTokenIdentifier]] = {
+    try {
+      obtainTokenForHiveServer2Inner(sparkConf, conf)
+    } catch {
+      case NonFatal(e) =>
+        logInfo(s"Fail to get DelegationToken from HiveServer2", e)
+        None
+    }
+  }
+
+  private[yarn] def obtainTokenForHiveServer2Inner(sparkConf: SparkConf, conf: Configuration
+    ): Option[Token[DelegationTokenIdentifier]] = {
+    Utils.classForName("org.apache.hive.jdbc.HiveDriver")
+
+    val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)
+    val hiveConfClass = mirror.classLoader.loadClass("org.apache.hadoop.hive.conf.HiveConf")
+    val ctor = hiveConfClass.getDeclaredConstructor(classOf[Configuration],
+      classOf[Object].getClass)
+    val hiveConf = ctor.newInstance(conf, hiveConfClass).asInstanceOf[Configuration]
+
+    val hs2HostKey = "hive.server2.thrift.bind.host"
+    val hs2PortKey = "hive.server2.thrift.port"
+    val hs2PrincKey = "hive.server2.authentication.kerberos.principal"
+
+    require(hiveConf.get(hs2HostKey) != null, s"$hs2HostKey is not configured")
+    require(hiveConf.get(hs2PortKey) != null, s"$hs2PortKey is not configured")
+    require(hiveConf.get(hs2PrincKey) != null, s"$hs2PrincKey is not configured")
+
+    val jdbcUrl = s"jdbc:hive2://${hiveConf.get(hs2HostKey)}:${hiveConf.get(hs2PortKey)}/;" +
+      s"principal=${hiveConf.get(hs2PrincKey)}"
+
+    var con: Connection = null
+    try {
+      doAsRealUser {
+        con = DriverManager.getConnection(jdbcUrl)
+        val method = con.getClass.getMethod("getDelegationToken", classOf[String], classOf[String])
+        val currentUser = UserGroupInformation.getCurrentUser()
+        val realUser = Option(currentUser.getRealUser()).getOrElse(currentUser)
+        val tokenStr = method.invoke(con, realUser.getUserName, hiveConf.get(hs2PrincKey))
+          .asInstanceOf[String]
+        val token = new Token[DelegationTokenIdentifier]()
+        token.decodeFromUrlString(tokenStr)
+        Some(token)
+      }
+    } finally {
+      if (con != null) {
+        con.close()
+        con = null
+      }
+    }
+  }
 }
 
 object YarnSparkHadoopUtil {

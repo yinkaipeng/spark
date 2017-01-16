@@ -127,6 +127,7 @@ private[yarn] class AMDelegationTokenRenewer(
         hadoopUtil.obtainTokensForNamenodes(nns, freshHadoopConf, tempCreds)
         hadoopUtil.obtainTokenForHiveMetastore(sparkConf, freshHadoopConf, tempCreds)
         hadoopUtil.obtainTokenForHBase(sparkConf, freshHadoopConf, tempCreds)
+        hadoopUtil.obtainTokenForHiveServer2(sparkConf, freshHadoopConf, tempCreds)
         null
       }
     })
