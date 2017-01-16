@@ -129,7 +129,7 @@ private[hive] object SparkCLIServices extends Logging {
   }
 
   def invokeSafelyUnit(block: () => Unit): Unit = {
-    invokeSafely(() => { block; Unit}, Unit)
+    invokeSafely(() => block(), Unit)
   }
 
   def invokeSafely[R](block: () => R, failValue: R): R = {

@@ -80,10 +80,8 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
       invoke(classOf[SessionManager], this, "initOperationLogRootDir")
     }
 
-
-    impersonationEnabled = hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS)
-    clusterModeEnabled = SparkSQLEnv.sparkContext.conf.getBoolean(
-      clusterModeEnabledKey, defaultValue = false)
+    impersonationEnabled = SparkSQLSessionManager.isImpersonationEnabled(hiveConf)
+    clusterModeEnabled = SparkSQLSessionManager.isClusterModeEnabled
 
     sparkSqlOperationManager.setImpersonationEnabled(impersonationEnabled)
     sparkSqlOperationManager.setClusterModeEnabled(clusterModeEnabled)
@@ -340,6 +338,13 @@ private[hive] object SparkSQLSessionManager extends Logging {
   // Should user query be launched in a separate cluster, and not inline within STS.
   private val clusterModeEnabledKey = "spark.sql.thriftServer.clusterMode.enabled"
 
+  def isImpersonationEnabled(hiveConf: HiveConf): Boolean = {
+    hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS)
+  }
+
+  def isClusterModeEnabled: Boolean = {
+    SparkSQLEnv.sparkContext.conf.getBoolean(clusterModeEnabledKey, defaultValue = false)
+  }
 
   private def getHiveSitePath: Option[String] = {
     val hiveSiteXmlFile = new File(System.getenv("SPARK_HOME") + File.separator + "conf" +
@@ -410,7 +415,8 @@ private[hive] object SparkSQLSessionManager extends Logging {
   private def getApplicationName(sessionHandle: SessionHandle, userOpt: Option[String],
       connIdOpt: Option[String]): String = {
 
-    userOpt.map(v => "User ") + "SparkThriftServerApp" + connIdOpt.map(c => s" connection id = $c")
+    userOpt.map(v => "User ").getOrElse("") + "SparkThriftServerApp" +
+      connIdOpt.map(c => s" connection id = $c").getOrElse("")
       // + ", id: " + sessionHandle.getSessionId
   }
 }
