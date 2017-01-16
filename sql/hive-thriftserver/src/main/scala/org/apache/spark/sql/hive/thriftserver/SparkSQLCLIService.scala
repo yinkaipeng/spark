@@ -25,6 +25,8 @@ import java.util.{Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.util.control.NonFatal
+
 import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -45,6 +47,8 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
   extends CLIService(hiveServer)
   with ReflectedCompositeService with Logging {
 
+  private var enableKinit = false
+
   private var securityUpdateRenewerFuture: ScheduledFuture[_] = _
   private val securityThreadPool = new ScheduledThreadPoolExecutor(1,
     new ThreadFactory {
@@ -56,11 +60,11 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
     })
   securityThreadPool.setRemoveOnCancelPolicy(true)
 
-  private def updateSparkSecurity(hiveConf: HiveConf, loginUser: UserGroupInformation): Unit = {
+  private def updateSparkSecurity(principal: String, hiveConf: HiveConf,
+      loginUser: UserGroupInformation): Unit = {
+
     val LOG = getSuperField[Log](this, "LOG")
 
-    val hivePrincipal = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL)
-    val principal = SecurityUtil.getServerPrincipal(hivePrincipal, "0.0.0.0")
     val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB)
 
     LOG.info(s"Attempting to login to KDC using principal: $principal")
@@ -81,67 +85,112 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
     }
   }
 
-  private def updateSecurity(initializeSecurity: Boolean): Unit = synchronized {
+  private def runKinitCommand(principal: String, keytab: String): Unit = {
+    assert (enableKinit)
+
+    if (null == principal || null == keytab) {
+      logWarning(s"kinit enabled, but invalid principal = $principal, keytab = $keytab")
+      return
+    }
+
+    val commands = Seq("kinit", "-kt", keytab, principal)
+    logInfo(s"Running kinit refresh command: '${commands.mkString(" ")}'")
+
+
+    var process: Process = null
+    var terminated = false
+
+    try {
+      process = new ProcessBuilder(commands: _*).inheritIO().start()
+      val retCode = process.waitFor()
+      terminated = true
+      logDebug(s"kinit retCode = $retCode")
+      retCode match {
+        case 0 =>
+          logInfo("kinit successfully executed")
+        case _ =>
+          logWarning("kinit returned error code = " + retCode)
+      }
+    } catch {
+      case NonFatal(ex) => logInfo("Unable to execute kinit", ex)
+    } finally {
+      // best case attempt to prevent leaks
+      if (null != process && ! terminated) {
+        SparkCLIServices.invokeSafelyUnit(() => process.destroy())
+      }
+    }
+  }
+
+  private def initializeSecurity(): Unit = synchronized {
+
     val LOG = getSuperField[Log](this, "LOG")
     val hiveConf = getSuperField[HiveConf](this, "hiveConf")
 
     assert (UserGroupInformation.isSecurityEnabled)
 
-    def logLoginUserDetails(which: String, lu: UserGroupInformation): Unit = {
-      if (null == lu) {
-        logDebug(which + " ... null ugc")
-        return
-      }
-
-      logDebug(which + " loginUser.isFromKeytab = " + lu.isFromKeytab)
-      logDebug(which + " loginUser.authmethod = " + lu.getAuthenticationMethod.getAuthMethod)
-      logDebug(which + " loginUser.hasKerberosCredentials = " + lu.hasKerberosCredentials)
-      logDebug(s"$which loginUser = $lu, hc = ${System.identityHashCode(lu)}")
+    try {
+      HiveAuthFactory.loginFromKeytab(hiveConf)
+      val sparkServiceUGI: UserGroupInformation = Utils.getUGI
+      setSuperField(this, "serviceUGI", sparkServiceUGI)
+    } catch {
+      case e@(_: IOException | _: LoginException) =>
+        throw new ServiceException("Unable to login to kerberos with given principal/keytab", e)
     }
-
-    if (initializeSecurity) {
-      logLoginUserDetails("initial", UserGroupInformation.getLoginUser)
-
+    // Also try creating a UGI object for the SPNego principal
+    val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_PRINCIPAL)
+    val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_KEYTAB)
+    if (principal.isEmpty || keyTabFile.isEmpty) {
+      LOG.info("SPNego httpUGI not created, spNegoPrincipal: " + principal +
+        ", ketabFile: " + keyTabFile)
+    }
+    else {
       try {
-        HiveAuthFactory.loginFromKeytab(hiveConf)
-        val sparkServiceUGI = Utils.getUGI()
-        setSuperField(this, "serviceUGI", sparkServiceUGI)
+        val httpUGI = HiveAuthFactory.loginFromSpnegoKeytabAndReturnUGI(hiveConf)
+        setSuperField(this, "httpUGI", httpUGI)
+        LOG.info("SPNego httpUGI successfully created.")
       } catch {
-        case e@(_: IOException | _: LoginException) =>
-          throw new ServiceException("Unable to login to kerberos with given principal/keytab", e)
-      }
-      // Also try creating a UGI object for the SPNego principal
-      val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_PRINCIPAL)
-      val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_KEYTAB)
-      if (principal.isEmpty || keyTabFile.isEmpty) {
-        LOG.info("SPNego httpUGI not created, spNegoPrincipal: " + principal +
-          ", ketabFile: " + keyTabFile)
-      }
-      else {
-        try {
-          val httpUGI = HiveAuthFactory.loginFromSpnegoKeytabAndReturnUGI(hiveConf)
-          setSuperField(this, "httpUGI", httpUGI)
-          LOG.info("SPNego httpUGI successfully created.")
-        } catch {
-          case e: Exception => {
-            LOG.warn("SPNego httpUGI creation failed: ", e)
-          }
-        }
+        case e: Exception => LOG.warn("SPNego httpUGI creation failed: ", e)
       }
     }
-
-    val loginUser = UserGroupInformation.getLoginUser
-    logLoginUserDetails("before", UserGroupInformation.getLoginUser)
-    // TODO: change from reloginFromKeytab to checkTGTAndReloginFromKeytab when done testing
-    // SparkCLIServices.invokeSafelyUnit(() => loginUser.checkTGTAndReloginFromKeytab())
-    SparkCLIServices.invokeSafelyUnit(() => loginUser.reloginFromKeytab())
-    logLoginUserDetails("after", UserGroupInformation.getLoginUser)
-
-    // Spark specific security method
-    updateSparkSecurity(hiveConf, loginUser)
   }
 
-  private def startSecurityUpdateThread(): Unit = synchronized {
+  private def updateSecurity(hivePrincipal: String, clusterMode: Boolean): Unit = synchronized {
+
+    val hiveConf = getSuperField[HiveConf](this, "hiveConf")
+
+    // Run a process to do kinit, if enabled
+    if (enableKinit) {
+      val keytabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB)
+      runKinitCommand(hivePrincipal, keytabFile)
+    }
+
+    // update spark security config in cluster mode
+    if (clusterMode) {
+
+      def logLoginUserDetails(which: String, lu: UserGroupInformation): Unit = {
+        if (null == lu) {
+          logDebug(which + " ... null ugc")
+          return
+        }
+
+        logDebug(which + " loginUser.isFromKeytab = " + lu.isFromKeytab)
+        logDebug(which + " loginUser.authmethod = " + lu.getAuthenticationMethod.getAuthMethod)
+        logDebug(which + " loginUser.hasKerberosCredentials = " + lu.hasKerberosCredentials)
+        logDebug(s"$which loginUser = $lu, hc = ${System.identityHashCode(lu)}")
+      }
+
+
+      val loginUser = UserGroupInformation.getLoginUser
+      logLoginUserDetails("before", UserGroupInformation.getLoginUser)
+      SparkCLIServices.invokeSafelyUnit(() => loginUser.checkTGTAndReloginFromKeytab())
+      logLoginUserDetails("after", UserGroupInformation.getLoginUser)
+
+      // Spark specific security method
+      updateSparkSecurity(hivePrincipal, hiveConf, loginUser)
+    }
+  }
+
+  private def startSecurityUpdateThread(clusterMode: Boolean): Unit = synchronized {
     if (null != securityUpdateRenewerFuture) return
 
     val LOG = getSuperField[Log](this, "LOG")
@@ -157,12 +206,17 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
       SparkSQLEnv.sparkContext.conf.getLong(
         "spark.yarn.token.renewal.interval", (24 hours).toMillis))).toLong
 
+    val hiveConf = getSuperField[HiveConf](this, "hiveConf")
+
+    val hivePrincipal = SecurityUtil.getServerPrincipal(
+      hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL), "0.0.0.0")
+
     securityUpdateRenewerFuture = securityThreadPool.scheduleAtFixedRate(
       new Runnable {
         override def run(): Unit = {
           LOG.info("Running security update thread")
           try {
-            updateSecurity(initializeSecurity = false)
+            updateSecurity(hivePrincipal, clusterMode)
           } catch {
             case ex: Exception =>
             // log and forget, so that we dont end up with some uncaught thread handling
@@ -186,6 +240,14 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
     setSuperField(this, "hiveConf", hiveConf)
 
     val sparkSqlSessionManager = new SparkSQLSessionManager(hiveServer, hiveContext)
+
+    val runInCluster = SparkSQLSessionManager.isClusterModeEnabled ||
+      SparkSQLSessionManager.isImpersonationEnabled(hiveConf)
+
+    // by default, if unspecified, we enable it for doAs or cluster mode.
+    enableKinit = SparkSQLEnv.sparkContext.conf.getBoolean(
+      "spark.sql.hive.thriftServer.kinit.enabled", runInCluster)
+
     setSuperField(this, "sessionManager", sparkSqlSessionManager)
     addService(sparkSqlSessionManager)
 
@@ -194,8 +256,18 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
     LOG.info("UGI security enabled = " + UserGroupInformation.isSecurityEnabled)
 
     if (UserGroupInformation.isSecurityEnabled) {
-      updateSecurity(initializeSecurity = true)
-      startSecurityUpdateThread()
+      initializeSecurity()
+
+      val hivePrincipal = SecurityUtil.getServerPrincipal(
+        hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL), "0.0.0.0")
+
+      updateSecurity(hivePrincipal, clusterMode = runInCluster)
+
+      // If user explicitly enabled kinit, then schedule periodic security update thread even
+      // if we are not in cluster mode
+      if (enableKinit || runInCluster) {
+        startSecurityUpdateThread(runInCluster)
+      }
     }
 
     // Required ?

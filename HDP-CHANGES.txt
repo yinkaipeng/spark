@@ -5,6 +5,7 @@ INCOMPATIBLE CHANGES
 NEW FEATURES
 
 IMPROVEMENTS
+  BUG-72325    Fix kerberos token expiry with long running STS while launching new livy sessions. Fix application name in BUG-70355
   RMP-7143.    Fix bugs/enhance doAs in STS. BUG-69809, BUG-69840, BUG-71758, BUG-71777, BUG-71779
   RMP-7143.    Add support for doAs in STS. Specifically : BUG-69804, BUG-69843, BUG-69980, BUG-69981, BUG-70062, BUG-70332, BUG-70333, BUG-70355, BUG-70409, BUG-71047, BUG-70407, BUG-71528
   BUG-58572.   spark-llap: validate security scenarios
