@@ -86,4 +86,4 @@ BUG FIXES
   SPARK-7481    Add spark-cloud module to pull in aws+azure object store FS accessors; test integration
   (Spark 2.2 backport)
   SPARK-19033  HistoryServer still uses old ACLs even if ACLs are updated
-
+  SPARK-19306  Fix inconsistent state in DiskBlockObjectWriter when exception occurred

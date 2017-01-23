@@ -106,15 +106,14 @@ private[spark] class DiskBlockObjectWriter(
         }
       } {
         objOut.close()
+        channel = null
+        bs = null
+        fos = null
+        ts = null
+        objOut = null
+        initialized = false
+        hasBeenClosed = true
       }
-
-      channel = null
-      bs = null
-      fos = null
-      ts = null
-      objOut = null
-      initialized = false
-      hasBeenClosed = true
     }
   }
 
@@ -151,21 +150,23 @@ private[spark] class DiskBlockObjectWriter(
     // Discard current writes. We do this by flushing the outstanding writes and then
     // truncating the file to its initial position.
     try {
-      if (initialized) {
-        writeMetrics.decShuffleBytesWritten(reportedPosition - initialPosition)
-        writeMetrics.decShuffleRecordsWritten(numRecordsWritten)
-        objOut.flush()
-        bs.flush()
-        close()
+      Utils.tryWithSafeFinally {
+        if (initialized) {
+          writeMetrics.decShuffleBytesWritten(reportedPosition - initialPosition)
+          writeMetrics.decShuffleRecordsWritten(numRecordsWritten)
+          objOut.flush()
+          bs.flush()
+          close()
+        }
+      } {
+        val truncateStream = new FileOutputStream(file, true)
+        try {
+          truncateStream.getChannel.truncate(initialPosition)
+        } finally {
+          truncateStream.close()
+        }
       }
-
-      val truncateStream = new FileOutputStream(file, true)
-      try {
-        truncateStream.getChannel.truncate(initialPosition)
-        file
-      } finally {
-        truncateStream.close()
-      }
+      file
     } catch {
       case e: Exception =>
         logError("Uncaught exception while reverting partial writes to file " + file, e)
