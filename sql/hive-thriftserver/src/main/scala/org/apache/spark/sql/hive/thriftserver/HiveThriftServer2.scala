@@ -72,6 +72,15 @@ object HiveThriftServer2 extends Logging {
   // which is not applicable in case of spark Thrift server
   private def setYarnMode(): Unit = {
 
+    val sparkConf = new SparkConf(loadDefaults = true)
+
+    // If explicitly set, use that.
+    val yarnModeOpt = sparkConf.getOption("spark.sql.hive.thriftServer.yarn_mode")
+    if (yarnModeOpt.isDefined) {
+      System.setProperty("SPARK_YARN_MODE", yarnModeOpt.get.toBoolean.toString)
+      return
+    }
+
     var enableYarnMode = false
     if (! JBoolean.getBoolean("SPARK_YARN_MODE")) {
       try {
@@ -79,13 +88,6 @@ object HiveThriftServer2 extends Logging {
         // This is a hack to see if any yarn configuration is set, to see if Spark Thrift server
         // is in yarn mode or not.
         def isYarnPropertiesSet(): Boolean = {
-          val sparkConf = new SparkConf(loadDefaults = true)
-          // A private escape hatch to set yarn mode explicitly
-          val yarnModeOpt = sparkConf.getOption("spark.sql.thriftServer.yarnMode")
-          if (yarnModeOpt.isDefined) {
-            return yarnModeOpt.get.toBoolean
-          }
-
           new Configuration().iterator.asScala.exists(v => v.toString.startsWith("yarn."))
         }
 
