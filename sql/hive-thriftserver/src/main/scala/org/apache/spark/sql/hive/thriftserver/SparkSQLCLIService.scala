@@ -41,6 +41,7 @@ import org.apache.hive.service.{AbstractService, Service, ServiceException}
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.spark.Logging
 import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.hive.client.ClientWrapper
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 
 private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: HiveContext)
@@ -126,10 +127,23 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
     val LOG = getSuperField[Log](this, "LOG")
     val hiveConf = getSuperField[HiveConf](this, "hiveConf")
 
-    assert (UserGroupInformation.isSecurityEnabled)
+    assert(UserGroupInformation.isSecurityEnabled)
 
     try {
-      HiveAuthFactory.loginFromKeytab(hiveConf)
+      val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL)
+      val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_KEYTAB)
+
+      SparkSQLCLIService.logLoginUserDetails("loginUser before hive auth login",
+        UserGroupInformation.getLoginUser)
+      // If not specified, allow HiveAuthFactory to throw exception. login only if it is required
+      if (principal.isEmpty || keyTabFile.isEmpty ||
+        ClientWrapper.needUgiLogin(UserGroupInformation.getCurrentUser,
+          SecurityUtil.getServerPrincipal(principal, "0.0.0.0"), keyTabFile)) {
+
+        HiveAuthFactory.loginFromKeytab(hiveConf)
+        SparkSQLCLIService.logLoginUserDetails("loginUser after hive auth login",
+          UserGroupInformation.getLoginUser)
+      }
       val sparkServiceUGI: UserGroupInformation = Utils.getUGI
       setSuperField(this, "serviceUGI", sparkServiceUGI)
     } catch {
@@ -154,7 +168,7 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
     }
   }
 
-  private def updateSecurity(hivePrincipal: String, clusterMode: Boolean): Unit = synchronized {
+  private def updateSecurity(hivePrincipal: String, updateKerberos: Boolean): Unit = synchronized {
 
     val hiveConf = getSuperField[HiveConf](this, "hiveConf")
 
@@ -164,33 +178,16 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
       runKinitCommand(hivePrincipal, keytabFile)
     }
 
-    // update spark security config in cluster mode
-    if (clusterMode) {
-
-      def logLoginUserDetails(which: String, lu: UserGroupInformation): Unit = {
-        if (null == lu) {
-          logDebug(which + " ... null ugc")
-          return
-        }
-
-        logDebug(which + " loginUser.isFromKeytab = " + lu.isFromKeytab)
-        logDebug(which + " loginUser.authmethod = " + lu.getAuthenticationMethod.getAuthMethod)
-        logDebug(which + " loginUser.hasKerberosCredentials = " + lu.hasKerberosCredentials)
-        logDebug(s"$which loginUser = $lu, hc = ${System.identityHashCode(lu)}")
-      }
-
-
+    if (updateKerberos) {
       val loginUser = UserGroupInformation.getLoginUser
-      logLoginUserDetails("before", UserGroupInformation.getLoginUser)
       SparkCLIServices.invokeSafelyUnit(() => loginUser.checkTGTAndReloginFromKeytab())
-      logLoginUserDetails("after", UserGroupInformation.getLoginUser)
 
       // Spark specific security method
       updateSparkSecurity(hivePrincipal, hiveConf, loginUser)
     }
   }
 
-  private def startSecurityUpdateThread(clusterMode: Boolean): Unit = synchronized {
+  private def startSecurityUpdateThread(updateKerberos: Boolean): Unit = synchronized {
     if (null != securityUpdateRenewerFuture) return
 
     val LOG = getSuperField[Log](this, "LOG")
@@ -216,7 +213,7 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
         override def run(): Unit = {
           LOG.info("Running security update thread")
           try {
-            updateSecurity(hivePrincipal, clusterMode)
+            updateSecurity(hivePrincipal, updateKerberos)
           } catch {
             case ex: Exception =>
             // log and forget, so that we dont end up with some uncaught thread handling
@@ -244,6 +241,11 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
     val runInCluster = SparkSQLSessionManager.isClusterModeEnabled ||
       SparkSQLSessionManager.isImpersonationEnabled(hiveConf)
 
+    // A private flag to explicitly enable/disable periodic kerberos update. By default, it will
+    // be turned on when we are running in a cluster (and security is enabled ofcourse)
+    val updateKerberos = SparkSQLEnv.sparkContext.conf.getBoolean(
+      "spark.sql.hive.thriftServer.kerberos.update.enabled", runInCluster)
+
     // by default, if unspecified, we enable it for doAs or cluster mode.
     enableKinit = SparkSQLEnv.sparkContext.conf.getBoolean(
       "spark.sql.hive.thriftServer.kinit.enabled", runInCluster)
@@ -261,12 +263,12 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
       val hivePrincipal = SecurityUtil.getServerPrincipal(
         hiveConf.getVar(ConfVars.HIVE_SERVER2_KERBEROS_PRINCIPAL), "0.0.0.0")
 
-      updateSecurity(hivePrincipal, clusterMode = runInCluster)
+      updateSecurity(hivePrincipal, updateKerberos = updateKerberos)
 
       // If user explicitly enabled kinit, then schedule periodic security update thread even
       // if we are not in cluster mode
-      if (enableKinit || runInCluster) {
-        startSecurityUpdateThread(runInCluster)
+      if (enableKinit || updateKerberos) {
+        startSecurityUpdateThread(updateKerberos)
       }
     }
 
@@ -311,6 +313,22 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, hiveContext: Hiv
       case GetInfoType.CLI_DBMS_VER => new GetInfoValue(hiveContext.sparkContext.version)
       case _ => super.getInfo(sessionHandle, getInfoType)
     }
+  }
+}
+
+object SparkSQLCLIService extends Logging {
+  def logLoginUserDetails(prefix: String, lu: UserGroupInformation): Unit = {
+    if (null == lu) {
+      logInfo(prefix + " ... null ugc")
+      return
+    }
+
+    logDebug(prefix + " loginUser.isFromKeytab = " + lu.isFromKeytab)
+    logDebug(prefix + " loginUser.authmethod = " + lu.getAuthenticationMethod.getAuthMethod)
+    logDebug(prefix + " loginUser.hasKerberosCredentials = " + lu.hasKerberosCredentials)
+    logDebug(prefix + " loginUser.getUserName = " + lu.getUserName)
+    logDebug(prefix + " keytab in ugi = " + ClientWrapper.getKeytabFromUgi)
+    logDebug(prefix + " loginUser = " + lu + ", hc = " + System.identityHashCode(lu))
   }
 }
 
