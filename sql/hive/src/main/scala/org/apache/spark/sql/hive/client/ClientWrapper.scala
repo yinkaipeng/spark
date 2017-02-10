@@ -33,7 +33,7 @@ import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.ql.{Driver, metadata}
 import org.apache.hadoop.hive.shims.{HadoopShims, ShimLoader}
-import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.security.{SecurityUtil, UserGroupInformation}
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkException, Logging}
@@ -162,13 +162,18 @@ private[hive] class ClientWrapper(
     if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
       val principalName = sparkConf.get("spark.yarn.principal")
       val keytabFileName = sparkConf.get("spark.yarn.keytab")
-      if (!new File(keytabFileName).exists()) {
-        throw new SparkException(s"Keytab file: ${keytabFileName}" +
-          " specified in spark.yarn.keytab does not exist")
-      } else {
-        logInfo("Attempting to login to Kerberos" +
-          s" using principal: ${principalName} and keytab: ${keytabFileName}")
-        UserGroupInformation.loginUserFromKeytab(principalName, keytabFileName)
+
+      val currentUser = UserGroupInformation.getCurrentUser
+      val resolvedPrincipal = SecurityUtil.getServerPrincipal(principalName, "0.0.0.0")
+      if (ClientWrapper.needUgiLogin(currentUser, resolvedPrincipal, keytabFileName)) {
+        if (!new File(keytabFileName).exists()) {
+          throw new SparkException(s"Keytab file: ${keytabFileName}" +
+            " specified in spark.yarn.keytab does not exist")
+        } else {
+          logInfo("Attempting to login to Kerberos" +
+            s" using principal: ${principalName} and keytab: ${keytabFileName}")
+          UserGroupInformation.loginUserFromKeytab(principalName, keytabFileName)
+        }
       }
     }
 
@@ -613,5 +618,40 @@ private[hive] class ClientWrapper(
         logDebug(s"Dropping Database: $db")
         client.dropDatabase(db, true, false, true)
       }
+  }
+}
+
+private[hive] object ClientWrapper extends Logging {
+
+  // Use reflection to determine what is the currently active keytab in UGI
+  def getKeytabFromUgi: String = {
+    try {
+      val cl = classOf[UserGroupInformation]
+      // synchronized on UGI class as updates happen in synchronized static methods
+      cl.synchronized {
+        val field = cl.getDeclaredField("keytabFile")
+        field.setAccessible(true)
+        val keyTab = field.get(null).asInstanceOf[String]
+        logInfo("Current keytab in ugi = " + keyTab)
+        keyTab
+      }
+    } catch {
+      case th: Throwable =>
+        logInfo("Unable to fetch keytab from UGI", th)
+        null
+    }
+  }
+
+  // Re-login only if existing user is not same principal or keytab is different
+  def needUgiLogin(user: UserGroupInformation, principal: String, keytabFile: String): Boolean = {
+    val needLogin = null == user || ! user.hasKerberosCredentials ||
+      user.getUserName != principal || keytabFile != getKeytabFromUgi
+
+    if (needLogin) {
+      logDebug(s"Need ugi login. user = $user, principal = $principal, keytabFile = $keytabFile," +
+        s" user.hasKerberosCredentials = ${user.hasKerberosCredentials}, " +
+        s"user.getUserName = ${user.getUserName}, getKeytabFromUgi = $getKeytabFromUgi")
+    }
+    needLogin
   }
 }

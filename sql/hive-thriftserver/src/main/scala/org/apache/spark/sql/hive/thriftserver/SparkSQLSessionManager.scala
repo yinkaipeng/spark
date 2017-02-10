@@ -46,13 +46,11 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
       invoke(classOf[SessionManager], this, "initOperationLogRootDir")
     }
 
-    val backgroundPoolSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_THREADS)
-    setSuperField(this, "backgroundOperationPool", Executors.newFixedThreadPool(backgroundPoolSize))
-    getAncestorField[Log](this, 3, "LOG").info(
-      s"HiveServer2: Async execution pool size $backgroundPoolSize")
-
     setSuperField(this, "operationManager", sparkSqlOperationManager)
     addService(sparkSqlOperationManager)
+
+    // This is what spins up the idle session, operation checks
+    invoke(classOf[SessionManager], this, "createBackgroundOperationPool")
 
     initCompositeService(hiveConf)
   }

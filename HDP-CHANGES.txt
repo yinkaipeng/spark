@@ -35,6 +35,7 @@ IMPROVEMENTS
 
 BUG FIXES
 
+  BUG-70957. Spark Thrift Server failing after 24hrs due to delegation token renewal failure
   BUG-57104. spark.files in properties file is not distributed to driver in yarn-cluster mode
   BUG-48230. yarn-client app hangs on shutdown
   BUG-47809. Application gets stuck with scala.MatchError
