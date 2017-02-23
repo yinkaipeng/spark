@@ -38,6 +38,7 @@ IMPROVEMENTS
   BUG-62302    Support HiveServer2 delegation token acquisition in Spark
 BUG FIXES
 
+  BUG-73561. Virtualenv example fails in yarn-cluster mode with requirement.txt not found error
   BUG-70957. Spark Thrift Server failing after 24hrs due to delegation token renewal failure
   BUG-70152. (SPARK-18160) spark.files & spark.jars should not be passed to driver in yarn mode
   SPARK-174. (Internal) Use metastore schema instead of inferring schema for ORC in HiveMetastoreCatalog
