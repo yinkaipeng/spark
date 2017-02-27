@@ -112,7 +112,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
         case (key, value) =>
           // Based on org.apache.hive.service.cli.session.HiveSessionImpl.configureSession
           key match {
-            case hiveVarPattern(confKey) => s"set ${confKey.trim}=$value"
+            case hiveVarPattern(confKey) => s"set hivevar:${confKey.trim}=$value"
             case v if v.startsWith("use:") => "use " + value
             case v if v == connectionIdConfigKey =>
               connectionId = Some(value)
