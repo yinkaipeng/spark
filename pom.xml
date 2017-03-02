@@ -140,6 +140,7 @@
     <flume.version>1.5.2.2.6.0.0-SNAPSHOT</flume.version>
     <kafka.version>0.10.0.2.6.0.0-SNAPSHOT</kafka.version>
     <zookeeper.version>3.4.6.2.6.0.0-SNAPSHOT</zookeeper.version>
+    <livy.version>0.3.0.2.6.0.0-504</livy.version>
     <curator.version>2.4.0</curator.version>
     <hive.group>org.spark-project.hive</hive.group>
     <!-- Version used in Maven Hive dependency -->
@@ -493,13 +494,13 @@
       <dependency>
         <groupId>com.cloudera.livy</groupId>
         <artifactId>livy-rsc</artifactId>
-        <version>0.3.0.2.6.0.0-504</version>
+        <version>${livy.version}</version>
         <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>com.cloudera.livy</groupId>
         <artifactId>livy-api</artifactId>
-        <version>0.3.0.2.6.0.0-504</version>
+        <version>${livy.version}</version>
         <scope>provided</scope>
       </dependency>
       <!-- End of shaded deps -->
