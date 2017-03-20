@@ -90,3 +90,4 @@ BUG FIXES
   (Spark 2.2 backport)
   SPARK-19033  HistoryServer still uses old ACLs even if ACLs are updated
   SPARK-19306  Fix inconsistent state in DiskBlockObjectWriter when exception occurred
+  SPARK-19970   Table owner should be USER instead of PRINCIPAL in kerberized clusters
