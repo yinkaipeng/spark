@@ -167,7 +167,13 @@ class SparkSubmitSuite
     childArgsStr should include regex ("--files .*file1.txt,.*file2.txt")
     childArgsStr should include regex ("--archives .*archive1.txt,.*archive2.txt")
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
-    classpath should have length (0)
+
+    // In yarn cluster mode, also adding jars to classpath
+    classpath(0) should endWith ("thejar.jar")
+    classpath(1) should endWith ("one.jar")
+    classpath(2) should endWith ("two.jar")
+    classpath(3) should endWith ("three.jar")
+
     sysProps("spark.app.name") should be ("beauty")
     sysProps("spark.ui.enabled") should be ("false")
     sysProps("SPARK_SUBMIT") should be ("true")
