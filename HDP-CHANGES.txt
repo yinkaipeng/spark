@@ -100,3 +100,4 @@ BUG FIXES
   SPARK-19970   Table owner should be USER instead of PRINCIPAL in kerberized clusters
   SPARK-20059   Use the correct classloader for HBaseCredentialProvider
   EAR-6580      STS memory leak when impersonation is enabled
+  SPARK-20922   - Backport SPARK-20922 to Spark1 Add whitelist of classes that can be deserialized by the launcher.
