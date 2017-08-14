@@ -156,7 +156,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
         } catch {
           case ex: Exception => logInfo("Unable to execute statement = '" + stmt, ex)
         } finally {
-          operation.close()
+          sparkSqlOperationManager.closeOperation(operation.getHandle)
         }
       }
     }
