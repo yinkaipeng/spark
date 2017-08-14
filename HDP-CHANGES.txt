@@ -36,6 +36,8 @@ IMPROVEMENTS
   SPARK-6717   Clear shuffle files after checkpointing in ALS
   SPARK-12967  NettyRPC races with SparkContext.stop() and throws exception
   BUG-62302    Support HiveServer2 delegation token acquisition in Spark
+  BUG-85956    STS in doAs enabled mode assumes spark.scheduler.allocation.file present on NodeManagers
+
 BUG FIXES
 
   BUG-73561. Virtualenv example fails in yarn-cluster mode with requirement.txt not found error

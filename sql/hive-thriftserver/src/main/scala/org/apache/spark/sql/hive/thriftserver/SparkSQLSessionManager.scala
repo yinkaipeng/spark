@@ -36,6 +36,7 @@ import com.cloudera.livy.LivyClientBuilder
 import com.cloudera.livy.rsc.RSCClient
 import com.cloudera.livy.rsc.RSCConf
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.util.{Utils => SparkUtils}
 import org.apache.spark.sql.hive.thriftserver.rpc.{RemoteDriver, RpcClient}
@@ -183,6 +184,20 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
     }
   }
 
+  private def distributeFileInConfiguration(confMap: HashMap[String, String],
+      key: String, distributedFilename: String) = {
+    confMap.get(key).foreach {
+      localFilename =>
+        mergeConfValue(confMap, "spark.yarn.dist.files",
+          Some(s"$localFilename#$distributedFilename"),
+          sep = ","
+        )
+        // Override the configuration
+        // to the distributed file name
+        confMap.put(key, distributedFilename)
+    }
+  }
+
   /**
     *
     * @param sessionHandle handle for the new session created
@@ -213,10 +228,25 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
     confMap.put("spark.app.name", getApplicationName(sessionHandle,
       Option(launchUserName), connIdOpt))
 
+    // Distribute fairscheduler xml definition to avoid errors
+    // when configurations are not present in the worker nodes
+    confMap.get("spark.scheduler.mode").map {
+      x => SchedulingMode.withName(x.toUpperCase)
+    } match {
+      case Some(SchedulingMode.FAIR) =>
+        // Distribute the fairscheduler definition
+        distributeFileInConfiguration(confMap,
+          "spark.scheduler.allocation.file", s"fairscheduler-${System.nanoTime}.xml")
+    }
+
+    distributeFileInConfiguration(confMap,
+      "spark.metrics.conf", s"metrics-${System.nanoTime}.properties")
+
     confMap.put("spark.sql.hive.version", HiveContext.hiveExecutionVersion)
 
     confMap
   }
+
 
   private def getSessionLaunchUser(sessionUser: String): String = {
     if (impersonationEnabled) {
