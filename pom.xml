@@ -140,11 +140,11 @@
     <flume.version>1.5.2.2.6.2.0-SNAPSHOT</flume.version>
     <kafka.version>0.10.1.2.6.2.0-SNAPSHOT</kafka.version>
     <zookeeper.version>3.4.6.2.6.2.0-SNAPSHOT</zookeeper.version>
-    <livy.version>0.3.0.2.6.1.0-129</livy.version>
+    <livy.version>0.3.0.2.6.2.0-180</livy.version>
     <curator.version>2.4.0</curator.version>
     <hive.group>org.spark-project.hive</hive.group>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>1.2.1.spark.hdp.2</hive.version>
+    <hive.version>1.21.1.2.6.2.0-SNAPSHOT</hive.version>
     <!-- Version used for internal directory structure -->
     <hive.version.short>1.2.1</hive.version.short>
     <derby.version>10.12.1.1</derby.version>
