@@ -127,16 +127,12 @@ private[hive] class SparkExecuteRemoteStatementOperation(
 
   def close(): Unit = {
     logInfo(s"close '$statement' with $statementId")
-    // Setting state after rpc request is sent.
-    rpcClient.closeOperation(statementId)
     cleanup(OperationState.CLOSED)
+    rpcClient.closeOperation(statementId)
   }
 
   override def cancel(): Unit = {
     logInfo(s"Cancel '$statement' with $statementId")
-    if (statementId != null) {
-      rpcClient.cancelStatement(statementId)
-    }
     cleanup(OperationState.CANCELED)
   }
 
@@ -145,6 +141,9 @@ private[hive] class SparkExecuteRemoteStatementOperation(
   }
 
   private def cleanup(state: OperationState) {
+    if (statementId != null) {
+      rpcClient.cancelStatement(statementId)
+    }
     setState(state)
   }
 }
