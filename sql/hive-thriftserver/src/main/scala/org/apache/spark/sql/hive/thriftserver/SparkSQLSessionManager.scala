@@ -237,6 +237,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
         // Distribute the fairscheduler definition
         distributeFileInConfiguration(confMap,
           "spark.scheduler.allocation.file", s"fairscheduler-${System.nanoTime}.xml")
+      case _ =>
     }
 
     distributeFileInConfiguration(confMap,
