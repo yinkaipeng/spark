@@ -71,8 +71,9 @@ private[hive] class SparkHiveWriterContainer(
   @transient protected lazy val jobContext = newJobContext(conf.value, jID.value)
   @transient private lazy val taskContext = newTaskAttemptContext(conf.value, taID.value)
   @transient private lazy val outputFormat = conf.value.getOutputFormat match {
-    case format: HiveOutputFormat[AnyRef, Writable]
-      => format.asInstanceOf[HiveOutputFormat[AnyRef, Writable]]
+    case format
+      if classOf[HiveOutputFormat[AnyRef, Writable]].isAssignableFrom(format.getClass)
+        => format.asInstanceOf[HiveOutputFormat[AnyRef, Writable]]
     case _ => null
   }
 
