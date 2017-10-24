@@ -200,7 +200,7 @@ private[thriftserver] class SparkSQLOperationManager()
   }
 
   def closeSession(sessionHandle: SessionHandle): Unit = {
-    val rpcToStop: Option[RpcClient] = synchronized {
+    val sessionIdAndRpcToClose: Option[Either[(String, RpcClient), RpcClient]] = synchronized {
       logInfo("Closing session = " + sessionHandle)
 
       if (runInCluster) {
@@ -216,17 +216,15 @@ private[thriftserver] class SparkSQLOperationManager()
           val sessions = rpcHandleToSessions.get(rpcHandle).
             map { set => {set.remove(sessionHandle); set } }
 
+          // When there are no more sessions for this rpc we need to close the rpc session,
+          // otherwise we need to remove only the session id from the remote application.
           if (sessions.isEmpty || sessions.get.isEmpty) {
             logInfo("Closing rpc session for handle = " + rpcHandle)
-            val rpcDataOpt = rpcHandleToUserAndRpcClient.remove(rpcHandle)
             rpcHandleToSessions.remove(rpcHandle)
-
-            rpcDataOpt.map(_._2)
+            rpcHandleToUserAndRpcClient.remove(rpcHandle).map(rpcData => Right(rpcData._2))
           } else {
-            // unregister the closed sessionId
-            rpcHandleToUserAndRpcClient.get(rpcHandle).
-              foreach(rpc => unregisterRemoteSessionId(removedSessionId, rpc._2))
-            None
+            rpcHandleToUserAndRpcClient.get(rpcHandle).map(
+              rpcData => Left((removedSessionId, rpcData._2)))
           }
         } else {
           None
@@ -239,8 +237,11 @@ private[thriftserver] class SparkSQLOperationManager()
       }
     }
 
-    // stop rpc outside of synchronized block
-    rpcToStop.foreach(_.stop(true))
+    // execute operation on rpc client outside of synchronized block
+    sessionIdAndRpcToClose.foreach {
+      case Left((sessionId, rpcClient)) => unregisterRemoteSessionId(sessionId, rpcClient)
+      case Right(rpcClient) => rpcClient.stop(true)
+    }
   }
 
   private def getSessionIdAndRpcClient(handle: SessionHandle): (String, RpcClient) = synchronized {
