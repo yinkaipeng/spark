@@ -37,6 +37,7 @@ IMPROVEMENTS
   SPARK-12967  NettyRPC races with SparkContext.stop() and throws exception
   BUG-62302    Support HiveServer2 delegation token acquisition in Spark
   BUG-85956    STS in doAs enabled mode assumes spark.scheduler.allocation.file present on NodeManagers
+  BUG-99452    Use `spark.kafka.version` instead of `kafka.version`
 
 BUG FIXES
 

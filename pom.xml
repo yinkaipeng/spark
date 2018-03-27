@@ -138,7 +138,7 @@
     <hbase.version>1.1.2.2.6.5.0-SNAPSHOT</hbase.version>
     <hbase.artifact>hbase</hbase.artifact>
     <flume.version>1.5.2.2.6.5.0-SNAPSHOT</flume.version>
-    <kafka.version>0.10.1.2.6.5.0-SNAPSHOT</kafka.version>
+    <spark.kafka.version>0.10.1.2.6.4.0-91</kafka.version>
     <zookeeper.version>3.4.6.2.6.5.0-SNAPSHOT</zookeeper.version>
     <livy.version>0.3.0.2.6.2.0-205</livy.version>
     <curator.version>2.4.0</curator.version>
