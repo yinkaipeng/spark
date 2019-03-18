@@ -1048,6 +1048,12 @@
         </exclusions>
       </dependency>
       <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcprov-jdk15on</artifactId>
+        <version>1.61</version>
+        <scope>${hadoop.deps.scope}</scope>
+      </dependency>
+      <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-auth</artifactId>
         <version>${hadoop.version}</version>
